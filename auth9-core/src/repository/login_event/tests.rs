@@ -31,6 +31,8 @@ async fn test_mock_create() {
         location: None,
         session_id: None,
         failure_reason: None,
+        provider_alias: None,
+        provider_type: None,
     };
 
     let id = mock.create(&input).await.unwrap();

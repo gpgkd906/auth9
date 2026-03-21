@@ -17,6 +17,7 @@ pub mod saml_application;
 pub mod scim;
 pub mod service;
 pub mod session;
+pub mod social_provider;
 pub mod system_settings;
 pub mod tenant;
 pub mod user;

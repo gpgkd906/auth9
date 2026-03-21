@@ -514,6 +514,240 @@ impl CacheManager {
 
     // ==================== Webhook Event Deduplication ====================
 
+    // ==================== TOTP ====================
+
+    pub async fn store_totp_setup(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::TOTP_SETUP, token);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_totp_setup(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::TOTP_SETUP, token);
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(&key).await?;
+        Ok(value)
+    }
+
+    pub async fn remove_totp_setup(&self, token: &str) -> Result<()> {
+        let key = format!("{}:{}", keys::TOTP_SETUP, token);
+        self.delete(&key).await
+    }
+
+    pub async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool> {
+        let key = format!("{}:{}:{}", keys::TOTP_USED, user_id, time_step);
+        let mut conn = self.conn.clone();
+        let exists: bool = redis::cmd("EXISTS")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await?;
+        Ok(exists)
+    }
+
+    pub async fn mark_totp_code_used(
+        &self,
+        user_id: &str,
+        time_step: u64,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}:{}", keys::TOTP_USED, user_id, time_step);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, "1", ttl_secs).await?;
+        Ok(())
+    }
+
+    // ==================== MFA Session ====================
+
+    pub async fn store_mfa_session(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::MFA_SESSION, token);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::MFA_SESSION, token);
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(&key).await?;
+        Ok(value)
+    }
+
+    pub async fn consume_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::MFA_SESSION, token);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Login Challenge ====================
+
+    pub async fn store_login_challenge(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::LOGIN_CHALLENGE, id);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_login_challenge(&self, id: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::LOGIN_CHALLENGE, id);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Authorization Code ====================
+
+    pub async fn store_authorization_code(
+        &self,
+        code: &str,
+        data: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::AUTH_CODE, code);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_authorization_code(&self, code: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::AUTH_CODE, code);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Social Login State ====================
+
+    pub async fn store_social_login_state(
+        &self,
+        id: &str,
+        data: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::SOCIAL_STATE, id);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_social_login_state(&self, id: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::SOCIAL_STATE, id);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Enterprise SSO State ====================
+
+    pub async fn store_enterprise_sso_state(
+        &self,
+        id: &str,
+        data: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::ENTERPRISE_SSO_STATE, id);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_enterprise_sso_state(&self, id: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::ENTERPRISE_SSO_STATE, id);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Pending Merge ====================
+
+    pub async fn store_pending_merge(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::PENDING_MERGE, token);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::PENDING_MERGE, token);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Audience Validation ====================
+
+    pub async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {
+        let mut conn = self.conn.clone();
+        let result: bool = redis::cmd("SISMEMBER")
+            .arg(keys::VALID_AUDIENCES)
+            .arg(client_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        Ok(result)
+    }
+
+    pub async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()> {
+        let mut conn = self.conn.clone();
+        // Atomic replace: delete then add all
+        let _: () = redis::cmd("DEL")
+            .arg(keys::VALID_AUDIENCES)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+
+        if !client_ids.is_empty() {
+            let mut cmd = redis::cmd("SADD");
+            cmd.arg(keys::VALID_AUDIENCES);
+            for id in client_ids {
+                cmd.arg(id.as_str());
+            }
+            let _: () = cmd.query_async(&mut conn).await.map_err(AppError::from)?;
+        }
+        Ok(())
+    }
+
+    pub async fn add_audience(&self, client_id: &str) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let _: () = redis::cmd("SADD")
+            .arg(keys::VALID_AUDIENCES)
+            .arg(client_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        Ok(())
+    }
+
+    pub async fn remove_audience(&self, client_id: &str) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let _: () = redis::cmd("SREM")
+            .arg(keys::VALID_AUDIENCES)
+            .arg(client_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        Ok(())
+    }
+
     /// Atomically check if a webhook event key exists and set it if not (SETNX).
     /// Returns true if the event was already processed (duplicate).
     pub async fn check_and_mark_webhook_event(

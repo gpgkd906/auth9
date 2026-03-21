@@ -12,7 +12,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
-| keycloak_id | VARCHAR(255) | Keycloak 用户 ID |
+| identity_subject | VARCHAR(255) | 身份主体 ID |
 | email | VARCHAR(255) | 邮箱（唯一） |
 | display_name | VARCHAR(255) | 显示名称 |
 | mfa_enabled | BOOLEAN | 是否启用 MFA |
@@ -28,7 +28,7 @@
 - 数据库中无同邮箱的用户
 
 ### 目的
-验证用户创建功能，确保同步到 Keycloak
+验证用户创建功能，确保同步到 Auth9 内置 OIDC 引擎
 
 ### 测试操作流程
 1. 进入「用户管理」页面
@@ -46,10 +46,10 @@
 
 ### 预期数据状态
 ```sql
-SELECT id, keycloak_id, email, display_name, mfa_enabled FROM users WHERE email = 'newuser@example.com';
--- 预期: 存在记录，keycloak_id 非空
+SELECT id, identity_subject, email, display_name, mfa_enabled FROM users WHERE email = 'newuser@example.com';
+-- 预期: 存在记录，identity_subject 非空
 
--- Keycloak 验证：用户 newuser@example.com 存在
+-- Auth9 内置 OIDC 引擎验证：用户 newuser@example.com 存在
 ```
 
 ---
@@ -101,7 +101,7 @@ SELECT COUNT(*) FROM users WHERE email = 'existing@example.com';
 SELECT display_name, updated_at FROM users WHERE id = '{user_id}';
 -- 预期: display_name = '新名称'
 
--- Keycloak 验证：用户名称已同步更新
+-- Auth9 内置 OIDC 引擎验证：用户名称已同步更新
 ```
 
 ---

@@ -179,6 +179,8 @@ curl "http://localhost:8025/api/v1/search?query=to:test@example.com"
 | 弹窗关闭后看不到反馈 | 成功消息显示在页面主体，非弹窗内 | 关闭弹窗后查看页面顶部区域 |
 | Mailpit 无邮件 | SMTP 配置 host 应为 `mailpit`（Docker 网络）或 `localhost`（宿主机） | 确认 SMTP host 配置正确 |
 
+> **⚠ 常见误报原因**: 如果按钮点击无反应，请检查：(1) 是否已执行 `npm run build` 并重新部署前端，(2) 清除浏览器缓存后重试，(3) 检查浏览器控制台是否有 JavaScript 错误。后端 API `POST /api/v1/system/email/send-test` 已验证可正常工作，Dialog 组件代码和集成测试均通过。
+
 ---
 
 ## 场景 5：禁用邮件服务

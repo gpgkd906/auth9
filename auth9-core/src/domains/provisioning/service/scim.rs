@@ -1,7 +1,7 @@
 //! Core SCIM service - orchestrates user/group CRUD operations
 
 use crate::error::{AppError, Result};
-use crate::keycloak::KeycloakClient;
+use crate::identity_engine::{IdentityEngine, IdentityUserCreateInput};
 use crate::models::common::StringUuid;
 use crate::models::rbac::AssignRolesInput;
 use crate::models::scim::*;
@@ -24,7 +24,7 @@ where
     user_repo: Arc<U>,
     group_mapping_repo: Arc<G>,
     log_repo: Arc<L>,
-    keycloak: Option<KeycloakClient>,
+    identity_engine: Option<Arc<dyn IdentityEngine>>,
     rbac_repo: Option<Arc<dyn RbacRepository>>,
 }
 
@@ -38,13 +38,13 @@ where
         user_repo: Arc<U>,
         group_mapping_repo: Arc<G>,
         log_repo: Arc<L>,
-        keycloak: Option<KeycloakClient>,
+        identity_engine: Option<Arc<dyn IdentityEngine>>,
     ) -> Self {
         Self {
             user_repo,
             group_mapping_repo,
             log_repo,
-            keycloak,
+            identity_engine,
             rbac_repo: None,
         }
     }
@@ -53,14 +53,14 @@ where
         user_repo: Arc<U>,
         group_mapping_repo: Arc<G>,
         log_repo: Arc<L>,
-        keycloak: Option<KeycloakClient>,
+        identity_engine: Option<Arc<dyn IdentityEngine>>,
         rbac_repo: Arc<dyn RbacRepository>,
     ) -> Self {
         Self {
             user_repo,
             group_mapping_repo,
             log_repo,
-            keycloak,
+            identity_engine,
             rbac_repo: Some(rbac_repo),
         }
     }
@@ -124,9 +124,9 @@ where
             return self.user_to_scim(&existing, ctx).await;
         }
 
-        // Create in Keycloak first (if available)
-        let keycloak_id = if let Some(kc) = &self.keycloak {
-            let kc_input = crate::keycloak::CreateKeycloakUserInput {
+        // Create in identity engine first (if available)
+        let identity_subject = if let Some(identity_engine) = &self.identity_engine {
+            let create_input = IdentityUserCreateInput {
                 username: email.clone(),
                 email: email.clone(),
                 first_name: None,
@@ -135,7 +135,11 @@ where
                 email_verified: true,
                 credentials: None,
             };
-            match kc.create_user(&kc_input).await {
+            match identity_engine
+                .user_store()
+                .create_user(&create_input)
+                .await
+            {
                 Ok(id) => id,
                 Err(e) => {
                     self.log_operation(
@@ -145,11 +149,11 @@ where
                         fields.external_id.as_deref(),
                         None,
                         "error",
-                        Some(&format!("Keycloak error: {}", e)),
+                        Some(&format!("Identity backend error: {}", e)),
                     )
                     .await;
-                    return Err(AppError::Keycloak(format!(
-                        "Failed to create user in Keycloak: {}",
+                    return Err(AppError::IdentityBackend(format!(
+                        "Failed to create user in identity backend: {}",
                         e
                     )));
                 }
@@ -165,7 +169,7 @@ where
             avatar_url: fields.avatar_url.clone(),
         };
 
-        let user = self.user_repo.create(&keycloak_id, &input).await?;
+        let user = self.user_repo.create(&identity_subject, &input).await?;
 
         // Set SCIM fields
         self.user_repo

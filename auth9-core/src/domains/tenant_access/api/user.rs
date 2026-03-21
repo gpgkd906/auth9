@@ -5,7 +5,9 @@ use crate::error::{AppError, Result};
 use crate::http_support::{
     write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
-use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
+use crate::identity_engine::{
+    IdentityCredentialInput, IdentityUserCreateInput, IdentityUserUpdateInput,
+};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::models::common::StringUuid;
 use crate::models::user::{AddUserToTenantInput, CreateUserInput, UpdateUserInput, User};
@@ -313,7 +315,7 @@ pub async fn get<S: HasServices>(
     Ok(Json(SuccessResponse::new(user)))
 }
 
-/// Create user input (includes optional password for Keycloak)
+/// Create user input (includes optional password for identity engine)
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateUserRequest {
     #[serde(flatten)]
@@ -357,17 +359,8 @@ pub async fn create<S: HasServices + HasBranding>(
             if let Ok(claims) = jwt.verify_identity_token(token) {
                 return AuthUser::from_identity_claims(claims).ok();
             }
-            let allowed = &state.config().jwt_tenant_access_allowed_audiences;
-            if !allowed.is_empty() {
-                if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
-                    return AuthUser::from_tenant_access_claims(claims).ok();
-                }
-            } else if !state.config().is_production() {
-                #[allow(deprecated)]
-                if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
-                    metrics::counter!("auth9_jwt_legacy_fallback_total", "caller" => "tenant_access_user").increment(1);
-                    return AuthUser::from_tenant_access_claims(claims).ok();
-                }
+            if let Ok(claims) = jwt.verify_tenant_access_token_any_audience(token) {
+                return AuthUser::from_tenant_access_claims(claims).ok();
             }
             None
         });
@@ -418,7 +411,7 @@ pub async fn create<S: HasServices + HasBranding>(
             .await?;
     }
 
-    // Validate input before calling Keycloak (catches invalid emails early)
+    // Validate input before calling identity engine (catches invalid emails early)
     input.user.validate()?;
 
     // Validate password against tenant password policy if provided
@@ -439,16 +432,17 @@ pub async fn create<S: HasServices + HasBranding>(
     }
 
     let credentials = input.password.map(|password| {
-        vec![KeycloakCredential {
+        vec![IdentityCredentialInput {
             credential_type: "password".to_string(),
             value: password,
             temporary: false,
         }]
     });
 
-    let keycloak_id = state
-        .keycloak_client()
-        .create_user(&CreateKeycloakUserInput {
+    let identity_subject = state
+        .identity_engine()
+        .user_store()
+        .create_user(&IdentityUserCreateInput {
             username: input.user.email.clone(),
             email: input.user.email.clone(),
             first_name: input.user.display_name.clone(),
@@ -459,19 +453,24 @@ pub async fn create<S: HasServices + HasBranding>(
         })
         .await?;
 
-    let user = match state.user_service().create(&keycloak_id, input.user).await {
+    let user = match state.user_service().create(&identity_subject, input.user).await {
         Ok(user) => user,
         Err(e) => {
             tracing::warn!(
-                keycloak_id = %keycloak_id,
+                identity_subject = %identity_subject,
                 error = %e,
-                "DB user creation failed, compensating by deleting Keycloak user"
+                "DB user creation failed, compensating by deleting identity engine user"
             );
-            if let Err(cleanup_err) = state.keycloak_client().delete_user(&keycloak_id).await {
+            if let Err(cleanup_err) = state
+                .identity_engine()
+                .user_store()
+                .delete_user(&identity_subject)
+                .await
+            {
                 tracing::error!(
-                    keycloak_id = %keycloak_id,
+                    identity_subject = %identity_subject,
                     error = %cleanup_err,
-                    "Failed to delete orphaned Keycloak user during compensation"
+                    "Failed to delete orphaned identity engine user during compensation"
                 );
             }
             return Err(e);
@@ -540,7 +539,7 @@ pub async fn update_me<S: HasServices>(
         .map_err(|e| AppError::Validation(e.to_string()))?;
     let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
-        let update = KeycloakUserUpdate {
+        let update = IdentityUserUpdateInput {
             username: None,
             email: None,
             first_name: input.display_name.clone(),
@@ -550,8 +549,9 @@ pub async fn update_me<S: HasServices>(
             required_actions: None,
         };
         state
-            .keycloak_client()
-            .update_user(&before.keycloak_id, &update)
+            .identity_engine()
+            .user_store()
+            .update_user(&before.identity_subject, &update)
             .await?;
     }
     let user = state.user_service().update(id, input).await?;
@@ -595,13 +595,13 @@ pub async fn update<S: HasServices>(
     }
 
     let id = StringUuid::from(id);
-    // Validate input before sending to Keycloak (prevent invalid data reaching external service)
+    // Validate input before sending to identity engine (prevent invalid data reaching external service)
     input
         .validate()
         .map_err(|e| AppError::Validation(e.to_string()))?;
     let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
-        let update = KeycloakUserUpdate {
+        let update = IdentityUserUpdateInput {
             username: None,
             email: None,
             first_name: input.display_name.clone(),
@@ -611,8 +611,9 @@ pub async fn update<S: HasServices>(
             required_actions: None,
         };
         state
-            .keycloak_client()
-            .update_user(&before.keycloak_id, &update)
+            .identity_engine()
+            .user_store()
+            .update_user(&before.identity_subject, &update)
             .await?;
     }
     let user = state.user_service().update(id, input).await?;
@@ -660,8 +661,9 @@ pub async fn delete<S: HasServices>(
     }
 
     if let Err(err) = state
-        .keycloak_client()
-        .delete_user(&before.keycloak_id)
+        .identity_engine()
+        .user_store()
+        .delete_user(&before.identity_subject)
         .await
     {
         if !matches!(err, crate::error::AppError::NotFound(_)) {
@@ -908,8 +910,9 @@ pub async fn enable_mfa<S: HasServices>(
         .get(StringUuid::from(auth.user_id))
         .await?;
     let password_valid = state
-        .keycloak_client()
-        .validate_user_password(&admin_user.keycloak_id, &input.confirm_password)
+        .identity_engine()
+        .user_store()
+        .validate_user_password(&admin_user.identity_subject, &input.confirm_password)
         .await?;
     if !password_valid {
         return Err(AppError::Forbidden(
@@ -920,7 +923,7 @@ pub async fn enable_mfa<S: HasServices>(
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
-    let update = KeycloakUserUpdate {
+    let update = IdentityUserUpdateInput {
         username: None,
         email: None,
         first_name: None,
@@ -930,8 +933,9 @@ pub async fn enable_mfa<S: HasServices>(
         required_actions: Some(vec!["CONFIGURE_TOTP".to_string()]),
     };
     state
-        .keycloak_client()
-        .update_user(&user.keycloak_id, &update)
+        .identity_engine()
+        .user_store()
+        .update_user(&user.identity_subject, &update)
         .await?;
     let updated = state.user_service().set_mfa_enabled(id, true).await?;
     let _ = write_audit_log_generic(
@@ -993,8 +997,9 @@ pub async fn disable_mfa<S: HasServices>(
         .get(StringUuid::from(auth.user_id))
         .await?;
     let password_valid = state
-        .keycloak_client()
-        .validate_user_password(&admin_user.keycloak_id, &input.confirm_password)
+        .identity_engine()
+        .user_store()
+        .validate_user_password(&admin_user.identity_subject, &input.confirm_password)
         .await?;
     if !password_valid {
         return Err(AppError::Forbidden(
@@ -1006,10 +1011,11 @@ pub async fn disable_mfa<S: HasServices>(
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
     state
-        .keycloak_client()
-        .remove_totp_credentials(&user.keycloak_id)
+        .identity_engine()
+        .credential_store()
+        .remove_totp_credentials(&user.identity_subject)
         .await?;
-    let update = KeycloakUserUpdate {
+    let update = IdentityUserUpdateInput {
         username: None,
         email: None,
         first_name: None,
@@ -1019,8 +1025,9 @@ pub async fn disable_mfa<S: HasServices>(
         required_actions: Some(vec![]),
     };
     state
-        .keycloak_client()
-        .update_user(&user.keycloak_id, &update)
+        .identity_engine()
+        .user_store()
+        .update_user(&user.identity_subject, &update)
         .await?;
     let updated = state.user_service().set_mfa_enabled(id, false).await?;
     let _ = write_audit_log_generic(
@@ -1084,20 +1091,21 @@ mod tests {
 
     #[test]
     fn test_create_user_request_deserialization() {
-        let json = r#"{
+        let value = serde_json::json!({
             "email": "user@example.com",
             "display_name": "John Doe",
             "avatar_url": "https://example.com/avatar.png",
-            "password": "secret123"
-        }"#;
-        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+            "password": "secret123" // pragma: allowlist secret
+        });
+        let json = serde_json::to_string(&value).unwrap();
+        let request: CreateUserRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(request.user.email, "user@example.com");
         assert_eq!(request.user.display_name, Some("John Doe".to_string()));
         assert_eq!(
             request.user.avatar_url,
             Some("https://example.com/avatar.png".to_string())
         );
-        assert_eq!(request.password, Some("secret123".to_string()));
+        assert_eq!(request.password, Some("secret123".to_string())); // pragma: allowlist secret
     }
 
     #[test]
@@ -1215,13 +1223,14 @@ mod tests {
 
     #[test]
     fn test_create_user_request_with_all_fields() {
-        let json = r#"{
+        let value = serde_json::json!({
             "email": "full@example.com",
             "display_name": "Full Name",
             "avatar_url": "https://cdn.example.com/avatars/full.png",
-            "password": "SecureP@ssw0rd!"
-        }"#;
-        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+            "password": "SecureP@ssw0rd!" // pragma: allowlist secret
+        });
+        let json = serde_json::to_string(&value).unwrap();
+        let request: CreateUserRequest = serde_json::from_str(&json).unwrap();
 
         assert_eq!(request.user.email, "full@example.com");
         assert_eq!(request.user.display_name, Some("Full Name".to_string()));
@@ -1355,14 +1364,15 @@ mod tests {
 
     #[test]
     fn test_create_user_request_password_only() {
-        let json = r#"{
+        let value = serde_json::json!({
             "email": "pwd@example.com",
-            "password": "OnlyPassword123"
-        }"#;
-        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+            "password": "OnlyPassword123" // pragma: allowlist secret
+        });
+        let json = serde_json::to_string(&value).unwrap();
+        let request: CreateUserRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(request.user.email, "pwd@example.com");
         assert!(request.user.display_name.is_none());
-        assert_eq!(request.password, Some("OnlyPassword123".to_string()));
+        assert_eq!(request.password, Some("OnlyPassword123".to_string())); // pragma: allowlist secret
     }
 
     #[test]

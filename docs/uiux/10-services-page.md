@@ -93,3 +93,5 @@
 |------|------|------|
 | 容器 `display: block` + `space-y-6` | 查看了页面顶层包裹器而非网格容器 | 检查 Card 内部的 `grid` 容器 |
 | 未检测到 `flex-col` 和 `mt-auto` | 查看了错误的 DOM 层级 | 检查每个卡片的直接 `<div>` 元素 |
+
+> **注意**: `min-w-0` 应用在卡片内部的 flex 子项 `<div class='min-w-0 flex-1'>` 上（用于 truncate），而非外层 grid 容器。CSS Grid 容器不需要 `min-w-0` 来支持子元素的 truncate。验证时请检查包含 `truncate` 类的元素的直接父容器是否有 `min-w-0`。

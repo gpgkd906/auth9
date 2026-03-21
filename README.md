@@ -78,7 +78,7 @@ The `.agents/skills/` directory contains 16 skills covering every phase of the d
 | Phase | Skills | What They Do |
 |-------|--------|-------------|
 | **Plan** | `project-bootstrap` | Scaffold a new project from scratch |
-| **Code** | `rust-conventions`, `keycloak-theme` | Coding standards, theme development |
+| **Code** | `rust-conventions` | Coding standards |
 | **Test Docs** | `qa-doc-gen`, `qa-doc-governance` | Generate and govern test documentation |
 | **Execute Tests** | `qa-testing`, `e2e-testing`, `performance-testing`, `auth9-grpc-regression` | Run QA, E2E, load, and gRPC tests |
 | **Fix** | `ticket-fix`, `align-tests` | Auto-fix tickets, realign tests after refactors |
@@ -164,7 +164,7 @@ Auth9 is a fully functional identity platform — the product that this methodol
 | **auth9-portal** | React Router 7 + TypeScript + Vite | Admin dashboard UI |
 | **Database** | TiDB (MySQL compatible) | Tenant, user, RBAC data |
 | **Cache** | Redis | Session, token caching |
-| **Auth Engine** | Keycloak | OIDC provider (optional) |
+| **Auth Engine** | auth9-oidc (built-in) | OIDC provider |
 
 ### Features
 
@@ -192,7 +192,7 @@ Auth9 is a fully functional identity platform — the product that this methodol
 ### Local Development
 
 ```bash
-# Start dependencies (TiDB, Redis, Keycloak)
+# Start dependencies (TiDB, Redis)
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # Run auth9-core
@@ -215,7 +215,6 @@ docker-compose up -d
 
 - Portal: http://localhost:3000
 - API: http://localhost:8080
-- Keycloak: http://localhost:8081
 
 ## API Endpoints
 
@@ -294,7 +293,7 @@ ghcr.io/gpgkd906/auth9-portal:latest
 - **[QA Test Cases](docs/qa/README.md)** — 96 functional test documents
 - **[Security Test Cases](docs/security/README.md)** — 48 security test documents
 - **[UI/UX Test Cases](docs/uiux/README.md)** — 12 UI/UX test documents
-- **[Keycloak Theme](docs/keycloak-theme.md)** — Login page customization
+
 
 ## Authorization Model
 

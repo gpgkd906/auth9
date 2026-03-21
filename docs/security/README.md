@@ -5,7 +5,7 @@
 ## 项目安全概述
 
 Auth9 是一个自托管的身份认证服务，核心安全组件包括：
-- **Keycloak**: OIDC 协议处理、MFA 认证
+- **Auth9 OIDC Engine**: 内置 OIDC 协议处理、MFA 认证
 - **Auth9 Core**: 业务逻辑、Token Exchange、RBAC
 - **Auth9 Portal**: 管理界面 (React Router 7)
 
@@ -207,6 +207,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-17 | 3.3.3 | **Keycloak Phase 1 FR3**：同步 `input-validation/04-parameter-tampering.md` 与 `data-security/01-sensitive-data.md`，将用户外部主体断言主语义切换为 `identity_subject`，旧 `keycloak_id` 仅保留 migration period 兼容说明 |
 | 2026-03-14 | 3.3.2 | 同步 `authorization/01-tenant-isolation.md`，新增“租户级恶意 IP 黑名单隔离”场景，覆盖租户级作用域、平台优先级与 `blacklist_scope` 告警断言 |
 | 2026-03-14 | 3.3.1 | 同步安全检测规避文档，补充平台级恶意 IP 黑名单已落地状态，避免安全测试仍按“未实现”假设执行 |
 
@@ -232,7 +233,6 @@ cd auth9-portal && npm run dev
 | Auth9 Portal | 3000 | 管理界面 |
 | Auth9 Core (HTTP) | 8080 | REST API |
 | Auth9 Core (gRPC) | 50051 | gRPC API |
-| Keycloak | 8081 | OIDC 认证 |
 | TiDB | 4000 | 数据库 |
 | Redis | 6379 | 缓存 |
 

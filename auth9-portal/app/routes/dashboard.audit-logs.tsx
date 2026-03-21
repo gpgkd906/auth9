@@ -55,7 +55,9 @@ export default function AuditLogsPage() {
               <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {data.data.map((log) => (
                   <tr key={log.id} className="text-[var(--text-secondary)]">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{log.action}</td>
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
+                      <code className="rounded bg-[var(--sidebar-item-hover)] px-1.5 py-0.5 font-mono text-xs">{log.action}</code>
+                    </td>
                     <td className="px-4 py-3">
                       {log.resource_type}
                       {log.resource_id ? `:${log.resource_id}` : ""}

@@ -1,5 +1,5 @@
 version: qa-doc-gen-v1
-generated_at: 2026-03-13
+generated_at: 2026-03-17
 documents:
   - id: action/01-crud
     path: docs/qa/action/01-crud.md
@@ -115,6 +115,14 @@ documents:
     has_checklist: true
     last_reviewed: 2026-02-21
     test_script: scripts/qa/auto/analytics-02-events.sh
+  - id: analytics/03-federation-events
+    path: docs/qa/analytics/03-federation-events.md
+    module: analytics
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-18
   - id: audit/01-audit-logs
     path: docs/qa/audit/01-audit-logs.md
     module: audit
@@ -126,7 +134,7 @@ documents:
   - id: auth/01-oidc-login
     path: docs/qa/auth/01-oidc-login.md
     module: auth
-    scenarios: 5
+    scenarios: 4
     has_ui_flow: true
     has_entry_visibility: false
     has_checklist: true
@@ -222,14 +230,6 @@ documents:
     has_entry_visibility: true
     has_checklist: true
     last_reviewed: 2026-03-06
-  - id: auth/13-keycloak-ui-visibility-regression
-    path: docs/qa/auth/13-keycloak-ui-visibility-regression.md
-    module: auth
-    scenarios: 5
-    has_ui_flow: true
-    has_entry_visibility: true
-    has_checklist: true
-    last_reviewed: 2026-03-04
   - id: auth/15-dark-mode-auth-contrast
     path: docs/qa/auth/15-dark-mode-auth-contrast.md
     module: auth
@@ -238,6 +238,38 @@ documents:
     has_entry_visibility: true
     has_checklist: true
     last_reviewed: 2026-03-13
+  - id: auth/18-oidc-login-mfa-advanced
+    path: docs/qa/auth/18-oidc-login-mfa-advanced.md
+    module: auth
+    scenarios: 3
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17
+  - id: auth/26-enterprise-oidc-broker
+    path: docs/qa/auth/26-enterprise-oidc-broker.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-18
+  - id: auth/28-federated-identity-linking
+    path: docs/qa/auth/28-federated-identity-linking.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-18
+  - id: auth/30-mfa-self-service-portal
+    path: docs/qa/auth/30-mfa-self-service-portal.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-03-20
   - id: identity-provider/01-crud
     path: docs/qa/identity-provider/01-crud.md
     module: identity-provider
@@ -295,15 +327,6 @@ documents:
     has_checklist: true
     last_reviewed: 2026-02-21
     test_script: scripts/qa/auto/integration-04-health-check.sh
-  - id: integration/05-keycloak-events
-    path: docs/qa/integration/05-keycloak-events.md
-    module: integration
-    scenarios: 5
-    has_ui_flow: false
-    has_entry_visibility: false
-    has_checklist: true
-    last_reviewed: 2026-02-21
-    test_script: scripts/qa/auto/integration-05-keycloak-events.sh
   - id: integration/06-init-seed-data
     path: docs/qa/integration/06-init-seed-data.md
     module: integration
@@ -346,14 +369,6 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
-  - id: integration/11-keycloak26-event-stream
-    path: docs/qa/integration/11-keycloak26-event-stream.md
-    module: integration
-    scenarios: 5
-    has_ui_flow: false
-    has_entry_visibility: false
-    has_checklist: true
-    last_reviewed: 2026-02-21
   - id: integration/12-otp-service-layer
     path: docs/qa/integration/12-otp-service-layer.md
     module: integration
@@ -362,6 +377,22 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-16
+  - id: integration/13-identity-engine-state-injection
+    path: docs/qa/integration/13-identity-engine-state-injection.md
+    module: integration
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17
+  - id: integration/19-phase1-identity-abstraction-closure
+    path: docs/qa/integration/19-phase1-identity-abstraction-closure.md
+    module: integration
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17
   - id: invitation/01-create-send
     path: docs/qa/invitation/01-create-send.md
     module: invitation
@@ -861,3 +892,19 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-16
+  - id: integration/17-identity-engine-capabilities-state-cleanup
+    path: docs/qa/integration/17-identity-engine-capabilities-state-cleanup.md
+    module: integration
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17
+  - id: integration/18-business-layer-keycloak-decoupling
+    path: docs/qa/integration/18-business-layer-keycloak-decoupling.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17

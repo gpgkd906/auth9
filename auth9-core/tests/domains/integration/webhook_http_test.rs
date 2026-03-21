@@ -4,7 +4,7 @@
 
 use crate::support::http::{
     delete_json_with_auth, get_json_with_auth, post_json_with_auth, put_json_with_auth,
-    MockKeycloakServer, TestAppState,
+    TestAppState,
 };
 use crate::support::{create_test_identity_token, create_test_tenant};
 use auth9_core::domains::integration::service::WebhookTestResult;
@@ -56,8 +56,7 @@ where
 
 #[tokio::test]
 async fn test_list_webhooks_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -76,8 +75,7 @@ async fn test_list_webhooks_empty() {
 
 #[tokio::test]
 async fn test_list_webhooks_with_data() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -118,8 +116,7 @@ async fn test_list_webhooks_with_data() {
 
 #[tokio::test]
 async fn test_get_webhook_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -158,8 +155,7 @@ async fn test_get_webhook_success() {
 
 #[tokio::test]
 async fn test_get_webhook_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -179,8 +175,7 @@ async fn test_get_webhook_not_found() {
 
 #[tokio::test]
 async fn test_get_webhook_wrong_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant1 = create_test_tenant(None);
     let tenant1_id = tenant1.id;
@@ -225,8 +220,7 @@ async fn test_get_webhook_wrong_tenant() {
 
 #[tokio::test]
 async fn test_create_webhook_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -260,8 +254,7 @@ async fn test_create_webhook_success() {
 
 #[tokio::test]
 async fn test_create_webhook_validation_error_empty_name() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -289,8 +282,7 @@ async fn test_create_webhook_validation_error_empty_name() {
 
 #[tokio::test]
 async fn test_create_webhook_validation_error_invalid_url() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -322,8 +314,7 @@ async fn test_create_webhook_validation_error_invalid_url() {
 
 #[tokio::test]
 async fn test_update_webhook_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -374,8 +365,7 @@ async fn test_update_webhook_success() {
 
 #[tokio::test]
 async fn test_delete_webhook_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -416,8 +406,7 @@ async fn test_delete_webhook_success() {
 
 #[tokio::test]
 async fn test_delete_webhook_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -441,8 +430,7 @@ async fn test_delete_webhook_not_found() {
 
 #[tokio::test]
 async fn test_update_webhook_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -469,8 +457,7 @@ async fn test_update_webhook_not_found() {
 
 #[tokio::test]
 async fn test_update_webhook_wrong_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant1 = create_test_tenant(None);
     let tenant1_id = tenant1.id;
@@ -521,8 +508,7 @@ async fn test_update_webhook_wrong_tenant() {
 
 #[tokio::test]
 async fn test_create_webhook_tenant_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Don't create a tenant - use a random ID
     let nonexistent_tenant_id = StringUuid::new_v4();
@@ -553,8 +539,7 @@ async fn test_create_webhook_tenant_not_found() {
 
 #[tokio::test]
 async fn test_regenerate_webhook_secret_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -602,8 +587,7 @@ async fn test_regenerate_webhook_secret_success() {
 
 #[tokio::test]
 async fn test_regenerate_webhook_secret_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -627,8 +611,7 @@ async fn test_regenerate_webhook_secret_not_found() {
 
 #[tokio::test]
 async fn test_regenerate_webhook_secret_wrong_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant1 = create_test_tenant(None);
     let tenant1_id = tenant1.id;
@@ -677,8 +660,7 @@ async fn test_regenerate_webhook_secret_wrong_tenant() {
 
 #[tokio::test]
 async fn test_webhook_test_endpoint() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -721,8 +703,7 @@ async fn test_webhook_test_endpoint() {
 
 #[tokio::test]
 async fn test_webhook_test_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -746,8 +727,7 @@ async fn test_webhook_test_not_found() {
 
 #[tokio::test]
 async fn test_webhook_test_wrong_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant1 = create_test_tenant(None);
     let tenant1_id = tenant1.id;

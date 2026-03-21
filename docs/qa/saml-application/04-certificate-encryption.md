@@ -15,13 +15,17 @@ Phase 3 新增以下能力：
 - **Assertion 加密校验**：`encrypt_assertions=true` 时必须提供 `sp_certificate`
 - **SLO POST Binding**：`slo_url` 同时注册 Redirect 和 POST 两种绑定
 
+## 入口可见性说明
+
+本文件仅补充证书与加密能力回归；Portal UI 入口可见性仍以 [03-portal-ui.md](./03-portal-ui.md) 为准，QA 应从已验证入口导航进入对应详情页后再执行证书相关检查。
+
 ---
 
 ## 场景 1：下载 IdP 签名证书（公开端点）
 
 ### 初始状态
 - 已创建 SAML Application `{app_id}`
-- Keycloak 正常运行
+- Auth9 内置 OIDC 引擎正常运行
 
 ### 目的
 验证证书端点无需认证即可访问，返回有效 PEM 格式证书
@@ -87,6 +91,8 @@ curl -s -o /dev/null -w "%{http_code}" \
   - `days_until_expiry`：整数，> 0（除非证书已过期）
   - `expires_soon`：布尔值（剩余天数 < 30 时为 `true`）
 - 无 Token 时返回 401
+
+> **注意（占位证书环境）**: 在未配置真实 RSA 签名密钥的全新环境中，OIDC 引擎使用占位证书。此时 `certificate-info` 端点会返回 HTTP 200 并携带 `days_until_expiry: -1`（表示占位证书无有效过期信息），而非返回 500 错误。这是预期行为，不是 bug。
 
 ---
 
@@ -170,11 +176,11 @@ FROM saml_applications WHERE entity_id = 'https://encrypted.example.com';
 ## 场景 4：SLO POST Binding 验证
 
 ### 初始状态
-- Keycloak 正常运行
-- 持有管理员级别的 Keycloak Admin Token（用于验证 Keycloak Client 属性）
+- Auth9 内置 OIDC 引擎正常运行
+- 持有管理员级别的 Access Token（用于验证 SAML Client 属性）
 
 ### 目的
-验证配置 `slo_url` 时，Keycloak SAML Client 同时注册 Redirect 和 POST 两种 SLO 绑定
+验证配置 `slo_url` 时，SAML Client 同时注册 Redirect 和 POST 两种 SLO 绑定
 
 ### 测试操作流程
 
@@ -190,30 +196,21 @@ APP_RESULT=$(curl -s -X POST "http://localhost:8080/api/v1/tenants/{tenant_id}/s
     "slo_url": "https://slo-test.example.com/slo"
   }')
 KC_CLIENT_ID=$(echo $APP_RESULT | jq -r '.data.keycloak_client_id')
-echo "Keycloak Client UUID: $KC_CLIENT_ID"
+echo "SAML Client ID: $KC_CLIENT_ID"
 ```
 
-**验证 Keycloak Client 属性**:
+**验证 SAML Client 属性**:
 ```bash
-# 获取 Keycloak Admin Token
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "grant_type=client_credentials&client_id=admin-cli&client_secret={admin_secret}" \
-  | jq -r '.access_token')
-
-# 查看 SAML Client 属性
-curl -s "http://localhost:8081/admin/realms/auth9/clients/$KC_CLIENT_ID" \
-  -H "Authorization: Bearer $KC_TOKEN" \
-  | jq '.attributes | {
-    saml_single_logout_service_url_redirect,
-    saml_single_logout_service_url_post
-  }'
+# 通过数据库验证 SLO URL 配置
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e "
+SELECT slo_url FROM saml_applications WHERE keycloak_client_id = '$KC_CLIENT_ID';
+"
+# 预期: slo_url = 'https://slo-test.example.com/slo'
 ```
 
 ### 预期结果
 - SAML Application 创建成功，`slo_url` = `"https://slo-test.example.com/slo"`
-- Keycloak Client 属性中同时包含：
-  - `saml_single_logout_service_url_redirect` = `"https://slo-test.example.com/slo"`
-  - `saml_single_logout_service_url_post` = `"https://slo-test.example.com/slo"`
+- SAML Client SLO 配置正确：`slo_url` = `"https://slo-test.example.com/slo"`（同时支持 Redirect 和 POST 绑定）
 
 ---
 
@@ -244,11 +241,13 @@ curl -s "http://localhost:8081/admin/realms/auth9/clients/$KC_CLIENT_ID" \
 ### 预期结果
 - 列表中每个 SAML Application 显示：
   - 「Download IdP Certificate」链接，点击后下载 `idp-signing.crt` 文件
-  - 证书状态 badge：
+  - 证书状态 badge（`CertExpiryBadge` 组件）：
     - 绿色 "Valid (N days)" — 剩余 > 30 天
     - 黄色 "Expires in N days" — 剩余 < 30 天
     - 红色 "Certificate expired" — 已过期
 - 下载的证书文件为有效 PEM 格式
+
+> **注意**: `CertExpiryBadge` 组件仅在证书信息可用时渲染。如果 badge 未显示，通常是上游 `certificate-info` API 调用失败（例如占位证书环境返回 `days_until_expiry: -1`）导致数据不可用。这不是 Portal 组件缺失的问题。
 - 开启加密后：
   - SP Certificate 字段标记为必填（红色 `*`）
   - 字段边框变为黄色高亮

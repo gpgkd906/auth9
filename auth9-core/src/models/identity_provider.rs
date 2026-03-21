@@ -1,8 +1,8 @@
 //! Identity Provider domain models
 //!
-//! Note: IdP configuration is stored in Keycloak.
-//! These models map Keycloak's IdP structures for Auth9 Portal.
+//! Models for identity provider (IdP) configuration used by Auth9 Portal.
 
+use crate::identity_engine::IdentityProviderRepresentation;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
@@ -47,14 +47,15 @@ pub struct IdentityProvider {
     pub trust_email: bool,
     pub store_token: bool,
     pub link_only: bool,
+    pub first_login_policy: String,
     pub first_broker_login_flow_alias: Option<String>,
     pub config: HashMap<String, String>,
 }
 
-/// Keycloak IdP representation
+/// Backend IdP representation (camelCase serialization for legacy compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct KeycloakIdentityProvider {
+pub struct BackendIdentityProvider {
     pub alias: String,
     pub display_name: Option<String>,
     pub provider_id: String,
@@ -70,23 +71,24 @@ pub struct KeycloakIdentityProvider {
     pub config: HashMap<String, String>,
 }
 
-impl From<KeycloakIdentityProvider> for IdentityProvider {
-    fn from(kc: KeycloakIdentityProvider) -> Self {
+impl From<BackendIdentityProvider> for IdentityProvider {
+    fn from(backend: BackendIdentityProvider) -> Self {
         Self {
-            alias: kc.alias,
-            display_name: kc.display_name,
-            provider_id: kc.provider_id,
-            enabled: kc.enabled,
-            trust_email: kc.trust_email,
-            store_token: kc.store_token,
-            link_only: kc.link_only,
-            first_broker_login_flow_alias: kc.first_broker_login_flow_alias,
-            config: kc.config,
+            alias: backend.alias,
+            display_name: backend.display_name,
+            provider_id: backend.provider_id,
+            enabled: backend.enabled,
+            trust_email: backend.trust_email,
+            store_token: backend.store_token,
+            link_only: backend.link_only,
+            first_login_policy: "auto_merge".to_string(),
+            first_broker_login_flow_alias: backend.first_broker_login_flow_alias,
+            config: backend.config,
         }
     }
 }
 
-impl From<IdentityProvider> for KeycloakIdentityProvider {
+impl From<IdentityProvider> for BackendIdentityProvider {
     fn from(idp: IdentityProvider) -> Self {
         Self {
             alias: idp.alias,
@@ -102,19 +104,19 @@ impl From<IdentityProvider> for KeycloakIdentityProvider {
     }
 }
 
-// Also implement From for the keycloak module's type
-impl From<crate::keycloak::KeycloakIdentityProvider> for IdentityProvider {
-    fn from(kc: crate::keycloak::KeycloakIdentityProvider) -> Self {
+impl From<IdentityProviderRepresentation> for IdentityProvider {
+    fn from(value: IdentityProviderRepresentation) -> Self {
         Self {
-            alias: kc.alias,
-            display_name: kc.display_name,
-            provider_id: kc.provider_id,
-            enabled: kc.enabled,
-            trust_email: kc.trust_email,
-            store_token: kc.store_token,
-            link_only: kc.link_only,
-            first_broker_login_flow_alias: kc.first_broker_login_flow_alias,
-            config: kc.config,
+            alias: value.alias,
+            display_name: value.display_name,
+            provider_id: value.provider_id,
+            enabled: value.enabled,
+            trust_email: value.trust_email,
+            store_token: value.store_token,
+            link_only: value.link_only,
+            first_login_policy: value.first_login_policy,
+            first_broker_login_flow_alias: value.first_broker_login_flow_alias,
+            config: value.config,
         }
     }
 }
@@ -135,8 +137,14 @@ pub struct CreateIdentityProviderInput {
     pub store_token: bool,
     #[serde(default)]
     pub link_only: bool,
+    #[serde(default = "default_first_login_policy")]
+    pub first_login_policy: String,
     #[serde(default)]
     pub config: HashMap<String, String>,
+}
+
+fn default_first_login_policy() -> String {
+    "auto_merge".to_string()
 }
 
 fn default_true() -> bool {
@@ -151,6 +159,7 @@ pub struct UpdateIdentityProviderInput {
     pub trust_email: Option<bool>,
     pub store_token: Option<bool>,
     pub link_only: Option<bool>,
+    pub first_login_policy: Option<String>,
     pub config: Option<HashMap<String, String>>,
 }
 
@@ -278,11 +287,11 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_idp_to_identity_provider() {
+    fn test_backend_idp_to_identity_provider() {
         let mut config = HashMap::new();
         config.insert("clientId".to_string(), "test-client".to_string());
 
-        let kc_idp = KeycloakIdentityProvider {
+        let backend_idp = BackendIdentityProvider {
             alias: "google".to_string(),
             display_name: Some("Google Login".to_string()),
             provider_id: "google".to_string(),
@@ -294,7 +303,7 @@ mod tests {
             config,
         };
 
-        let idp: IdentityProvider = kc_idp.into();
+        let idp: IdentityProvider = backend_idp.into();
         assert_eq!(idp.alias, "google");
         assert_eq!(idp.display_name, Some("Google Login".to_string()));
         assert!(idp.enabled);
@@ -312,6 +321,7 @@ mod tests {
             trust_email: true,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             config: HashMap::new(),
         };
         assert!(input.validate().is_ok());
@@ -327,6 +337,7 @@ mod tests {
             trust_email: false,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             config: HashMap::new(),
         };
         assert!(input.validate().is_err());
@@ -411,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_idp_deserialization() {
+    fn test_backend_idp_deserialization() {
         let json = r#"{
             "alias": "github",
             "displayName": "GitHub",
@@ -421,7 +432,7 @@ mod tests {
             "config": {"clientId": "abc123"}
         }"#;
 
-        let idp: KeycloakIdentityProvider = serde_json::from_str(json).unwrap();
+        let idp: BackendIdentityProvider = serde_json::from_str(json).unwrap();
         assert_eq!(idp.alias, "github");
         assert!(idp.enabled);
         assert!(idp.trust_email);
@@ -429,14 +440,14 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_idp_deserialization_defaults() {
+    fn test_backend_idp_deserialization_defaults() {
         let json = r#"{
             "alias": "test",
             "providerId": "oidc",
             "enabled": false
         }"#;
 
-        let idp: KeycloakIdentityProvider = serde_json::from_str(json).unwrap();
+        let idp: BackendIdentityProvider = serde_json::from_str(json).unwrap();
         assert_eq!(idp.alias, "test");
         assert!(!idp.enabled);
         assert!(!idp.trust_email); // default

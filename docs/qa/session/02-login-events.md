@@ -8,17 +8,17 @@
 
 ## 架构说明
 
-Auth9 采用 Headless Keycloak 架构，登录事件的产生和记录涉及两个系统：
+Auth9 的登录事件产生和记录流程：
 
-1. **用户名/密码与 MFA 验证由底层认证引擎处理** → 认证引擎产生事件
-2. **事件通过 Webhook 推送** → Keycloak ext-event-http SPI 插件（p2-inc/keycloak-events）将事件实时推送到 auth9-core 的 `POST /api/v1/keycloak/events` 端点
+1. **用户名/密码与 MFA 验证由 Auth9 内置 OIDC 引擎处理** → 引擎产生事件
+2. **事件通过 Webhook 推送** → 事件兼容入口将事件实时推送到 auth9-core 的 `POST /api/v1/keycloak/events` 端点
 3. **Auth9 Core 记录和分析** → Auth9 接收事件后写入 `login_events` 表，并触发安全检测（如暴力破解告警）
 
-**关键点**：本文档测试的是事件接收和记录链路，通过直接调用 Webhook API 模拟事件，不通过浏览器登录流程。这确保测试解耦于 Keycloak UI，与 Headless Keycloak 架构一致。
+**关键点**：本文档测试的是事件接收和记录链路，通过直接调用 Webhook API 模拟事件，不通过浏览器登录流程。
 
 ### Webhook 事件模拟方法
 
-所有场景使用以下模式模拟 Keycloak 事件推送：
+所有场景使用以下模式模拟事件推送：
 
 ```bash
 SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
@@ -138,7 +138,7 @@ WHERE email = 'user@example.com' ORDER BY created_at DESC LIMIT 1;
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| Webhook 返回 401 | 签名不匹配 | 确认 `SECRET` 与 auth9-core 配置的 `KEYCLOAK_WEBHOOK_SECRET` 一致 |
+| Webhook 返回 401 | 签名不匹配 | 确认 `SECRET` 与 auth9-core 配置的 Webhook Secret（环境变量 `KEYCLOAK_WEBHOOK_SECRET`，历史遗留名）一致 |
 | 事件未记录 | auth9-core 未运行 | 检查 `docker ps` 确认 auth9-core 容器正常 |
 | Webhook 返回 204 但无记录 | 事件类型未映射 | 确认 `type` 字段为有效类型（LOGIN、LOGIN_ERROR 等） |
 

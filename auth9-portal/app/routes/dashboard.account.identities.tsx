@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { redirect } from "react-router";
@@ -10,7 +9,7 @@ import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
 import { mapApiError } from "~/lib/error-messages";
 import { identityProviderApi, type LinkedIdentity } from "~/services/api";
-import { getAccessToken, requireAuthWithUpdate } from "~/services/session.server";
+import { getAccessToken } from "~/services/session.server";
 import { Cross2Icon } from "@radix-ui/react-icons";
 
 type AvailableIdentityProvider = {
@@ -18,66 +17,6 @@ type AvailableIdentityProvider = {
   provider_id: string;
   display_name?: string;
 };
-
-type LinkTokenClaims = {
-  iss: string;
-  session_state?: string;
-  sid?: string;
-  azp?: string;
-  aud?: string | string[];
-};
-
-function parseKeycloakLinkTokenClaims(token: string): LinkTokenClaims {
-  const [, payload = ""] = token.split(".");
-  if (!payload) {
-    throw new Error("Missing access token payload");
-  }
-
-  const decoded = Buffer.from(payload, "base64url").toString("utf8");
-  const claims = JSON.parse(decoded) as Partial<LinkTokenClaims>;
-  const clientId =
-    claims.azp ||
-    (typeof claims.aud === "string" ? claims.aud : undefined) ||
-    process.env.AUTH9_PORTAL_CLIENT_ID ||
-    "auth9-portal";
-
-  const sessionState = claims.session_state || claims.sid;
-
-  if (!claims.iss || !sessionState) {
-    throw new Error("OIDC token is missing Keycloak linking claims");
-  }
-
-  return {
-    iss: claims.iss,
-    session_state: sessionState,
-    azp: clientId,
-  };
-}
-
-function buildKeycloakAccountLinkUrl(
-  requestUrl: URL,
-  providerAlias: string,
-  keycloakToken: string
-): string {
-  const portalUrl = process.env.AUTH9_PORTAL_URL || requestUrl.origin;
-  const redirectUri = `${portalUrl}/dashboard/account/identities`;
-  const nonce = crypto.randomUUID();
-  const claims = parseKeycloakLinkTokenClaims(keycloakToken);
-  const issuer = claims.iss.replace(/\/$/, "");
-  const clientId = claims.azp || process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
-  const digestInput = `${nonce}${claims.session_state}${clientId}${providerAlias}`;
-  const hash = createHash("sha256").update(digestInput, "utf8").digest("base64url");
-
-  const accountLinkUrl = new URL(
-    `${issuer}/broker/${encodeURIComponent(providerAlias)}/link`
-  );
-  accountLinkUrl.searchParams.set("client_id", clientId);
-  accountLinkUrl.searchParams.set("redirect_uri", redirectUri);
-  accountLinkUrl.searchParams.set("nonce", nonce);
-  accountLinkUrl.searchParams.set("hash", hash);
-
-  return accountLinkUrl.toString();
-}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const accessToken = await getAccessToken(request);
@@ -129,20 +68,21 @@ export async function action({ request }: ActionFunctionArgs) {
         return { error: translate(await resolveLocale(request), "accountIdentities.providerAliasRequired") };
       }
 
-      const { session, headers } = await requireAuthWithUpdate(request);
-      const keycloakLinkToken =
-        session.idToken || session.identityAccessToken || session.accessToken;
-      if (!keycloakLinkToken) {
-        return { error: translate(await resolveLocale(request), "accountIdentities.notAuthenticated") };
+      const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
+      const linkUrl = `${apiBaseUrl}/api/v1/social-login/link/${encodeURIComponent(providerAlias)}`;
+
+      // Server-side fetch with Bearer token to get redirect URL from Auth9 social broker
+      const linkResponse = await fetch(linkUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        redirect: "manual",
+      });
+
+      const redirectUrl = linkResponse.headers.get("Location");
+      if (!redirectUrl) {
+        return { error: translate(await resolveLocale(request), "accountIdentities.linkFailed") };
       }
 
-      const linkUrl = buildKeycloakAccountLinkUrl(
-        new URL(request.url),
-        providerAlias,
-        keycloakLinkToken
-      );
-
-      return redirect(linkUrl, headers ? { headers } : undefined);
+      return redirect(redirectUrl);
     }
 
     if (intent === "unlink") {

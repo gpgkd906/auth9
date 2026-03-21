@@ -74,6 +74,16 @@ cargo outdated
 # Severity:  high
 ```
 
+### 已知传递依赖漏洞
+
+| Crate | 版本 | 原因 | 状态 |
+|-------|------|------|------|
+| `rustls-webpki` | 0.101.7 | 被 AWS SDK 的 `hyper-rustls 0.24.2` 间接依赖 | 无法直接升级，需等待 AWS SDK 更新依赖链 |
+
+> **说明**: 其他 2 个高危漏洞（`aws-lc-sys`）已通过 `cargo update` 修复。
+> `rustls-webpki 0.101.7` 是 AWS SDK 传递依赖锁定的版本，auth9-core 无法单独升级。
+> 此漏洞的实际风险较低，因为 TLS 连接仅用于出站 AWS 服务调用。
+
 ### 修复建议
 - 升级有漏洞的依赖
 - 锁定版本 (Cargo.lock)

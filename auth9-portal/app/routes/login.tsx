@@ -1,26 +1,28 @@
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useCallback } from "react";
+import { getBrandMark } from "~/components/auth/AuthBrandPanel";
+import { AuthPageShell } from "~/components/AuthPageShell";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
-import { LanguageSwitcher } from "~/components/LanguageSwitcher";
-import { ThemeToggle } from "~/components/ThemeToggle";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { useI18n } from "~/i18n";
 import { translate } from "~/i18n/translate";
 import { mapApiError, mapOAuthError } from "~/lib/error-messages";
-import { LockClosedIcon } from "@radix-ui/react-icons";
+import { LockClosedIcon, GlobeIcon, EnvelopeClosedIcon, IdCardIcon } from "@radix-ui/react-icons";
 import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
-import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
+import { enterpriseSsoApi, hostedLoginApi, publicBrandingApi, identityProviderApi, type BrandingConfig, isMfaChallenge } from "~/services/api";
+import type { PublicSocialProvider } from "~/services/api/identity-provider";
+import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 import type { AppLocale } from "~/i18n";
 
 export const meta: MetaFunction = ({ matches }) => {
   return buildMeta(resolveMetaLocale(matches), "auth.login.metaTitle");
 };
 
-function mapLocaleToKeycloak(locale: AppLocale): string {
+function mapLocaleToOidc(locale: AppLocale): string {
   if (locale.startsWith("en")) return "en";
   return locale;
 }
@@ -58,7 +60,7 @@ async function buildAuthorizeParams(requestUrl: URL, locale: AppLocale) {
     scope: "openid email profile",
     state,
     nonce: crypto.randomUUID(),
-    ui_locales: mapLocaleToKeycloak(locale),
+    ui_locales: mapLocaleToOidc(locale),
     code_challenge: codeChallenge,
     code_challenge_method: "S256" as const,
     codeVerifier,
@@ -69,20 +71,29 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const locale = await resolveLocale(request);
   const error = url.searchParams.get("error");
+  const loginChallenge = url.searchParams.get("login_challenge") || undefined;
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
-  const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
-  let allowRegistration = false;
-  let emailOtpEnabled = false;
+  const brandingClientId = url.searchParams.get("client_id")
+    || process.env.AUTH9_PORTAL_CLIENT_ID
+    || "auth9-portal";
+  let branding: BrandingConfig = DEFAULT_PUBLIC_BRANDING;
 
   try {
-    const { data: branding } = await publicBrandingApi.get(clientId);
-    allowRegistration = branding.allow_registration;
-    emailOtpEnabled = branding.email_otp_enabled ?? false;
+    const { data } = await publicBrandingApi.get(brandingClientId);
+    branding = { ...DEFAULT_PUBLIC_BRANDING, ...data };
   } catch {
-    // Default closed if branding cannot be loaded.
+    // Fall back to default Portal-owned branding.
   }
 
-  return { error, apiBaseUrl, allowRegistration, emailOtpEnabled, locale };
+  let socialProviders: PublicSocialProvider[] = [];
+  try {
+    const { data } = await identityProviderApi.listEnabledPublic();
+    socialProviders = data;
+  } catch {
+    // Social providers unavailable — continue without them.
+  }
+
+  return { error, apiBaseUrl, locale, branding, loginChallenge, socialProviders };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -91,13 +102,64 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  // Handle social login: create login_challenge if needed, then redirect to social broker
+  if (intent === "social-login") {
+    const providerAlias = String(formData.get("providerAlias") || "").trim();
+    let loginChallenge = formData.get("loginChallenge") as string | null;
+
+    if (!providerAlias) {
+      return { error: translate(locale, "auth.login.socialProviderRequired") };
+    }
+
+    // If no login_challenge, initiate OIDC authorize to get one
+    if (!loginChallenge) {
+      const auth = await buildAuthorizeParams(url, locale);
+      const coreInternalUrl = process.env.AUTH9_CORE_URL || auth.corePublicUrl;
+      const authorizeUrl = `${coreInternalUrl}/api/v1/auth/authorize?response_type=${auth.response_type}&client_id=${auth.client_id}&redirect_uri=${encodeURIComponent(auth.redirect_uri)}&scope=${encodeURIComponent(auth.scope)}&state=${auth.state}&code_challenge=${auth.code_challenge}&code_challenge_method=${auth.code_challenge_method}`;
+
+      const authorizeResponse = await fetch(authorizeUrl, { redirect: "manual" });
+      const location = authorizeResponse.headers.get("Location") || "";
+      // Extract login_challenge from redirect: try login_challenge= first, then state=
+      // (Keycloak-mode authorize redirects use state= as the login_challenge_id)
+      const challengeMatch = location.match(/login_challenge=([^&]+)/) || location.match(/[?&]state=([^&]+)/);
+      loginChallenge = challengeMatch ? challengeMatch[1] : null;
+
+      if (!loginChallenge) {
+        return { error: translate(locale, "auth.login.socialLoginFailed") };
+      }
+
+      // Store OAuth state for the callback to validate later
+      const oauthCookie = await serializeOAuthState(auth.state, auth.codeVerifier);
+      const corePublicUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
+      const socialUrl = `${corePublicUrl}/api/v1/social-login/authorize/${encodeURIComponent(providerAlias)}?login_challenge=${encodeURIComponent(loginChallenge)}`;
+      return redirect(socialUrl, { headers: { "Set-Cookie": oauthCookie } });
+    }
+
+    // login_challenge already exists, redirect directly
+    const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
+    const socialUrl = `${apiBaseUrl}/api/v1/social-login/authorize/${encodeURIComponent(providerAlias)}?login_challenge=${encodeURIComponent(loginChallenge)}`;
+    return redirect(socialUrl);
+  }
+
   // Handle passkey token storage
   if (intent === "passkey-login") {
     const accessToken = formData.get("accessToken") as string;
     const expiresIn = parseInt(formData.get("expiresIn") as string || "3600", 10);
+    const loginChallenge = formData.get("loginChallenge") as string | null;
 
     if (!accessToken) {
       return { error: translate(locale, "auth.login.missingAccessToken") };
+    }
+
+    // If login_challenge is present, complete the OIDC authorization flow
+    if (loginChallenge) {
+      try {
+        const result = await hostedLoginApi.authorizeComplete(loginChallenge, accessToken);
+        return redirect(result.redirect_url);
+      } catch (error) {
+        const message = mapApiError(error, locale);
+        return { error: message };
+      }
     }
 
     const session = {
@@ -136,23 +198,68 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "password-login") {
-    const auth = await buildAuthorizeParams(url, locale);
-    const corePublicUrl = auth.corePublicUrl;
-    const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
-    authorizeUrl.searchParams.set("response_type", auth.response_type);
-    authorizeUrl.searchParams.set("client_id", auth.client_id);
-    authorizeUrl.searchParams.set("redirect_uri", auth.redirect_uri);
-    authorizeUrl.searchParams.set("scope", auth.scope);
-    authorizeUrl.searchParams.set("state", auth.state);
-    authorizeUrl.searchParams.set("nonce", auth.nonce);
-    authorizeUrl.searchParams.set("ui_locales", auth.ui_locales);
-    authorizeUrl.searchParams.set("code_challenge", auth.code_challenge);
-    authorizeUrl.searchParams.set("code_challenge_method", auth.code_challenge_method);
+    const email = String(formData.get("email") || "").trim();
+    const password = String(formData.get("password") || "").trim();
+    const loginChallenge = formData.get("loginChallenge") as string | null;
 
-    const oauthCookie = await serializeOAuthState(auth.state, auth.codeVerifier);
-    return redirect(authorizeUrl.toString(), {
-      headers: { "Set-Cookie": oauthCookie },
-    });
+    if (!email || !password) {
+      return { error: translate(locale, "auth.login.credentialsRequired") };
+    }
+
+    try {
+      const result = await hostedLoginApi.passwordLogin(email, password);
+
+      // MFA required — redirect to verification page
+      if (isMfaChallenge(result)) {
+        const params = new URLSearchParams({
+          mfa_session_token: result.mfa_session_token,
+          mfa_methods: result.mfa_methods.join(","),
+        });
+        if (loginChallenge) {
+          params.set("login_challenge", loginChallenge);
+        }
+        return redirect(`/mfa/verify?${params.toString()}`);
+      }
+
+      const session = {
+        accessToken: result.access_token,
+        identityAccessToken: result.access_token,
+        refreshToken: undefined,
+        idToken: undefined,
+        expiresAt: Date.now() + result.expires_in * 1000,
+        identityExpiresAt: Date.now() + result.expires_in * 1000,
+      };
+      const cookie = await commitSession(session);
+
+      // Redirect to first pending action if any, otherwise tenant select
+      if (result.pending_actions && result.pending_actions.length > 0) {
+        const first = result.pending_actions[0];
+        let actionUrl = first.redirect_url.includes("?")
+          ? `${first.redirect_url}&action_id=${first.id}`
+          : `${first.redirect_url}?action_id=${first.id}`;
+        // Carry login_challenge through pending actions
+        if (loginChallenge) {
+          actionUrl += `&login_challenge=${encodeURIComponent(loginChallenge)}`;
+        }
+        return redirect(actionUrl, { headers: { "Set-Cookie": cookie } });
+      }
+
+      // If login_challenge is present, complete the OIDC authorization flow
+      if (loginChallenge && result.access_token) {
+        try {
+          const authResult = await hostedLoginApi.authorizeComplete(loginChallenge, result.access_token);
+          return redirect(authResult.redirect_url);
+        } catch (error) {
+          const message = mapApiError(error, locale);
+          return { error: message };
+        }
+      }
+
+      return redirect("/tenant/select", { headers: { "Set-Cookie": cookie } });
+    } catch (error) {
+      const message = mapApiError(error, locale);
+      return { error: message };
+    }
   }
 
   return { error: translate(locale, "auth.login.invalidAction") };
@@ -201,18 +308,57 @@ function toRequestOptions(publicKey: Record<string, unknown>): PublicKeyCredenti
   } as PublicKeyCredentialRequestOptions;
 }
 
+function SocialProviderIcon({ providerType }: { providerType: string }) {
+  switch (providerType.toLowerCase()) {
+    case "google":
+      return <span className="inline-block w-4 h-4 text-center font-semibold text-sm leading-4">G</span>;
+    case "github":
+      return <span className="inline-block w-4 h-4 text-center font-semibold text-sm leading-4">GH</span>;
+    case "microsoft":
+      return <span className="inline-block w-4 h-4 text-center font-semibold text-sm leading-4">MS</span>;
+    default:
+      return <span className="inline-block w-4 h-4 text-center font-semibold text-sm leading-4">{providerType.slice(0, 2).toUpperCase()}</span>;
+  }
+}
+
 export default function Login() {
-  const data = useLoaderData<typeof loader>() as {
+  const loaderData = (useLoaderData<typeof loader>() ?? {}) as {
     error: string | null;
     apiBaseUrl: string;
-    allowRegistration: boolean;
-    emailOtpEnabled: boolean;
     locale: string;
+    branding: BrandingConfig;
+    socialProviders?: PublicSocialProvider[];
+  };
+  const data = {
+    error: loaderData.error ?? null,
+    apiBaseUrl: loaderData.apiBaseUrl ?? "http://localhost:8080",
+    locale: loaderData.locale ?? "zh-CN",
+    branding: { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) },
+    loginChallenge: (loaderData as Record<string, unknown>).loginChallenge as string | undefined,
+    socialProviders: loaderData.socialProviders ?? [],
   };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const { t } = useI18n();
+  const [view, setView] = useState<"methods" | "password" | "sso">("methods");
+  const [ssoEmail, setSsoEmail] = useState("");
+  const [dismissedError, setDismissedError] = useState(false);
+
+  // Clear dismissed state when new actionData arrives
+  const [prevActionData, setPrevActionData] = useState(actionData);
+  if (actionData !== prevActionData) {
+    setPrevActionData(actionData);
+    setDismissedError(false);
+  }
+
+  const visibleError = dismissedError ? null : actionData?.error;
+
+  const switchView = (v: "methods" | "password" | "sso") => {
+    setView(v);
+    setDismissedError(true);
+    setPasskeyError(null);
+  };
 
   const [authenticating, setAuthenticating] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -299,6 +445,13 @@ export default function Login() {
       expiresInput.value = String(tokenResult.expires_in);
       form.appendChild(expiresInput);
 
+      if (data.loginChallenge) {
+        const challengeInput = document.createElement("input");
+        challengeInput.name = "loginChallenge";
+        challengeInput.value = data.loginChallenge;
+        form.appendChild(challengeInput);
+      }
+
       document.body.appendChild(form);
       form.submit();
     } catch (error) {
@@ -310,111 +463,233 @@ export default function Login() {
       }
       setAuthenticating(false);
     }
-  }, [data.apiBaseUrl, t]);
+  }, [data.apiBaseUrl, data.loginChallenge, t]);
 
   return (
-    <>
-      {/* Theme Toggle */}
-      <div className="fixed top-6 right-6 z-20 flex items-center gap-3">
-        <LanguageSwitcher />
-        <ThemeToggle />
-      </div>
-
-      <div className="min-h-screen flex items-center justify-center px-6 relative">
-        {/* Dynamic Background */}
-        <div className="page-backdrop" />
-
-        <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
+    <AuthPageShell
+      branding={data.branding}
+      panelEyebrow={t("auth.shared.hostedEyebrow")}
+      panelTitle={t("auth.shared.hostedTitle")}
+      panelDescription={t("auth.shared.hostedDescription")}
+    >
+      <Card className="w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
-            <div className="logo-icon mx-auto mb-4">A9</div>
+            {data.branding.logo_url ? (
+              <img
+                src={data.branding.logo_url}
+                alt={data.branding.company_name || "Auth9"}
+                className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+              />
+            ) : (
+              <div className="logo-icon mx-auto mb-4">
+                {getBrandMark(data.branding.company_name || "Auth9")}
+              </div>
+            )}
             <CardTitle className="text-2xl">
-              {data.error ? t("auth.login.failedTitle") : t("auth.login.title")}
+              {data.error
+                ? t("auth.login.failedTitle")
+                : view === "sso"
+                  ? t("auth.login.ssoTitle")
+                  : t("auth.login.title")}
             </CardTitle>
             <CardDescription>
               {data.error
                 ? mapOAuthError(data.error, data.locale as AppLocale)
-                : t("auth.login.chooseMethod")}
+                : view === "sso"
+                  ? t("auth.login.ssoDescription")
+                  : t("auth.login.chooseMethod")}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* SSO Login Button */}
-              <Form method="post" action="/login">
-                <input type="hidden" name="intent" value="sso-login" />
-                <Input
-                  type="email"
-                  name="email"
-                  required
-                  placeholder={t("common.placeholders.companyEmail")}
-                  className="mb-3"
-                />
-                <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
-                </Button>
-              </Form>
+            {view === "password" ? (
+              /* ── Password Login View ── */
+              <div className="space-y-4">
+                <Form method="post" action="/login" className="space-y-3">
+                  <input type="hidden" name="intent" value="password-login" />
+                  {data.loginChallenge && (
+                    <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
+                  )}
+                  <Input
+                    type="text"
+                    name="email"
+                    required
+                    autoFocus
+                    autoComplete="username"
+                    placeholder={t("auth.login.passwordEmailPlaceholder")}
+                    defaultValue={ssoEmail}
+                  />
+                  <Input
+                    type="password"
+                    name="password"
+                    required
+                    autoComplete="current-password"
+                    placeholder={t("auth.login.passwordPlaceholder")}
+                  />
 
-              {actionData?.error && (
-                <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
-              )}
+                  {visibleError && (
+                    <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
+                      {visibleError}
+                    </div>
+                  )}
 
-              {/* Divider */}
-              <div className="flex items-center gap-4 my-1">
-                <span className="flex-1 h-px bg-[var(--glass-border-subtle)]" />
-                <span className="text-xs uppercase text-[var(--text-tertiary)] tracking-wide">{t("auth.login.or")}</span>
-                <span className="flex-1 h-px bg-[var(--glass-border-subtle)]" />
-              </div>
-
-              {/* Password Login Button */}
-              <Form method="post" action="/login">
-                <input type="hidden" name="intent" value="password-login" />
-                <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? t("auth.login.redirecting") : t("auth.login.passwordButton")}
-                </Button>
-              </Form>
-
-              {/* Email OTP Login Button */}
-              {data.emailOtpEnabled && (
-                <Link to="/auth/email-otp">
-                  <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                    {t("auth.login.emailOtpButton")}
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? t("auth.login.signingIn") : t("auth.login.passwordSubmit")}
                   </Button>
-                </Link>
-              )}
+                </Form>
 
-              {/* Passkey Login Button */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handlePasskeyLogin}
-                disabled={authenticating || isSubmitting}
-              >
-                <LockClosedIcon className="h-4 w-4 mr-2" />
-                {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
-              </Button>
-
-              {/* Error Messages */}
-              {passkeyError && (
-                <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md text-center">
-                  {passkeyError}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)] pt-1">
-                <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
-                  {t("auth.login.forgotPassword")}
-                </Link>
-                {data.allowRegistration ? (
-                  <Link to="/register" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
-                    {t("auth.login.createAccount")}
+                <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)]">
+                  <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
+                    {t("auth.login.forgotPassword")}
                   </Link>
-                ) : (
-                  <span />
+                  <button
+                    type="button"
+                    onClick={() => switchView("methods")}
+                    className="text-[var(--accent-blue)] hover:underline underline-offset-4"
+                  >
+                    {t("auth.login.backToMethods")}
+                  </button>
+                </div>
+              </div>
+            ) : view === "sso" ? (
+              /* ── SSO Login View ── */
+              <div className="space-y-4">
+                <Form method="post" action="/login" className="space-y-3">
+                  <input type="hidden" name="intent" value="sso-login" />
+                  {data.loginChallenge && (
+                    <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
+                  )}
+                  <Input
+                    type="email"
+                    name="email"
+                    required
+                    autoFocus
+                    placeholder={t("common.placeholders.companyEmail")}
+                    onChange={(e) => setSsoEmail(e.target.value)}
+                    defaultValue={ssoEmail}
+                  />
+
+                  {visibleError && (
+                    <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
+                      {visibleError}
+                    </div>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoSubmit")}
+                  </Button>
+                </Form>
+
+                <div className="flex items-center justify-center text-sm text-[var(--text-tertiary)]">
+                  <button
+                    type="button"
+                    onClick={() => switchView("methods")}
+                    className="text-[var(--accent-blue)] hover:underline underline-offset-4"
+                  >
+                    {t("auth.login.backToMethods")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ── Method Selection View ── */
+              <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => switchView("sso")}
+                    disabled={isSubmitting || authenticating}
+                  >
+                    <GlobeIcon className="h-4 w-4 mr-2" />
+                    {t("auth.login.ssoButton")}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => switchView("password")}
+                    disabled={isSubmitting || authenticating}
+                  >
+                    <LockClosedIcon className="h-4 w-4 mr-2" />
+                    {t("auth.login.passwordButton")}
+                  </Button>
+
+                  {data.branding.email_otp_enabled && (
+                    <Link to="/auth/email-otp" className="block mt-2">
+                      <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
+                        <EnvelopeClosedIcon className="h-4 w-4 mr-2" />
+                        {t("auth.login.emailOtpButton")}
+                      </Button>
+                    </Link>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className={`w-full${!data.branding.email_otp_enabled ? " mt-2" : ""}`}
+                    onClick={handlePasskeyLogin}
+                    disabled={authenticating || isSubmitting}
+                  >
+                    <IdCardIcon className="h-4 w-4 mr-2" />
+                    {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
+                  </Button>
+
+                  {data.socialProviders.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="relative my-2">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-[var(--glass-border-subtle)]" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-[var(--auth-surface-bg)] px-2 text-[var(--text-tertiary)]">
+                            {t("auth.login.socialDivider")}
+                          </span>
+                        </div>
+                      </div>
+                      {data.socialProviders.map((provider) => (
+                        <Form method="post" action="/login" key={provider.alias}>
+                          <input type="hidden" name="intent" value="social-login" />
+                          <input type="hidden" name="providerAlias" value={provider.alias} />
+                          {data.loginChallenge && (
+                            <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
+                          )}
+                          <Button
+                            type="submit"
+                            variant="outline"
+                            className="w-full"
+                            disabled={isSubmitting || authenticating}
+                          >
+                            <SocialProviderIcon providerType={provider.provider_id} />
+                            <span className="ml-2">
+                              {provider.display_name || provider.alias}
+                            </span>
+                          </Button>
+                        </Form>
+                      ))}
+                    </div>
+                  )}
+                {visibleError && (
+                  <p className="text-sm text-[var(--accent-red)]">{visibleError}</p>
+                )}
+
+                {passkeyError && (
+                  <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)] text-center">
+                    {passkeyError}
+                  </div>
+                )}
+
+                {data.branding.allow_registration && (
+                  <div className="flex items-center justify-center text-sm text-[var(--text-tertiary)] pt-1">
+                    <Link to="/register" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
+                      {t("auth.login.createAccount")}
+                    </Link>
+                  </div>
                 )}
               </div>
-            </div>
+            )}
           </CardContent>
-        </Card>
-      </div>
-    </>
+      </Card>
+    </AuthPageShell>
   );
 }

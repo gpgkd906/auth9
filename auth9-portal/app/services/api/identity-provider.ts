@@ -25,6 +25,12 @@ export interface LinkedIdentity {
   linked_at: string;
 }
 
+export interface PublicSocialProvider {
+  alias: string;
+  display_name?: string;
+  provider_id: string;
+}
+
 export interface IdpTemplate {
   provider_id: string;
   name: string;
@@ -126,6 +132,14 @@ export const identityProviderApi = {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       }
+    );
+    return handleResponse(response);
+  },
+
+  /** List enabled social providers (public, no auth required). */
+  listEnabledPublic: async (): Promise<{ data: PublicSocialProvider[] }> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/social-login/providers`
     );
     return handleResponse(response);
   },

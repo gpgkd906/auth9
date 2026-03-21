@@ -192,10 +192,16 @@ pub async fn delete_group<S: ProvisioningContext>(
 
     match state.scim_service().delete_group(group_id, &ctx).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            ScimJson(ScimError::internal(e.to_string())),
-        )
-            .into_response(),
+        Err(e) => match &e {
+            crate::error::AppError::NotFound(_) => {
+                // SCIM DELETE should be idempotent per RFC 7644
+                StatusCode::NO_CONTENT.into_response()
+            }
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ScimJson(ScimError::internal(e.to_string())),
+            )
+                .into_response(),
+        },
     }
 }

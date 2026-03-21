@@ -9,7 +9,7 @@
 
 ## 背景说明
 
-Passkeys 已从 Keycloak 代理模式迁移到原生 WebAuthn 实现。注册流程完全在 Auth9 内完成：前端调用浏览器 WebAuthn API，后端使用 `webauthn-rs` 处理挑战和验证，凭据存储在 TiDB `webauthn_credentials` 表中。
+Passkeys 使用原生 WebAuthn 实现。注册流程完全在 Auth9 内完成：前端调用浏览器 WebAuthn API，后端使用 `webauthn-rs` 处理挑战和验证，凭据存储在 TiDB `webauthn_credentials` 表中。
 
 注册端点（需要认证）：
 - `POST /api/v1/users/me/passkeys/register/start` — 获取 `CreationChallengeResponse`
@@ -72,7 +72,7 @@ SELECT COUNT(*) FROM webauthn_credentials WHERE user_id = '{user_id}';
 - 浏览器支持 `navigator.credentials.create()` API
 
 ### 目的
-验证原生 WebAuthn Passkey 注册流程（不跳转 Keycloak）
+验证原生 WebAuthn Passkey 注册流程
 
 ### 测试操作流程
 1. 进入「Account」→「Passkeys」
@@ -107,7 +107,7 @@ ORDER BY created_at DESC LIMIT 1;
 - 用户已注册 1 个或多个 Passkeys
 
 ### 目的
-验证 Passkey 列表正确显示（包含 TiDB 原生凭据和可能的 Keycloak 遗留凭据）
+验证 Passkey 列表正确显示
 
 ### 测试操作流程
 1. 进入「Account」→「Passkeys」
@@ -301,7 +301,7 @@ async (page) => {
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
 | 1 | 查看 Passkeys 列表（无 Passkey） | ☐ | | | |
-| 2 | 注册新 Passkey（原生 WebAuthn） | ☐ | | | 不应跳转 Keycloak |
+| 2 | 注册新 Passkey（原生 WebAuthn） | ☐ | | | |
 | 3 | 查看已注册的 Passkeys | ☐ | | | |
 | 4 | 删除 Passkey | ☐ | | | |
 | 5 | 注册 Passkey 失败（取消或超时） | ☐ | | | |

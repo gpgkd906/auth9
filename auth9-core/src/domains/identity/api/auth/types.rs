@@ -58,6 +58,18 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
 }
 
+/// Request to complete authorization after hosted login
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AuthorizeCompleteRequest {
+    pub login_challenge_id: String,
+}
+
+/// Response from authorize_complete with redirect URL
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct AuthorizeCompleteResponse {
+    pub redirect_url: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct EnterpriseSsoDiscoveryResponse {
     pub tenant_id: StringUuid,

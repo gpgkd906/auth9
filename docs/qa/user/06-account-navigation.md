@@ -18,6 +18,8 @@
 ### 初始状态
 - 用户已登录（display_name 为 `Jane Smith`，邮箱为 `jane@example.com`）
 
+> **注意**: 默认 seed 数据中不包含 jane@example.com 用户。实际测试时请使用 admin@auth9.local 用户登录，或通过 API/SQL 预先创建该测试用户。
+
 ### 目的
 验证 Dashboard 侧边栏底部显示当前登录用户的真实信息，而非硬编码数据
 

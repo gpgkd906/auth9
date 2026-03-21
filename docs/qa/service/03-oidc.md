@@ -80,7 +80,7 @@ SELECT redirect_uris FROM services WHERE id = '{service_id}';
    ```
 
 ### 预期结果
-- 步骤1: 307重定向到Keycloak登出页面
+- 步骤1: 307重定向到 Auth9 OIDC 登出页面
 - 步骤2: 400错误，拒绝无效URI
 - 步骤3: 400错误，要求提供client_id
 

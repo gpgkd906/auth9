@@ -5,7 +5,7 @@
 use crate::support::create_test_identity_token;
 use crate::support::http::{
     build_system_settings_test_router, get_json_with_auth, post_json_with_auth, put_json_with_auth,
-    MockKeycloakServer, TestAppState,
+    TestAppState,
 };
 use auth9_core::domains::platform::api::system_settings::TestEmailResponse;
 use auth9_core::models::system_settings::SystemSettingRow;
@@ -20,8 +20,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn test_get_email_settings_none() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -38,8 +37,7 @@ async fn test_get_email_settings_none() {
 
 #[tokio::test]
 async fn test_get_email_settings_smtp_masked() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Pre-populate with SMTP config
     let smtp_config = json!({
@@ -90,8 +88,7 @@ async fn test_get_email_settings_smtp_masked() {
 
 #[tokio::test]
 async fn test_get_email_settings_oracle() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let oracle_config = json!({
         "type": "oracle",
@@ -133,8 +130,7 @@ async fn test_get_email_settings_oracle() {
 
 #[tokio::test]
 async fn test_get_email_settings_ses() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let ses_config = json!({
         "type": "ses",
@@ -182,8 +178,7 @@ async fn test_get_email_settings_ses() {
 
 #[tokio::test]
 async fn test_update_email_settings_smtp() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -218,8 +213,7 @@ async fn test_update_email_settings_smtp() {
 
 #[tokio::test]
 async fn test_update_email_settings_none() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // First set up some config
     let smtp_config = json!({
@@ -262,8 +256,7 @@ async fn test_update_email_settings_none() {
 
 #[tokio::test]
 async fn test_update_email_settings_oracle() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -294,8 +287,7 @@ async fn test_update_email_settings_oracle() {
 
 #[tokio::test]
 async fn test_update_email_settings_ses() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -325,8 +317,7 @@ async fn test_update_email_settings_ses() {
 
 #[tokio::test]
 async fn test_update_email_settings_invalid_email() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -349,8 +340,7 @@ async fn test_update_email_settings_invalid_email() {
 
 #[tokio::test]
 async fn test_update_email_settings_missing_host() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -375,8 +365,7 @@ async fn test_update_email_settings_missing_host() {
 
 #[tokio::test]
 async fn test_email_connection_not_configured() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -424,8 +413,7 @@ async fn test_email_connection_failure_response() {
 
 #[tokio::test]
 async fn test_send_email_not_configured() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -446,8 +434,7 @@ async fn test_send_email_not_configured() {
 
 #[tokio::test]
 async fn test_send_email_invalid_address() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Set up email config
     let smtp_config = json!({
@@ -502,8 +489,7 @@ async fn test_send_email_response_with_message_id() {
 
 #[tokio::test]
 async fn test_update_preserves_password_on_masked_input() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // First set up config with real password
     let smtp_config = json!({
@@ -555,8 +541,7 @@ async fn test_update_preserves_password_on_masked_input() {
 
 #[tokio::test]
 async fn test_email_settings_roundtrip() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -589,8 +574,7 @@ async fn test_email_settings_roundtrip() {
 
 #[tokio::test]
 async fn test_email_provider_type_switch() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
     let token = create_test_identity_token();
 
@@ -632,8 +616,7 @@ async fn test_email_provider_type_switch() {
 
 #[tokio::test]
 async fn test_get_email_settings_requires_auth() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
 
     // No auth token
@@ -645,8 +628,7 @@ async fn test_get_email_settings_requires_auth() {
 
 #[tokio::test]
 async fn test_update_email_settings_requires_auth() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state);
 
     let input = json!({
@@ -666,8 +648,7 @@ async fn test_update_email_settings_requires_auth() {
 
 #[tokio::test]
 async fn test_get_malicious_ip_blacklist_returns_entries() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     state
         .malicious_ip_blacklist_repo
         .add_entry(
@@ -698,8 +679,7 @@ async fn test_get_malicious_ip_blacklist_returns_entries() {
 
 #[tokio::test]
 async fn test_update_malicious_ip_blacklist_deduplicates_entries() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_system_settings_test_router(state.clone());
     let token = create_test_identity_token();
 

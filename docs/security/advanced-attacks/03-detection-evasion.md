@@ -23,17 +23,17 @@ Auth9 实现了 `SecurityDetectionService`（`src/service/security_detection.rs`
 
 ### 架构说明
 
-Auth9 采用 **Headless Keycloak 架构**，登录认证由 Keycloak 处理，登录事件通过 Keycloak webhook 发送到 `POST /api/v1/keycloak/events`，由 auth9-core 记录并触发安全检测分析。
+Auth9 使用内置 OIDC Engine 处理登录认证，登录事件由 auth9-core 记录并触发安全检测分析。
 
 **不支持**直接向 `/api/v1/auth/token` 发送 `grant_type=password` 进行密码登录。
 
-**测试方法**：通过 Keycloak 登录页面触发真实登录事件（推荐），或通过模拟 Keycloak webhook 事件到 `/api/v1/keycloak/events` 端点。
+**测试方法**：通过 Auth9 托管认证页触发真实登录事件（推荐），或通过模拟 webhook 事件到 `/api/v1/keycloak/events` 端点。
 
 ```bash
-# 环境变量：Keycloak webhook 签名密钥（本地开发默认值）
+# 环境变量：webhook 签名密钥（本地开发默认值）
 WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
-# 辅助函数：发送带 HMAC 签名的 Keycloak 事件
+# 辅助函数：发送带 HMAC 签名的登录事件
 send_signed_event() {
   local body="$1"
   local signature=$(echo -n "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $NF}')
@@ -44,7 +44,7 @@ send_signed_event() {
     -d "$body"
 }
 
-# 辅助函数：模拟 Keycloak LOGIN_ERROR 事件
+# 辅助函数：模拟 LOGIN_ERROR 事件
 send_login_error() {
   local ip="${1:-127.0.0.1}"
   local email="${2:-test@test.com}"
@@ -53,18 +53,15 @@ send_login_error() {
   send_signed_event "$body"
 }
 
-# 辅助函数：通过 Keycloak 登录页面触发真实失败登录
-send_keycloak_login_failure() {
+# 辅助函数：通过 Auth9 托管认证页触发真实失败登录
+send_auth9_login_failure() {
   local email="${1:-test@test.com}"
   local password="${2:-wrong-password}"
-  # 获取 Keycloak 登录页面和 session code
-  LOGIN_PAGE=$(curl -s -c /tmp/kc_cookies -L \
-    "http://localhost:8081/realms/auth9/protocol/openid-connect/auth?client_id=auth9-portal&response_type=code&redirect_uri=http://localhost:3000/callback")
-  ACTION_URL=$(echo "$LOGIN_PAGE" | grep -o 'action="[^"]*"' | head -1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')
-  # 提交错误密码
-  curl -s -o /dev/null -b /tmp/kc_cookies \
-    -X POST "$ACTION_URL" \
-    -d "username=$email&password=$password"
+  # 通过 Auth9 hosted login 端点提交错误密码
+  curl -s -o /dev/null \
+    -X POST "http://localhost:8080/api/v1/hosted-login/password" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"$email\",\"password\":\"$password\"}"
 }
 ```
 
@@ -73,9 +70,9 @@ send_keycloak_login_failure() {
 ## 场景 1：暴力破解检测阈值边界测试
 
 ### 前置条件
-- 测试账户（Keycloak 中已存在）
+- 测试账户（系统中已存在）
 - 了解检测阈值（5 次 / 10 分钟）
-- **KEYCLOAK_WEBHOOK_SECRET 必须与 auth9-core 一致**（Docker 默认值：`dev-webhook-secret-change-in-production`）
+- **WEBHOOK_SECRET 必须与 auth9-core 一致**（Docker 默认值：`dev-webhook-secret-change-in-production`）
 
 ### 攻击目标
 验证检测阈值的精确性和边界条件
@@ -97,14 +94,14 @@ send_keycloak_login_failure() {
 
 ### 验证方法
 ```bash
-# 方法 A：通过 Keycloak 登录页面触发真实事件（推荐）
+# 方法 A：通过 Auth9 托管认证页触发真实事件（推荐）
 # 发送 4 次失败（不应触发）
 for i in $(seq 1 4); do
-  send_keycloak_login_failure "test@test.com" "wrong-password-$i"
+  send_auth9_login_failure "test@test.com" "wrong-password-$i"
   sleep 2
 done
 
-# 方法 B：通过 webhook 端点模拟事件（快速测试）
+# 方法 B：通过事件 webhook 端点模拟事件（快速测试）
 # 发送 4 次失败（不应触发）
 for i in $(seq 1 4); do
   send_login_error "192.168.1.100" "test@test.com"
@@ -162,7 +159,7 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ### 验证方法
 ```bash
-# 低速暴力破解 - 每 3 分钟 1 次（通过 Keycloak webhook 模拟）
+# 低速暴力破解 - 每 3 分钟 1 次（通过事件 webhook 模拟）
 for i in $(seq 1 20); do
   echo "Attempt $i at $(date)"
   send_login_error "192.168.1.100" "test@test.com"
@@ -221,7 +218,7 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ### 验证方法
 ```bash
-# 模拟多 IP 攻击（通过 Keycloak webhook，ipAddress 字段模拟不同来源 IP）
+# 模拟多 IP 攻击（通过事件 webhook，ipAddress 字段模拟不同来源 IP）
 # 每个 IP 发送 4 次失败（低于阈值），总计 40 次
 for ip_suffix in $(seq 1 10); do
   for attempt in $(seq 1 4); do
@@ -236,12 +233,12 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
   "http://localhost:8080/api/v1/security/alerts" | jq '.'
 # 观察: 是否有 brute_force 告警（账户级聚合）
 
-# 测试 X-Forwarded-For 伪造：通过 Keycloak webhook 模拟不同来源 IP
-# 验证 auth9-core 是否信任事件中的 ipAddress（来自 Keycloak）而忽略请求头中的伪造 IP
+# 测试 X-Forwarded-For 伪造：通过事件 webhook 模拟不同来源 IP
+# 验证 auth9-core 是否信任事件中的 ipAddress 而忽略请求头中的伪造 IP
 for ip_suffix in $(seq 1 5); do
   send_login_error "10.99.99.$ip_suffix" "target@test.com"
 done
-# auth9-core 使用 Keycloak 事件中的 ipAddress，不受 HTTP 头伪造影响
+# auth9-core 使用事件中的 ipAddress，不受 HTTP 头伪造影响
 
 # 验证账户级聚合
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \

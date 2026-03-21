@@ -29,6 +29,10 @@ where
         )
         .route("/api/v1/auth/token", post(identity_api::auth::token::<S>))
         .route(
+            "/api/v1/auth/authorize/complete",
+            post(identity_api::auth::authorize_complete::<S>),
+        )
+        .route(
             "/api/v1/auth/logout",
             get(identity_api::auth::logout_redirect::<S>).post(identity_api::auth::logout::<S>),
         )
@@ -55,6 +59,80 @@ where
         .route(
             "/api/v1/auth/email-otp/verify",
             post(identity_api::email_otp::verify_email_otp::<S>),
+        )
+        // Hosted Login API
+        .route(
+            "/api/v1/hosted-login/password",
+            post(identity_api::hosted_login::password_login::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/logout",
+            post(identity_api::hosted_login::hosted_logout::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/start-password-reset",
+            post(identity_api::hosted_login::start_password_reset::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/complete-password-reset",
+            post(identity_api::hosted_login::complete_password_reset::<S>),
+        )
+        // MFA challenge (during login, no JWT required)
+        .route(
+            "/api/v1/mfa/challenge/totp",
+            post(identity_api::mfa::challenge_totp::<S>),
+        )
+        .route(
+            "/api/v1/mfa/challenge/recovery-code",
+            post(identity_api::mfa::challenge_recovery_code::<S>),
+        )
+        // Email verification
+        .route(
+            "/api/v1/hosted-login/send-verification",
+            post(identity_api::email_verification::send_verification::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/verify-email",
+            post(identity_api::email_verification::verify_email::<S>),
+        )
+        // Enterprise SSO broker (OIDC + SAML)
+        .route(
+            "/api/v1/enterprise-sso/authorize/{alias}",
+            get(identity_api::enterprise_broker::authorize::<S>),
+        )
+        .route(
+            "/api/v1/enterprise-sso/callback",
+            get(identity_api::enterprise_broker::callback::<S>),
+        )
+        .route(
+            "/api/v1/enterprise-sso/saml/acs",
+            post(identity_api::enterprise_saml_broker::saml_acs::<S>),
+        )
+        .route(
+            "/api/v1/enterprise-sso/saml/metadata/{alias}",
+            get(identity_api::enterprise_saml_broker::saml_metadata::<S>),
+        )
+        // Social login broker
+        .route(
+            "/api/v1/social-login/providers",
+            get(identity_api::social_broker::list_enabled_providers::<S>),
+        )
+        .route(
+            "/api/v1/social-login/authorize/{alias}",
+            get(identity_api::social_broker::authorize::<S>),
+        )
+        .route(
+            "/api/v1/social-login/callback",
+            get(identity_api::social_broker::callback::<S>),
+        )
+        .route(
+            "/api/v1/social-login/link/callback",
+            get(identity_api::social_broker::link_callback::<S>),
+        )
+        // Confirm-link for pending identity merge
+        .route(
+            "/api/v1/auth/confirm-link",
+            post(identity_api::confirm_link::confirm_link::<S>),
         )
 }
 
@@ -135,5 +213,49 @@ where
         .route(
             "/api/v1/users/me/linked-identities/{id}",
             delete(identity_api::identity_provider::unlink_identity::<S>),
+        )
+        // Social login account linking
+        .route(
+            "/api/v1/social-login/link/{alias}",
+            get(identity_api::social_broker::link_authorize::<S>),
+        )
+        // Enterprise SSO account linking
+        .route(
+            "/api/v1/enterprise-sso/link/{alias}",
+            get(identity_api::enterprise_broker::link_authorize::<S>),
+        )
+        // Required actions
+        .route(
+            "/api/v1/hosted-login/pending-actions",
+            get(identity_api::required_actions::get_pending_actions::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/complete-action",
+            post(identity_api::required_actions::complete_action::<S>),
+        )
+        // MFA management (authenticated)
+        .route(
+            "/api/v1/mfa/status",
+            get(identity_api::mfa::mfa_status::<S>),
+        )
+        .route(
+            "/api/v1/mfa/totp/enroll",
+            post(identity_api::mfa::totp_enroll_start::<S>),
+        )
+        .route(
+            "/api/v1/mfa/totp/enroll/verify",
+            post(identity_api::mfa::totp_enroll_verify::<S>),
+        )
+        .route(
+            "/api/v1/mfa/totp",
+            delete(identity_api::mfa::totp_remove::<S>),
+        )
+        .route(
+            "/api/v1/mfa/recovery-codes/generate",
+            post(identity_api::mfa::recovery_codes_generate::<S>),
+        )
+        .route(
+            "/api/v1/mfa/recovery-codes/remaining",
+            get(identity_api::mfa::recovery_codes_remaining::<S>),
         )
 }

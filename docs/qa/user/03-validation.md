@@ -100,8 +100,8 @@ INSERT INTO tenants (id, name, slug, settings, status) VALUES
 ('aaaa2222-2222-2222-2222-222222222222', 'Test Tenant B', 'test-b', '{}', 'active');
 
 -- 准备测试用户
-INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled) VALUES
-('bbbb1111-1111-1111-1111-111111111111', 'kc-user-1', 'existing@example.com', '已存在用户', false);
+INSERT INTO users (id, identity_subject, email, display_name, mfa_enabled) VALUES
+('bbbb1111-1111-1111-1111-111111111111', 'oidc-user-1', 'existing@example.com', '已存在用户', false);
 
 -- 准备 tenant_users（场景 2 前置数据）
 INSERT INTO tenant_users (id, tenant_id, user_id, role_in_tenant, joined_at) VALUES

@@ -50,11 +50,11 @@
 
 ### 测试操作流程
 本项目目前**没有稳定、可配置**的”天然大 payload”业务事件（例如带大量列表字段的事件）。
-因此这里补充一个（依赖安全检测规则的）**可复现**方案：通过 Keycloak events webhook 写入超长 `user_agent`，触发 `security.alert` 的 `new_device` 告警事件（其 `data.details.user_agent` 会包含该超长字符串），从而构造大 payload。
+因此这里补充一个（依赖安全检测规则的）**可复现**方案：通过事件 webhook 写入超长 `user_agent`，触发 `security.alert` 的 `new_device` 告警事件（其 `data.details.user_agent` 会包含该超长字符串），从而构造大 payload。
 
 前置条件：
 - Auth9 Core 已启动（默认 `http://localhost:8080`）。
-- **（重要）签名密钥已知**：Docker 环境默认配置 `KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret`，所有发往 `/api/v1/keycloak/events` 的请求**必须**携带 `X-Keycloak-Signature` 头（HMAC-SHA256, hex），否则会被 401 拒绝。
+- **（重要）签名密钥已知**：Docker 环境默认配置 `KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret`（历史遗留环境变量名），所有发往 `/api/v1/keycloak/events` 的请求**必须**携带 `X-Keycloak-Signature` 头（HMAC-SHA256, hex），否则会被 401 拒绝。
 - 存在启用的 webhook，订阅 `security.alert`，URL 指向可接收的端点（建议 `webhook.site`）。
   - 创建方法：登录 Portal (`http://localhost:3000`, admin / SecurePass123!)，进入 Settings → Webhooks → 新建，URL 填 `https://webhook.site/<your-uuid>`，勾选 `security.alert` 事件。
 - 注意：`login_events.user_agent` 列类型为 `TEXT`，单条最大约 64KB；因此本场景建议把 `User-Agent` 控制在 `60000` 字符以内。

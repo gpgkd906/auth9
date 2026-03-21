@@ -2,7 +2,6 @@ use crate::support::create_test_jwt_manager;
 use crate::support::http::{
     build_test_router, get_json_with_auth, post_json_with_auth, TestAppState,
 };
-use crate::support::mock_keycloak::MockKeycloakServer;
 use axum::http::StatusCode;
 use serde_json::json;
 use uuid::Uuid;
@@ -23,8 +22,7 @@ fn create_member_token_for_tenant(tenant_id: Uuid) -> String {
 
 #[tokio::test]
 async fn test_abac_list_policies_forbidden_without_permission() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let tenant_id = Uuid::new_v4();
@@ -42,8 +40,7 @@ async fn test_abac_list_policies_forbidden_without_permission() {
 
 #[tokio::test]
 async fn test_abac_create_policy_forbidden_without_permission() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let tenant_id = Uuid::new_v4();
@@ -66,8 +63,7 @@ async fn test_abac_create_policy_forbidden_without_permission() {
 
 #[tokio::test]
 async fn test_abac_simulate_forbidden_without_permission() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let tenant_id = Uuid::new_v4();

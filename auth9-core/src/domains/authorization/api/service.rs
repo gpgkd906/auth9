@@ -6,7 +6,7 @@ use crate::http_support::{
     deserialize_page, deserialize_per_page, extract_actor_id_generic, extract_ip,
     write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse,
 };
-use crate::keycloak::KeycloakOidcClient;
+use crate::identity_engine::OidcClientRepresentation;
 use crate::middleware::auth::AuthUser;
 use crate::models::common::StringUuid;
 use crate::models::service::{
@@ -37,7 +37,7 @@ use validator::Validate;
 // Helper functions (testable without AppState)
 // ============================================================================
 
-/// Build Keycloak attributes from logout URIs
+/// Build OIDC client attributes from logout URIs
 pub fn build_logout_attributes(logout_uris: &[String]) -> Option<HashMap<String, String>> {
     if logout_uris.is_empty() {
         None
@@ -51,17 +51,17 @@ pub fn build_logout_attributes(logout_uris: &[String]) -> Option<HashMap<String,
     }
 }
 
-/// Build KeycloakOidcClient from CreateServiceInput
-pub fn build_keycloak_client_from_create_input(input: &CreateServiceInput) -> KeycloakOidcClient {
+/// Build OidcClientRepresentation from CreateServiceInput
+pub fn build_oidc_client_from_create_input(input: &CreateServiceInput) -> OidcClientRepresentation {
     let logout_uris = input.logout_uris.clone().unwrap_or_default();
     let attributes = build_logout_attributes(&logout_uris);
 
-    KeycloakOidcClient {
+    OidcClientRepresentation {
         id: None,
         client_id: input.client_id.clone(),
         name: Some(input.name.clone()),
         enabled: true,
-        protocol: "openid-connect".to_string(),
+        protocol: Some("openid-connect".to_string()),
         base_url: input.base_url.clone(),
         root_url: input.base_url.clone(),
         admin_url: input.base_url.clone(),
@@ -102,19 +102,19 @@ pub fn merge_service_update(before: &Service, input: &UpdateServiceInput) -> Mer
     }
 }
 
-/// Build KeycloakOidcClient for update from merged values
-pub fn build_keycloak_client_for_update(
+/// Build OidcClientRepresentation for update from merged values
+pub fn build_oidc_client_for_update(
     client_id: &str,
     merged: &MergedServiceUpdate,
-) -> KeycloakOidcClient {
+) -> OidcClientRepresentation {
     let attributes = build_logout_attributes(&merged.logout_uris);
 
-    KeycloakOidcClient {
+    OidcClientRepresentation {
         id: None,
         client_id: client_id.to_string(),
         name: Some(merged.name.clone()),
         enabled: true,
-        protocol: "openid-connect".to_string(),
+        protocol: Some("openid-connect".to_string()),
         base_url: merged.base_url.clone(),
         root_url: merged.base_url.clone(),
         admin_url: merged.base_url.clone(),
@@ -309,14 +309,16 @@ pub async fn create<S: HasServices>(
     input.client_id = uuid::Uuid::new_v4().to_string();
     input.validate()?;
     require_service_access(state.config(), &auth, input.tenant_id)?;
-    let keycloak_client = build_keycloak_client_from_create_input(&input);
+    let oidc_client = build_oidc_client_from_create_input(&input);
 
     let client_uuid = state
-        .keycloak_client()
-        .create_oidc_client(&keycloak_client)
+        .identity_engine()
+        .client_store()
+        .create_oidc_client(&oidc_client)
         .await?;
     let client_secret = state
-        .keycloak_client()
+        .identity_engine()
+        .client_store()
         .get_client_secret(&client_uuid)
         .await?;
 
@@ -367,18 +369,20 @@ pub async fn update<S: HasServices>(
     )?;
     let merged = merge_service_update(&before, &input);
 
-    // Update all associated Keycloak clients with new service settings
-    let keycloak_clients = state.client_service().list_clients(id).await?;
-    for client in keycloak_clients {
-        let keycloak_client = build_keycloak_client_for_update(&client.client_id, &merged);
+    // Update all associated identity engine clients with new service settings
+    let oidc_clients = state.client_service().list_clients(id).await?;
+    for client in oidc_clients {
+        let oidc_client = build_oidc_client_for_update(&client.client_id, &merged);
         if let Ok(kc_uuid) = state
-            .keycloak_client()
+            .identity_engine()
+            .client_store()
             .get_client_uuid_by_client_id(&client.client_id)
             .await
         {
             let _ = state
-                .keycloak_client()
-                .update_oidc_client(&kc_uuid, &keycloak_client)
+                .identity_engine()
+                .client_store()
+                .update_oidc_client(&kc_uuid, &oidc_client)
                 .await;
         }
     }
@@ -444,15 +448,15 @@ pub async fn create_client<S: HasServices>(
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
 
-    // Create new Keycloak client
-    // We need to generate a client_id logic or let Keycloak do it?
+    // Create new identity engine client
+    // We need to generate a client_id logic or let identity engine do it?
     // User said "clientId and clientSecret auto generated".
-    // Keycloak usually can generate. Or we generate UUID.
+    // identity engine usually can generate. Or we generate UUID.
     // Let's generate a UUID based client_id.
     let new_client_id = Uuid::new_v4().to_string();
 
-    // Setup Keycloak Client with Service defaults
-    // ... logic to create keycloak client ...
+    // Setup identity engine Client with Service defaults
+    // ... logic to create identity engine client ...
     let logout_uris = service.logout_uris.clone();
     let attributes = if logout_uris.is_empty() {
         None
@@ -465,7 +469,7 @@ pub async fn create_client<S: HasServices>(
         Some(attrs)
     };
 
-    let keycloak_client = KeycloakOidcClient {
+    let oidc_client = OidcClientRepresentation {
         id: None,
         client_id: new_client_id.clone(),
         name: Some(format!(
@@ -474,7 +478,7 @@ pub async fn create_client<S: HasServices>(
             input.name.clone().unwrap_or("Client".to_string())
         )),
         enabled: service.status == crate::models::service::ServiceStatus::Active,
-        protocol: "openid-connect".to_string(),
+        protocol: Some("openid-connect".to_string()),
         base_url: service.base_url.clone(),
         root_url: service.base_url.clone(),
         admin_url: service.base_url.clone(),
@@ -485,19 +489,24 @@ pub async fn create_client<S: HasServices>(
             .map(|url| vec![url.clone()])
             .unwrap_or_default(),
         attributes,
-        public_client: false,
-        secret: None, // Keycloak will generate
+        public_client: input.public_client,
+        secret: None,
     };
 
     let kc_uuid = state
-        .keycloak_client()
-        .create_oidc_client(&keycloak_client)
+        .identity_engine()
+        .client_store()
+        .create_oidc_client(&oidc_client)
         .await?;
-    let client_secret = state.keycloak_client().get_client_secret(&kc_uuid).await?;
+    let client_secret = state
+        .identity_engine()
+        .client_store()
+        .get_client_secret(&kc_uuid)
+        .await?;
 
     let client_with_secret = state
         .client_service()
-        .create_client_with_secret(id, new_client_id, client_secret, input.name.clone())
+        .create_client_with_secret(id, new_client_id, client_secret, input.name.clone(), input.public_client)
         .await?;
 
     let _ = write_audit_log_generic(
@@ -537,13 +546,18 @@ pub async fn delete_client<S: HasServices>(
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
 
-    // Also delete from Keycloak
+    // Also delete from identity engine
     if let Ok(kc_uuid) = state
-        .keycloak_client()
+        .identity_engine()
+        .client_store()
         .get_client_uuid_by_client_id(&client_id)
         .await
     {
-        let _ = state.keycloak_client().delete_oidc_client(&kc_uuid).await;
+        let _ = state
+            .identity_engine()
+            .client_store()
+            .delete_oidc_client(&kc_uuid)
+            .await;
     }
 
     state
@@ -586,18 +600,23 @@ pub async fn delete<S: HasServices>(
         &auth,
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
-    // Also delete all Keycloak clients associated with this service
+    // Also delete all identity engine clients associated with this service
     // If we assume a name prefix or just delete clients in DB...
-    // The clients in DB have `client_id` which maps to Keycloak.
-    // Ideally we should iterate clients and delete them from Keycloak first.
+    // The clients in DB have `client_id` which maps to identity engine.
+    // Ideally we should iterate clients and delete them from identity engine first.
     let clients = state.client_service().list_clients(id).await?;
     for client in clients {
         if let Ok(kc_uuid) = state
-            .keycloak_client()
+            .identity_engine()
+            .client_store()
             .get_client_uuid_by_client_id(&client.client_id)
             .await
         {
-            let _ = state.keycloak_client().delete_oidc_client(&kc_uuid).await;
+            let _ = state
+                .identity_engine()
+                .client_store()
+                .delete_oidc_client(&kc_uuid)
+                .await;
         }
     }
 
@@ -675,7 +694,6 @@ pub struct EnvVar {
 /// Build endpoint info from config
 fn build_endpoint_info(config: &Config) -> EndpointInfo {
     let domain = config
-        .keycloak
         .core_public_url
         .clone()
         .unwrap_or_else(|| config.jwt.issuer.clone());
@@ -772,11 +790,12 @@ pub async fn integration_info<S: HasServices>(
 
     let db_clients = state.client_service().list_clients(id).await?;
 
-    // Enrich each client with Keycloak data (public_client flag, secret)
+    // Enrich each client with identity engine data (public_client flag, secret)
     let mut clients = Vec::new();
     for c in &db_clients {
         let kc_result = state
-            .keycloak_client()
+            .identity_engine()
+            .client_store()
             .get_client_by_client_id(&c.client_id)
             .await;
 
@@ -785,21 +804,27 @@ pub async fn integration_info<S: HasServices>(
                 if kc_client.public_client {
                     (true, None)
                 } else {
-                    // Confidential — fetch secret from Keycloak
+                    // Confidential — fetch secret from identity engine
                     let secret = match kc_client.id {
                         Some(ref kc_uuid) => {
-                            match state.keycloak_client().get_client_secret(kc_uuid).await {
+                            match state
+                                .identity_engine()
+                                .client_store()
+                                .get_client_secret(kc_uuid)
+                                .await
+                            {
                                 Ok(s) => Some(s),
                                 Err(e) => {
                                     tracing::warn!(
                                         client_id = %c.client_id,
-                                        keycloak_uuid = %kc_uuid,
+                                        backend_uuid = %kc_uuid,
                                         error = %e,
-                                        "Failed to fetch client secret from Keycloak, attempting to regenerate"
+                                        "Failed to fetch client secret from identity engine, attempting to regenerate"
                                     );
                                     // Secret may not exist yet — try regenerating
                                     match state
-                                        .keycloak_client()
+                                        .identity_engine()
+                                        .client_store()
                                         .regenerate_client_secret(kc_uuid)
                                         .await
                                     {
@@ -819,7 +844,7 @@ pub async fn integration_info<S: HasServices>(
                         None => {
                             tracing::warn!(
                                 client_id = %c.client_id,
-                                "Client missing UUID in Keycloak response"
+                                "Client missing UUID in identity engine response"
                             );
                             None
                         }
@@ -828,11 +853,10 @@ pub async fn integration_info<S: HasServices>(
                 }
             }
             Err(_) => {
-                // Client not in Keycloak — check if it's a database-managed confidential client
-                let is_confidential = !c.client_secret_hash.is_empty();
+                // Client not in identity engine — use the public_client flag from database
                 (
-                    !is_confidential,
-                    if is_confidential {
+                    c.public_client,
+                    if !c.public_client && !c.client_secret_hash.is_empty() {
                         // Secret is managed in auth9 database (e.g., M2M client_credentials flow)
                         // We cannot return the plaintext since it's hashed; indicate it exists
                         Some("(set — use the secret configured at creation)".to_string())
@@ -899,15 +923,17 @@ pub async fn regenerate_client_secret<S: HasServices>(
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
 
-    // Regenerate in Keycloak first (if it exists there)
+    // Regenerate in identity engine first (if it exists there)
     let new_secret = if let Ok(kc_uuid) = state
-        .keycloak_client()
+        .identity_engine()
+        .client_store()
         .get_client_uuid_by_client_id(&client_id)
         .await
     {
-        // Use Keycloak's regenerated secret
+        // Use identity engine's regenerated secret
         state
-            .keycloak_client()
+            .identity_engine()
+            .client_store()
             .regenerate_client_secret(&kc_uuid)
             .await?
     } else {
@@ -918,11 +944,12 @@ pub async fn regenerate_client_secret<S: HasServices>(
             .await?
     };
 
-    // If Keycloak was used, we need to sync the hash to our DB
+    // If identity engine was used, we need to sync the hash to our DB
     // ClientService.regenerate_client_secret already updates the hash if used
-    // But if Keycloak generated, we need manual DB update
+    // But if identity engine generated, we need manual DB update
     if state
-        .keycloak_client()
+        .identity_engine()
+        .client_store()
         .get_client_uuid_by_client_id(&client_id)
         .await
         .is_ok()
@@ -1129,6 +1156,7 @@ mod tests {
         let json = r#"{"name": "My Client"}"#;
         let input: CreateClientInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.name, Some("My Client".to_string()));
+        assert!(!input.public_client);
     }
 
     #[test]
@@ -1136,6 +1164,15 @@ mod tests {
         let json = r#"{}"#;
         let input: CreateClientInput = serde_json::from_str(json).unwrap();
         assert!(input.name.is_none());
+        assert!(!input.public_client);
+    }
+
+    #[test]
+    fn test_create_client_input_public() {
+        let json = r#"{"name": "SPA Client", "public_client": true}"#;
+        let input: CreateClientInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("SPA Client".to_string()));
+        assert!(input.public_client);
     }
 
     // ========================================================================
@@ -1145,8 +1182,7 @@ mod tests {
     fn test_config() -> Config {
         let mut config = Config::for_tests();
         config.jwt.issuer = "http://localhost:8080".to_string();
-        config.keycloak.ssl_required = "none".to_string();
-        config.keycloak.realm = "auth9".to_string();
+        // ssl_required and realm fields removed (identity engine retired)
         config.password_reset.hmac_key = "test-key".to_string();
         config
     }
@@ -1172,7 +1208,7 @@ mod tests {
     #[test]
     fn test_build_endpoint_info_with_core_public_url() {
         let mut config = test_config();
-        config.keycloak.core_public_url = Some("https://api.auth9.example.com".to_string());
+        config.core_public_url = Some("https://api.auth9.example.com".to_string());
         let ep = build_endpoint_info(&config);
 
         assert_eq!(ep.auth9_domain, "https://api.auth9.example.com");
@@ -1379,7 +1415,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_client_from_create_input() {
+    fn test_build_oidc_client_from_create_input() {
         let input = CreateServiceInput {
             tenant_id: Some(uuid::Uuid::new_v4()),
             name: "Test Service".to_string(),
@@ -1389,12 +1425,12 @@ mod tests {
             logout_uris: Some(vec!["https://test.example.com/logout".to_string()]),
         };
 
-        let kc_client = build_keycloak_client_from_create_input(&input);
+        let kc_client = build_oidc_client_from_create_input(&input);
 
         assert_eq!(kc_client.client_id, "test-client");
         assert_eq!(kc_client.name, Some("Test Service".to_string()));
         assert!(kc_client.enabled);
-        assert_eq!(kc_client.protocol, "openid-connect");
+        assert_eq!(kc_client.protocol, Some("openid-connect".to_string()));
         assert_eq!(
             kc_client.base_url,
             Some("https://test.example.com".to_string())
@@ -1405,7 +1441,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_client_from_create_input_minimal() {
+    fn test_build_oidc_client_from_create_input_minimal() {
         let input = CreateServiceInput {
             tenant_id: Some(uuid::Uuid::new_v4()),
             name: "Minimal".to_string(),
@@ -1415,7 +1451,7 @@ mod tests {
             logout_uris: None,
         };
 
-        let kc_client = build_keycloak_client_from_create_input(&input);
+        let kc_client = build_oidc_client_from_create_input(&input);
 
         assert_eq!(kc_client.client_id, "minimal");
         assert!(kc_client.base_url.is_none());
@@ -1489,7 +1525,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_client_for_update() {
+    fn test_build_oidc_client_for_update() {
         let merged = MergedServiceUpdate {
             name: "Updated Service".to_string(),
             base_url: Some("https://updated.example.com".to_string()),
@@ -1498,7 +1534,7 @@ mod tests {
             status: ServiceStatus::Active,
         };
 
-        let kc_client = build_keycloak_client_for_update("my-client-id", &merged);
+        let kc_client = build_oidc_client_for_update("my-client-id", &merged);
 
         assert_eq!(kc_client.client_id, "my-client-id");
         assert_eq!(kc_client.name, Some("Updated Service".to_string()));

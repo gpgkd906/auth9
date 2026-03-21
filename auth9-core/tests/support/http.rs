@@ -1,14 +1,13 @@
 //! HTTP API Handler Tests Infrastructure
 //!
 //! This module provides test utilities for HTTP handler testing without
-//! external dependencies (no database, no Redis, no Keycloak).
+//! external dependencies (no database, no Redis, no identity backend).
 //!
 //! Key components:
 //! - `TestAppState` - Test-friendly version of AppState implementing `HasServices`
 //! - Uses production `build_full_router()` with `TestAppState` for actual handler coverage
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
-pub use super::mock_keycloak::MockKeycloakServer;
 use crate::support::TestSamlApplicationRepository;
 use crate::support::{
     create_test_jwt_manager, TestActionRepository, TestAuditRepository, TestInvitationRepository,
@@ -22,16 +21,17 @@ use crate::support::{
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
-    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig,
-    RateLimitConfig, RedisConfig, ServerConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, RateLimitConfig,
+    RedisConfig, ServerConfig,
 };
 use auth9_core::domains::authorization::service::{ClientService, RbacService};
 use auth9_core::domains::identity::service::{
-    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
+    EmailVerificationService, IdentityProviderService, PasswordService, RequiredActionService,
+    SessionService, WebAuthnService,
 };
 use auth9_core::domains::integration::service::{ActionService, WebhookService};
 use auth9_core::domains::platform::service::{
-    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
+    BrandingService, EmailService, EmailTemplateService, IdentitySyncService, SystemSettingsService,
 };
 use auth9_core::domains::provisioning::service::{ScimService, ScimTokenService};
 use auth9_core::domains::security_observability::service::{
@@ -41,8 +41,8 @@ use auth9_core::domains::tenant_access::service::{
     InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
     UserRepositoryBundle, UserService,
 };
+use auth9_core::identity_engine::{FederationBroker, IdentityEngine, IdentitySessionStore};
 use auth9_core::jwt::JwtManager;
-use auth9_core::keycloak::KeycloakClient;
 use auth9_core::middleware::RateLimitState;
 use auth9_core::server::build_full_router;
 use auth9_core::state::HasScimServices;
@@ -64,8 +64,8 @@ use tower::ServiceExt;
 // Test Configuration
 // ============================================================================
 
-/// Create a test config with the given Keycloak base URL
-pub fn create_test_config(keycloak_url: &str) -> Config {
+/// Create a test config (url parameter is retained for call-site compatibility)
+pub fn create_test_config(_keycloak_url: &str) -> Config {
     Config {
         environment: "development".to_string(),
         http_host: "127.0.0.1".to_string(),
@@ -91,17 +91,9 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             public_key_pem: None,
             previous_public_key_pem: None,
         },
-        keycloak: KeycloakConfig {
-            url: keycloak_url.to_string(),
-            public_url: keycloak_url.to_string(),
-            realm: "test".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "test-secret".to_string(), // pragma: allowlist secret
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        },
+        core_public_url: None,
+        portal_url: None,
+        webhook_secret: None,
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
@@ -123,6 +115,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         },
         async_action: auth9_core::models::action::AsyncActionConfig::default(),
         branding_allowed_domains: vec![],
+        admin_password: None,
     }
 }
 
@@ -176,8 +169,7 @@ pub struct TestAppState {
         >,
     >,
     pub session_service: Arc<SessionService<TestSessionRepository, TestUserRepository>>,
-    pub identity_provider_service:
-        Arc<IdentityProviderService<TestLinkedIdentityRepository, TestUserRepository>>,
+    pub identity_provider_service: Arc<IdentityProviderService<TestLinkedIdentityRepository>>,
     pub webauthn_service: Arc<WebAuthnService>,
     pub webhook_service: Arc<WebhookService<TestWebhookRepository>>,
     pub invitation_service: Arc<
@@ -199,7 +191,7 @@ pub struct TestAppState {
     pub action_service: Arc<ActionService<TestActionRepository>>,
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
-    pub keycloak_client: KeycloakClient,
+    pub identity_engine: Arc<dyn IdentityEngine>,
     #[allow(dead_code)]
     pub cache_manager: NoOpCacheManager,
     pub db_pool: sqlx::MySqlPool,
@@ -228,10 +220,14 @@ pub struct TestAppState {
     pub scim_group_mapping_repo: Arc<TestScimGroupMappingRepository>,
     pub scim_log_repo: Arc<TestScimLogRepository>,
     pub saml_application_service: Arc<SamlApplicationService<TestSamlApplicationRepository>>,
+    pub email_verification_service: Arc<EmailVerificationService>,
+    pub required_actions_service: Arc<RequiredActionService>,
+    pub totp_service: Arc<auth9_core::domains::identity::service::TotpService>,
+    pub recovery_code_service: Arc<auth9_core::domains::identity::service::RecoveryCodeService>,
 }
 
 impl TestAppState {
-    /// Create a new test app state with the given Keycloak base URL
+    /// Create a new test app state with the given base URL
     pub fn new(keycloak_url: &str) -> Self {
         let config = Arc::new(create_test_config(keycloak_url));
         let tenant_repo = Arc::new(TestTenantRepository::new());
@@ -281,7 +277,6 @@ impl TestAppState {
         );
         let user_service = Arc::new(UserService::new(
             user_repos,
-            None,
             Some(webhook_service.clone()), // webhook event publisher
         ));
         let client_service = Arc::new(ClientService::new(
@@ -304,36 +299,37 @@ impl TestAppState {
         ));
 
         let jwt_manager = create_test_jwt_manager();
-        let keycloak_client = KeycloakClient::new(config.keycloak.clone());
         let cache_manager = NoOpCacheManager::new();
         let db_pool = sqlx::MySqlPool::connect_lazy(&config.database.url).unwrap();
+        let identity_sessions: Arc<dyn IdentitySessionStore> =
+            Arc::new(crate::support::noop_identity_engine::NoOpSessionStore);
+        let federation_broker: Arc<dyn FederationBroker> =
+            Arc::new(crate::support::noop_identity_engine::NoOpFederationBroker);
+        let identity_engine: Arc<dyn IdentityEngine> =
+            Arc::new(crate::support::noop_identity_engine::NoOpIdentityEngine);
 
-        // Create Keycloak sync service for tests
-        let keycloak_updater: Arc<
-            dyn auth9_core::domains::platform::service::keycloak_sync::KeycloakRealmUpdater,
-        > = Arc::new(KeycloakClient::new(config.keycloak.clone()));
-        let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
+        // Create identity sync service for tests
+        let identity_sync_service = Arc::new(IdentitySyncService::new(identity_engine.clone()));
 
         // Create new services
         let password_service = Arc::new(PasswordService::with_tenant_repo(
             password_reset_repo.clone(),
             user_repo.clone(),
             email_service.clone(),
-            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+            identity_engine.clone(),
             tenant_repo.clone(),
-            keycloak_sync_service,
+            identity_sync_service,
             config.password_reset.hmac_key.clone(),
         ));
         let session_service = Arc::new(SessionService::new(
             session_repo.clone(),
             user_repo.clone(),
-            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+            identity_sessions,
             Some(webhook_service.clone()), // webhook event publisher
         ));
         let identity_provider_service = Arc::new(IdentityProviderService::new(
             linked_identity_repo.clone(),
-            user_repo.clone(),
-            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+            federation_broker,
         ));
         let webauthn_service = {
             let rp_origin = url::Url::parse(&config.webauthn.rp_origin).unwrap();
@@ -349,7 +345,7 @@ impl TestAppState {
                 webauthn_instance,
                 webauthn_repo,
                 Arc::new(auth9_core::cache::NoOpCacheManager::new()),
-                Some(Arc::new(KeycloakClient::new(config.keycloak.clone()))),
+                Some(identity_engine.clone()),
                 config.webauthn.challenge_ttl_secs,
             ))
         };
@@ -375,7 +371,7 @@ impl TestAppState {
         let scim_log_repo = Arc::new(TestScimLogRepository::new());
         let saml_application_service = Arc::new(SamlApplicationService::new(
             Arc::new(TestSamlApplicationRepository::new()),
-            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+            identity_engine.clone(),
         ));
 
         let scim_token_service = Arc::new(ScimTokenService::new(scim_token_repo));
@@ -383,8 +379,29 @@ impl TestAppState {
             user_repo.clone(),
             scim_group_mapping_repo.clone(),
             scim_log_repo.clone(),
-            None, // No Keycloak in tests
+            None, // No identity backend in tests
         ));
+
+        let email_verification_service = Arc::new(EmailVerificationService::new(
+            identity_engine.clone(),
+            "http://localhost:3000".to_string(),
+        ));
+        let required_actions_service =
+            Arc::new(RequiredActionService::new(identity_engine.clone()));
+
+        // MFA services with mock credential repo
+        let mock_cred_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
+            Arc::new(
+                auth9_oidc::repository::credential::CredentialRepositoryImpl::new(db_pool.clone()),
+            );
+        let totp_service = Arc::new(auth9_core::domains::identity::service::TotpService::new(
+            mock_cred_repo.clone(),
+            Arc::new(cache_manager.clone()),
+            auth9_core::crypto::EncryptionKey::new([0u8; 32]),
+        ));
+        let recovery_code_service = Arc::new(
+            auth9_core::domains::identity::service::RecoveryCodeService::new(mock_cred_repo),
+        );
 
         Self {
             config,
@@ -407,7 +424,7 @@ impl TestAppState {
             action_service,
             audit_repo,
             jwt_manager,
-            keycloak_client,
+            identity_engine,
             cache_manager,
             db_pool,
             tenant_repo,
@@ -429,12 +446,11 @@ impl TestAppState {
             scim_group_mapping_repo,
             scim_log_repo,
             saml_application_service,
+            email_verification_service,
+            required_actions_service,
+            totp_service,
+            recovery_code_service,
         }
-    }
-
-    /// Create with an already started mock Keycloak server
-    pub fn with_mock_keycloak(mock_server: &MockKeycloakServer) -> Self {
-        Self::new(&mock_server.uri())
     }
 
     /// Enable public registration by setting allow_registration to true in branding config
@@ -517,8 +533,8 @@ impl HasServices for TestAppState {
         &self.jwt_manager
     }
 
-    fn keycloak_client(&self) -> &KeycloakClient {
-        &self.keycloak_client
+    fn identity_engine(&self) -> &Arc<dyn IdentityEngine> {
+        &self.identity_engine
     }
 
     fn action_service(&self) -> &ActionService<Self::ActionRepo> {
@@ -609,11 +625,8 @@ impl HasSessionManagement for TestAppState {
 /// Implement HasIdentityProviders trait for TestAppState
 impl HasIdentityProviders for TestAppState {
     type LinkedIdentityRepo = TestLinkedIdentityRepository;
-    type IdpUserRepo = TestUserRepository;
 
-    fn identity_provider_service(
-        &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo> {
+    fn identity_provider_service(&self) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
         &self.identity_provider_service
     }
 
@@ -698,6 +711,30 @@ impl HasCache for TestAppState {
 
     fn cache(&self) -> &Self::Cache {
         &self.cache_manager
+    }
+}
+
+impl auth9_core::state::HasEmailVerification for TestAppState {
+    fn email_verification_service(&self) -> &EmailVerificationService {
+        &self.email_verification_service
+    }
+}
+
+impl auth9_core::state::HasRequiredActions for TestAppState {
+    fn required_actions_service(&self) -> &RequiredActionService {
+        &self.required_actions_service
+    }
+}
+
+impl auth9_core::state::HasMfa for TestAppState {
+    fn totp_service(&self) -> &auth9_core::domains::identity::service::TotpService {
+        &self.totp_service
+    }
+
+    fn recovery_code_service(
+        &self,
+    ) -> &auth9_core::domains::identity::service::RecoveryCodeService {
+        &self.recovery_code_service
     }
 }
 
@@ -1151,13 +1188,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_test_config() {
         let config = create_test_config("http://localhost:8080");
-        assert_eq!(config.keycloak.url, "http://localhost:8080");
-        assert_eq!(config.keycloak.realm, "test");
+        assert_eq!(config.jwt.issuer, "https://auth9.test");
     }
 
     #[tokio::test]
     async fn test_test_app_state_creation() {
         let state = TestAppState::new("http://localhost:8080");
-        assert!(state.config.keycloak.url.contains("localhost"));
+        assert_eq!(state.config.jwt.issuer, "https://auth9.test");
     }
 }

@@ -255,19 +255,9 @@ fn extract_user_id<S: HasPasswordManagement + HasServices>(
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    let allowed = &state.config().jwt_tenant_access_allowed_audiences;
-    if !allowed.is_empty() {
-        if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
-            return StringUuid::parse_str(&claims.sub)
-                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
-        }
-    } else if !state.config().is_production() {
-        #[allow(deprecated)]
-        if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
-            metrics::counter!("auth9_jwt_legacy_fallback_total", "caller" => "password_extract_user").increment(1);
-            return StringUuid::parse_str(&claims.sub)
-                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
-        }
+    if let Ok(claims) = jwt.verify_tenant_access_token_any_audience(token) {
+        return StringUuid::parse_str(&claims.sub)
+            .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
     Err(AppError::Unauthorized(

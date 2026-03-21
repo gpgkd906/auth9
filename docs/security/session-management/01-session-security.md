@@ -14,7 +14,7 @@
 ## 背景知识
 
 Auth9 会话机制：
-- **Keycloak Session**: OIDC 登录会话
+- **Auth9 OIDC Session**: OIDC 登录会话
 - **Portal Session**: React Router 应用会话
 - **API Session**: JWT Token (无状态)
 - **Redis 存储**: Session 数据缓存
@@ -60,22 +60,16 @@ curl -I -c - http://localhost:3000/login
 # Set-Cookie: session=xxx; HttpOnly; Secure; SameSite=Strict; Path=/
 ```
 
-> **重要：Auth9 Cookie vs Keycloak Cookie 的区别**
+> **Auth9 Cookie 安全要求**
 >
-> 浏览器中会看到多种 Cookie，需区分来源：
+> 浏览器中的 Auth9 Cookie：
 >
-> | Cookie | 来源 | Auth9 可控 | 检查重点 |
-> |--------|------|-----------|----------|
-> | `auth9_session` | Auth9 Portal | ✅ 是 | **必须** HttpOnly=true, SameSite=Lax, Secure=true(生产) |
-> | `oauth_state` | Auth9 Portal | ✅ 是 | **必须** HttpOnly=true, SameSite=Lax, TTL=5min |
-> | `AUTH_SESSION_ID` | Keycloak | ❌ 否 | Keycloak 内部 OIDC 流程 Cookie |
-> | `KC_AUTH_SESSION_HASH` | Keycloak | ❌ 否 | Keycloak 内部 Cookie（可能无 HttpOnly） |
-> | `KEYCLOAK_SESSION` | Keycloak | ❌ 否 | Keycloak 内部 Cookie（可能无 HttpOnly） |
-> | `KEYCLOAK_IDENTITY` | Keycloak | ❌ 否 | Keycloak 身份 Cookie |
+> | Cookie | 来源 | 检查重点 |
+> |--------|------|----------|
+> | `auth9_session` | Auth9 Portal | **必须** HttpOnly=true, SameSite=Lax, Secure=true(生产) |
+> | `oauth_state` | Auth9 Portal | **必须** HttpOnly=true, SameSite=Lax, TTL=5min |
 >
-> **本场景仅验证 Auth9 控制的 Cookie 安全属性**（`auth9_session`、`oauth_state`）。
-> Keycloak 的 Cookie 安全属性由 Keycloak 自身管理，部分 Cookie 设计上不设 HttpOnly
-> （如 `KC_AUTH_SESSION_HASH`），这是 Keycloak 的已知行为，不属于 Auth9 安全漏洞。
+> **本场景验证 Auth9 控制的 Cookie 安全属性**（`auth9_session`、`oauth_state`）。
 
 ### 修复建议
 - 使用 CSPRNG 生成
@@ -89,8 +83,8 @@ curl -I -c - http://localhost:3000/login
 
 ### 前置条件
 - 能够设置 Cookie
-- **Docker 环境已完全启动**（Keycloak、auth9-core、auth9-portal 均健康运行）
-- **必须能够完成 OIDC 登录流程**（如 Keycloak 登录失败，请先执行 `./scripts/reset-docker.sh` 重建环境）
+- **Docker 环境已完全启动**（auth9-core、auth9-portal 均健康运行）
+- **必须能够完成 OIDC 登录流程**（如登录失败，请先执行 `./scripts/reset-docker.sh` 重建环境）
 
 ### 攻击目标
 验证是否存在 Session 固定漏洞
@@ -108,17 +102,13 @@ curl -I -c - http://localhost:3000/login
 
 **重要说明 - Auth9 会话架构**:
 
-Auth9 使用 Keycloak OIDC + 自有 JWT 的多层会话保护架构。测试时需要监控**正确的 Cookie**：
+Auth9 使用内置 OIDC Engine + JWT 的会话保护架构。测试时需要监控**正确的 Cookie**：
 
 | Cookie | 用途 | 登录后是否更新 |
 |--------|------|---------------|
-| `AUTH_SESSION_ID` | Keycloak 内部 OIDC 流程追踪标识符 | **不一定** - 这是流程 ID，不是认证凭证 |
-| `KEYCLOAK_IDENTITY` | Keycloak 认证 JWT Token | **是** - 登录后新生成 |
 | `auth9_session` | Auth9 Portal 会话 Cookie（含 JWT） | **是** - 登录后新生成 |
 
-> **注意**: `AUTH_SESSION_ID` 不变**不是** Session Fixation 漏洞。Keycloak 23+ 使用 token-based 会话保护，
-> 实际认证凭证是 `KEYCLOAK_IDENTITY`（JWE 加密 Token）和 `auth9_session`（含签名 JWT）。
-> 攻击者即使控制 `AUTH_SESSION_ID`，也无法获得有效认证 Token。
+> **注意**: `auth9_session` 是实际认证凭证（含签名 JWT）。登录后必须生成新的 session Cookie。
 
 ### 验证方法
 ```bash
@@ -137,9 +127,8 @@ curl -b "auth9_session=$PRE_LOGIN" \
   http://localhost:3000/dashboard
 # 预期: 重定向到登录页 (旧 Session 无效)
 
-# 4. 验证 Keycloak Token 更新（可选）
+# 4. 验证 Session Token 更新（可选）
 # 使用浏览器 DevTools 比较登录前后:
-# - KEYCLOAK_IDENTITY: 应该登录后新增
 # - auth9_session: 应该登录后为新值
 ```
 
@@ -147,8 +136,6 @@ curl -b "auth9_session=$PRE_LOGIN" \
 
 | 现象 | 原因 | 结论 |
 |------|------|------|
-| AUTH_SESSION_ID 登录前后相同 | 这是 Keycloak OIDC 流程 ID，非认证凭证 | **非漏洞** |
-| KEYCLOAK_IDENTITY 登录后新增 | 正常行为，这是实际认证 Token | 安全 |
 | auth9_session 登录后变化 | 正常行为，JWT session 重新生成 | 安全 |
 
 ### 修复建议

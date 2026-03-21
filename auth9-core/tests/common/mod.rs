@@ -4,8 +4,9 @@
 //! For unit tests, use mock repositories from the service layer.
 
 use auth9_core::config::{
-    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RedisConfig,
-    SecurityHeadersConfig, ServerConfig, TelemetryConfig, WebAuthnConfig, RateLimitConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig,
+    RateLimitConfig, RedisConfig, SecurityHeadersConfig, ServerConfig,
+    TelemetryConfig, WebAuthnConfig,
 };
 
 /// Test configuration (no real connections needed)
@@ -35,17 +36,9 @@ pub fn test_config() -> Config {
             public_key_pem: None,
             previous_public_key_pem: None,
         },
-        keycloak: KeycloakConfig {
-            url: "http://localhost:8081".to_string(),
-            public_url: "http://localhost:8081".to_string(),
-            realm: "test".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "secret".to_string(),
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        },
+        core_public_url: None,
+        portal_url: None,
+        webhook_secret: None,
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
@@ -61,6 +54,13 @@ pub fn test_config() -> Config {
         jwt_tenant_access_allowed_audiences: vec![],
         security_headers: SecurityHeadersConfig::default(),
         portal_client_id: None,
+        password_reset: auth9_core::config::PasswordResetConfig {
+            hmac_key: "test-password-reset-hmac-key".to_string(),
+            token_ttl_secs: 3600,
+        },
+        async_action: auth9_core::models::action::AsyncActionConfig::default(),
+        branding_allowed_domains: vec![],
+        admin_password: None,
     }
 }
 

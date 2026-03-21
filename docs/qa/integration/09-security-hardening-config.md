@@ -91,8 +91,12 @@
 ### 目的
 验证 production 必须配置 Tenant Access Token audience allowlist
 
+> **注意：动态 audience 加载机制**
+> `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 环境变量现在是可选的。系统在启动时会从 `clients` 表动态加载 audience 到 Redis 缓存中（参见 `config/mod.rs` 注释："jwt_tenant_access_allowed_audiences is now optional — audiences are dynamically loaded from the clients table into Redis on startup."）。
+> 因此，此场景仅在 `clients` 表也为空且 `AUTH9_PORTAL_CLIENT_ID` 也未设置时才会触发启动失败。如果数据库中存在 client 记录，即使 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 为空，系统仍可正常启动。
+
 ### 测试操作流程
-1. 执行命令（同时清空显式 allowlist 与 portal client id）：
+1. 执行命令（同时清空显式 allowlist 与 portal client id，**且确保数据库 `clients` 表为空**）：
    ```bash
    cd auth9-core
    ENVIRONMENT=production \
@@ -107,8 +111,8 @@
 2. 观察启动日志
 
 ### 预期结果
-- 进程启动失败并退出（非 0）
-- 日志包含类似信息：`Tenant access token audience allowlist is empty in production`
+- 若 `clients` 表为空：进程启动失败并退出（非 0），日志包含类似信息：`Tenant access token audience allowlist is empty in production`
+- 若 `clients` 表中有记录：系统正常启动，audience 从 `clients` 表动态加载到 Redis
 
 ---
 
@@ -116,21 +120,27 @@
 
 ### 初始状态
 - 服务以 `ENVIRONMENT=production` 启动成功
-- 已配置 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES='auth9-portal'`
 - 已准备两个 Tenant Access Token：
   - `{tenant_token_aud_auth9_portal}`（`aud=auth9-portal`）
-  - `{tenant_token_aud_other}`（`aud=other-service`）
+  - `{tenant_token_aud_other}`（`aud=other-service`，且 `other-service` 不在 `clients` 表中）
 
-> **重要**：默认 Docker 环境中 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 和 `AUTH9_PORTAL_CLIENT_ID` **均未配置**。
-> 在非 production 模式下，缺少这些配置时系统会回退到不检查 audience 的兼容模式（deprecated 行为）。
+> **重要：动态 audience 验证机制**
+> REST 侧的 audience 校验通过 `require_auth` 中间件执行，从 Redis 缓存查找有效 audience。
+> Audience 来源有两个（合并生效）：
+> 1. `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 环境变量（静态配置）
+> 2. `clients` 表中的 `client_id`（启动时动态加载到 Redis）
+>
+> 因此，如果某个 `client_id`（如 `auth9-demo`）存在于 `clients` 表中，它会被自动加载为有效 audience，即使未出现在 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 中。测试 audience 拒绝场景时，必须使用一个**不在 `clients` 表中**的 audience 值。
+>
 > **测试本场景必须**：
 > 1. 在 docker-compose.yml 的 auth9-core 环境变量中添加 `ENVIRONMENT: production`
-> 2. 添加 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: auth9-portal`
+> 2. （可选）添加 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: auth9-portal`
 > 3. 重启 auth9-core 容器使配置生效
 > 4. Token 必须通过 gRPC TokenExchange 生成（`service_id` 对应的 client 的 `client_id` 即为 token 的 `aud` 值）
+> 5. 确认用于"拒绝"测试的 audience 值不在 `clients` 表中：`SELECT client_id FROM clients WHERE client_id = 'other-service';` 应返回空
 
 ### 目的
-验证 REST 认证链路只接受 allowlist 内 aud
+验证 REST 认证链路只接受有效 audience（静态 allowlist + 动态 clients 表）内的 aud
 
 ### 测试操作流程
 1. 使用 allowlist 内 token 访问受保护接口：
@@ -154,7 +164,7 @@
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
 | 两个 token 都返回 401 (InvalidAudience) | `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 未生效或值与 token aud 不匹配 | 确认 docker-compose 中配置正确并重启容器；用 `jwt.io` 解码 token 验证 aud 值 |
-| 两个 token 都返回 200 | 未设置 `ENVIRONMENT=production`，系统回退到兼容模式 | 在 auth9-core 环境变量中添加 `ENVIRONMENT: production` 并重启 |
+| 两个 token 都返回 200 | 未设置 `ENVIRONMENT=production`（兼容模式），或"拒绝"测试的 audience 值存在于 `clients` 表中（被动态加载为有效 audience） | 确认 `ENVIRONMENT: production` 已设置；用 `SELECT client_id FROM clients` 检查 audience 是否被动态加载 |
 | Token 无法生成 | TokenExchange 的 `service_id` 与数据库中的 client `client_id` 不匹配 | 查询数据库 `SELECT client_id FROM clients` 确认正确的 service_id |
 
 ---

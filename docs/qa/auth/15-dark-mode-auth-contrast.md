@@ -11,7 +11,11 @@
 本用例用于验证 2026-03-13 的 Dark Mode 对比度修正：
 
 - `auth9-portal` 的 `/forgot-password` 与 `/reset-password`
-- `auth9-keycloak-theme` 承载的登录/忘记密码/信息页
+- Auth9 品牌认证页承载的登录/忘记密码/信息页
+
+## 入口可见性说明
+
+本文件要求优先从 Portal `/login` 或其他可见认证入口进入目标页面，禁止仅依赖手输 URL 跳过入口可见性验证。
 
 本回归只验证视觉层级与可读性，不替代密码功能本身的主流程验收。密码能力正确性仍以 [03-password.md](./03-password.md) 为主。
 
@@ -97,12 +101,12 @@
 ## 场景 4：Auth9 品牌认证页在 Dark Mode 下的忘记密码/信息页无灰雾感
 
 ### 初始状态
-- Keycloak 与 `auth9-keycloak-theme` 已启动
+- Auth9 服务已启动
 - 可从 Portal `/login` 进入 Auth9 品牌认证页
 - 页面为 Dark Mode
 
 ### 目的
-验证由 `auth9-keycloak-theme` 承载的认证页在 Dark Mode 下，卡片、输入框、按钮、提示框和主题切换具有稳定对比度。
+验证由 Auth9 品牌认证页承载的认证页在 Dark Mode 下，卡片、输入框、按钮、提示框和主题切换具有稳定对比度。
 
 ### 测试操作流程
 1. 打开 Portal `/login`
@@ -117,7 +121,7 @@
 - 输入框边框、hover/focus 态、placeholder 层级自然
 - 错误/成功/信息提示框有独立背景和边框，不与卡片融成一片
 - 主题切换控件激活态与非激活态清楚可辨
-- 全程不出现 Keycloak 默认 PatternFly UI
+- 全程不出现原生认证 UI 的默认样式
 
 ---
 

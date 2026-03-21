@@ -213,12 +213,12 @@ pub async fn list_passkeys<S: HasWebAuthn + HasServices>(
 ) -> Result<Json<SuccessResponse<Vec<WebAuthnCredential>>>, AppError> {
     let claims = extract_identity_claims(&state, &headers)?;
 
-    // Get keycloak_user_id for migration period
-    let keycloak_user_id = get_keycloak_user_id(&state, &claims.sub).await.ok();
+    // Get identity_subject for migration period
+    let identity_subject_id = get_identity_subject(&state, &claims.sub).await.ok();
 
     let credentials = state
         .webauthn_service()
-        .list_credentials(&claims.sub, keycloak_user_id.as_deref())
+        .list_credentials(&claims.sub, identity_subject_id.as_deref())
         .await?;
 
     Ok(Json(SuccessResponse::new(credentials)))
@@ -240,11 +240,11 @@ pub async fn delete_passkey<S: HasWebAuthn + HasServices>(
 ) -> Result<Json<MessageResponse>, AppError> {
     let claims = extract_identity_claims(&state, &headers)?;
 
-    let keycloak_user_id = get_keycloak_user_id(&state, &claims.sub).await.ok();
+    let identity_subject_id = get_identity_subject(&state, &claims.sub).await.ok();
 
     state
         .webauthn_service()
-        .delete_credential(&claims.sub, &credential_id, keycloak_user_id.as_deref())
+        .delete_credential(&claims.sub, &credential_id, identity_subject_id.as_deref())
         .await?;
 
     Ok(Json(MessageResponse::new("Passkey deleted successfully.")))
@@ -275,15 +275,15 @@ fn extract_identity_claims<S: HasWebAuthn>(
         .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))
 }
 
-/// Get keycloak_user_id from the user record (for migration period)
-async fn get_keycloak_user_id<S: HasServices>(
+/// Get identity_subject from the user record (for migration period)
+async fn get_identity_subject<S: HasServices>(
     state: &S,
     user_id: &str,
 ) -> Result<String, AppError> {
     let uuid = crate::models::common::StringUuid::parse_str(user_id)
         .map_err(|_| AppError::BadRequest("Invalid user_id".to_string()))?;
     let user = state.user_service().get(uuid).await?;
-    Ok(user.keycloak_id)
+    Ok(user.identity_subject)
 }
 
 /// Extract client IP from request headers

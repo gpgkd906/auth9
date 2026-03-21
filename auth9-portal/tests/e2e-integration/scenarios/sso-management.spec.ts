@@ -266,23 +266,6 @@ test.describe("Scenario: Identity Provider API", () => {
   });
 });
 
-/**
- * Scenario: Keycloak IdP Integration
- *
- * Tests the Keycloak identity provider proxy.
- */
-test.describe("Scenario: Keycloak IdP Integration", () => {
-  test("1. Keycloak realm supports identity providers", async ({ request }) => {
-    const response = await request.get(
-      `${TEST_CONFIG.keycloakUrl}/realms/${TEST_CONFIG.keycloakRealm}/.well-known/openid-configuration`
-    );
-
-    expect(response.ok()).toBeTruthy();
-    const config = await response.json();
-    expect(config).toHaveProperty("issuer");
-  });
-});
-
 // Helper function
 async function loginAsTestUser(page: Page): Promise<void> {
   const testUser = TEST_CONFIG.testUsers.standard;

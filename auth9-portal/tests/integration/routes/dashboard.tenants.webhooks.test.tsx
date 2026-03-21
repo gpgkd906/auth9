@@ -9,6 +9,7 @@ import { ConfirmProvider } from "~/hooks/useConfirm";
 // Mock the session module
 vi.mock("~/services/session.server", () => ({
   getAccessToken: vi.fn().mockResolvedValue(null),
+  getAccessTokenWithUpdate: vi.fn().mockResolvedValue({ token: null, headers: undefined }),
     requireAuthWithUpdate: vi.fn().mockResolvedValue({
         session: {
             accessToken: "test-token",
@@ -20,7 +21,7 @@ vi.mock("~/services/session.server", () => ({
     }),
 }));
 
-import { getAccessToken } from "~/services/session.server";
+import { getAccessToken, getAccessTokenWithUpdate } from "~/services/session.server";
 
 // Mock the API
 vi.mock("~/services/api", () => ({
@@ -91,6 +92,7 @@ describe("Webhooks Page", () => {
     expect(response).toEqual({
       webhooks: [mockWebhook, mockWebhookDisabled],
       tenantId: "tenant-1",
+      error: null,
     });
     expect(webhookApi.list).toHaveBeenCalledWith("tenant-1", undefined);
   });
@@ -107,6 +109,7 @@ describe("Webhooks Page", () => {
     expect(response).toEqual({
       webhooks: [],
       error: "Tenant ID required",
+      tenantId: "",
     });
   });
 
@@ -1034,6 +1037,7 @@ describe("Webhooks Page", () => {
   describe("action", () => {
     beforeEach(() => {
       vi.mocked(getAccessToken).mockResolvedValue("test-token");
+      vi.mocked(getAccessTokenWithUpdate).mockResolvedValue({ token: "test-token", headers: undefined });
     });
 
     function createFormRequest(data: Record<string, string>) {
@@ -1390,7 +1394,7 @@ describe("Webhooks Page", () => {
     });
 
     it("passes undefined token when getAccessToken returns null", async () => {
-      vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+      vi.mocked(getAccessTokenWithUpdate).mockResolvedValueOnce({ token: null, headers: undefined });
       vi.mocked(webhookApi.delete).mockResolvedValue(undefined);
 
       const request = createFormRequest({

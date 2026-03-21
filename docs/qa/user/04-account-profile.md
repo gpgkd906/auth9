@@ -23,7 +23,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
-| keycloak_id | VARCHAR(255) | Keycloak 用户 ID |
+| identity_subject | VARCHAR(255) | 身份主体 ID |
 | email | VARCHAR(255) | 邮箱（唯一） |
 | display_name | VARCHAR(255) | 显示名称 |
 | avatar_url | TEXT | 头像 URL |
@@ -94,7 +94,7 @@ SELECT id, email, display_name, avatar_url, mfa_enabled FROM users WHERE id = '{
 - 当前 display_name 为 `Test User`
 
 ### 目的
-验证用户可以从侧边栏可见入口进入 Account Profile，并成功修改显示名称和头像 URL（含 Keycloak 同步）
+验证用户可以从侧边栏可见入口进入 Account Profile，并成功修改显示名称和头像 URL
 
 ### 测试操作流程
 1. 在任意 Dashboard 页面，确认左侧边栏底部存在当前用户卡片入口
@@ -177,6 +177,11 @@ echo "{token}" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.roles, .permissions'
 > |------|------|---------|
 > | 更新他人返回 200（而非 403）| Token 实际是 admin/owner 角色 | 执行步骤 0 验证 Token 角色 |
 > | 更新他人返回 404（而非 403）| 目标用户不在当前租户 | 使用同一租户内的目标用户 ID |
+>
+> **权限检查说明**：`PUT /api/v1/users/{id}` 对非自身用户执行 `PolicyAction::UserManage` 权限检查，要求 `user:write`、`user:delete`、`user:*` 或 `rbac:*` 中的任一权限。`user:read` 单独不足以更新他人资料。如果测试中更新他人返回 200，首先确认 token 的 permissions 字段——`gen_tenant_access_token.js` 默认生成的 token 包含 `rbac:*,user:*`，会授予写权限。生成仅含 member 权限的 token：
+> ```bash
+> node gen_tenant_access_token.js "$USER_ID" "$TENANT_ID" "member" ""
+> ```
 
 ### 预期数据状态
 ```sql

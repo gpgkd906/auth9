@@ -12,11 +12,12 @@ use crate::grpc::TokenExchangeService;
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth9_descriptor");
 use crate::domains::authorization::service::{ClientService, RbacService};
 use crate::domains::identity::service::{
-    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
+    EmailVerificationService, IdentityProviderService, PasswordService, RecoveryCodeService,
+    RequiredActionService, SessionService, TotpService, WebAuthnService,
 };
 use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
 use crate::domains::platform::service::{
-    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
+    BrandingService, EmailService, EmailTemplateService, IdentitySyncService, SystemSettingsService,
 };
 use crate::domains::provisioning::service::{ScimService, ScimTokenService};
 use crate::domains::security_observability::service::{
@@ -26,8 +27,11 @@ use crate::domains::tenant_access::service::{
     InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
     UserRepositoryBundle, UserService,
 };
+use crate::identity_engine::adapters::auth9_oidc::{
+    Auth9OidcFederationBrokerAdapter, Auth9OidcIdentityEngineAdapter, Auth9OidcSessionStoreAdapter,
+};
+use crate::identity_engine::{FederationBroker, IdentityEngine, IdentitySessionStore};
 use crate::jwt::JwtManager;
-use crate::keycloak::KeycloakClient;
 use crate::repository::{
     action::ActionRepositoryImpl, audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl,
     linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
@@ -110,7 +114,7 @@ pub struct AppState {
     pub audit_repo: Arc<AuditRepositoryImpl>,
     pub jwt_manager: JwtManager,
     pub cache_manager: CacheManager,
-    pub keycloak_client: KeycloakClient,
+    pub identity_engine: Arc<dyn IdentityEngine>,
     pub system_settings_service: Arc<SystemSettingsService<SystemSettingsRepositoryImpl>>,
     pub email_service: Arc<EmailService<SystemSettingsRepositoryImpl>>,
     pub email_template_service: Arc<EmailTemplateService<SystemSettingsRepositoryImpl>>,
@@ -134,8 +138,7 @@ pub struct AppState {
     >,
     pub session_service: Arc<SessionService<SessionRepositoryImpl, UserRepositoryImpl>>,
     pub webauthn_service: Arc<WebAuthnService>,
-    pub identity_provider_service:
-        Arc<IdentityProviderService<LinkedIdentityRepositoryImpl, UserRepositoryImpl>>,
+    pub identity_provider_service: Arc<IdentityProviderService<LinkedIdentityRepositoryImpl>>,
     pub analytics_service: Arc<AnalyticsService<LoginEventRepositoryImpl>>,
     pub webhook_service: Arc<WebhookService<WebhookRepositoryImpl>>,
     pub security_detection_service: Arc<
@@ -159,6 +162,10 @@ pub struct AppState {
     pub scim_group_mapping_repo: Arc<ScimGroupRoleMappingRepositoryImpl>,
     pub scim_log_repo: Arc<ScimProvisioningLogRepositoryImpl>,
     pub saml_application_service: Arc<SamlApplicationService<SamlApplicationRepositoryImpl>>,
+    pub email_verification_service: Arc<EmailVerificationService>,
+    pub required_actions_service: Arc<RequiredActionService>,
+    pub totp_service: Arc<TotpService>,
+    pub recovery_code_service: Arc<RecoveryCodeService>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -229,8 +236,8 @@ impl HasServices for AppState {
         &self.jwt_manager
     }
 
-    fn keycloak_client(&self) -> &KeycloakClient {
-        &self.keycloak_client
+    fn identity_engine(&self) -> &Arc<dyn IdentityEngine> {
+        &self.identity_engine
     }
 
     fn action_service(&self) -> &ActionService<Self::ActionRepo> {
@@ -344,11 +351,8 @@ impl HasWebAuthn for AppState {
 /// Implement HasIdentityProviders trait for production AppState
 impl HasIdentityProviders for AppState {
     type LinkedIdentityRepo = LinkedIdentityRepositoryImpl;
-    type IdpUserRepo = UserRepositoryImpl;
 
-    fn identity_provider_service(
-        &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo> {
+    fn identity_provider_service(&self) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
         &self.identity_provider_service
     }
 
@@ -413,6 +417,28 @@ impl HasCache for AppState {
     }
 }
 
+impl crate::state::HasEmailVerification for AppState {
+    fn email_verification_service(&self) -> &EmailVerificationService {
+        &self.email_verification_service
+    }
+}
+
+impl crate::state::HasRequiredActions for AppState {
+    fn required_actions_service(&self) -> &RequiredActionService {
+        &self.required_actions_service
+    }
+}
+
+impl crate::state::HasMfa for AppState {
+    fn totp_service(&self) -> &TotpService {
+        &self.totp_service
+    }
+
+    fn recovery_code_service(&self) -> &RecoveryCodeService {
+        &self.recovery_code_service
+    }
+}
+
 /// Implement HasScimServices trait for production AppState
 impl HasScimServices for AppState {
     type ScimTokenRepo = ScimTokenRepositoryImpl;
@@ -443,6 +469,7 @@ impl HasScimServices for AppState {
 
 /// Run the server
 pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) -> Result<()> {
+    info!("Identity backend: auth9_oidc");
     // Create database connection pool
     let db_pool = MySqlPoolOptions::new()
         .max_connections(config.database.max_connections)
@@ -457,6 +484,27 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create cache manager
     let cache_manager = CacheManager::new(&config.redis).await?;
     info!("Connected to Redis");
+
+    // Seed audience validation set: load all registered client_ids into Redis
+    {
+        let client_ids: Vec<String> = sqlx::query_scalar("SELECT client_id FROM clients")
+            .fetch_all(&db_pool)
+            .await
+            .unwrap_or_default();
+        let mut all_audiences = client_ids;
+        // Merge with env var audiences for backward compatibility
+        all_audiences.extend(config.jwt_tenant_access_allowed_audiences.clone());
+        all_audiences.sort();
+        all_audiences.dedup();
+        if let Err(e) = cache_manager.refresh_audience_set(&all_audiences).await {
+            tracing::warn!("Failed to seed audience set in Redis: {}", e);
+        } else {
+            info!(
+                count = all_audiences.len(),
+                "Audience validation set loaded into Redis"
+            );
+        }
+    }
 
     // Create repositories
     let tenant_repo = Arc::new(TenantRepositoryImpl::new(db_pool.clone()));
@@ -485,12 +533,20 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create JWT manager
     let jwt_manager = JwtManager::new(config.jwt.clone());
 
-    // Create Keycloak client
-    let keycloak_client = KeycloakClient::new(config.keycloak.clone());
-
-    // Create services
-    // Create Arc-wrapped Keycloak client for services that need it
-    let keycloak_arc = Arc::new(keycloak_client.clone());
+    // Create identity engine adapters (Auth9-OIDC)
+    let social_provider_repo: Arc<dyn crate::repository::SocialProviderRepository> = Arc::new(
+        crate::repository::social_provider::SocialProviderRepositoryImpl::new(db_pool.clone()),
+    );
+    let identity_sessions: Arc<dyn IdentitySessionStore> =
+        Arc::new(Auth9OidcSessionStoreAdapter::new());
+    let federation_broker: Arc<dyn FederationBroker> = Arc::new(
+        Auth9OidcFederationBrokerAdapter::new(social_provider_repo.clone()),
+    );
+    let identity_engine: Arc<dyn IdentityEngine> = Arc::new(Auth9OidcIdentityEngineAdapter::new(
+        db_pool.clone(),
+        social_provider_repo,
+        config.core_public_url.clone(),
+    ));
 
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
@@ -542,7 +598,6 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let user_service = Arc::new(
         UserService::new(
             user_repos,
-            Some(keycloak_client.clone()),
             Some(webhook_service.clone()), // webhook event publisher
         )
         .with_pool(db_pool.clone()),
@@ -583,18 +638,15 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         }
     };
 
-    // Create Keycloak sync service (shared between branding and system settings)
-    let keycloak_updater: Arc<
-        dyn crate::domains::platform::service::keycloak_sync::KeycloakRealmUpdater,
-    > = keycloak_arc.clone();
-    let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
+    // Create identity sync service (shared between branding and system settings)
+    let identity_sync_service = Arc::new(IdentitySyncService::new(identity_engine.clone()));
 
-    // Create system settings service with Keycloak sync
+    // Create system settings service with identity sync
     let system_settings_service = Arc::new(SystemSettingsService::with_sync_service(
         system_settings_repo.clone(),
         malicious_ip_blacklist_repo.clone(),
         encryption_key,
-        keycloak_sync_service.clone(),
+        identity_sync_service.clone(),
     ));
 
     // Create email service
@@ -603,12 +655,12 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create email template service
     let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
 
-    // Create branding service with Keycloak sync
+    // Create branding service with identity sync
     let branding_service = Arc::new(
         BrandingService::with_sync_service(
             system_settings_repo.clone(),
             service_branding_repo.clone(),
-            keycloak_sync_service.clone(),
+            identity_sync_service.clone(),
         )
         .with_allowed_domains(config.branding_allowed_domains.clone())
         .with_service_repo(service_repo.clone()),
@@ -631,17 +683,17 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         password_reset_repo.clone(),
         user_repo.clone(),
         email_service.clone(),
-        keycloak_arc.clone(),
+        identity_engine.clone(),
         tenant_repo.clone(),
         action_engine.clone(),
-        keycloak_sync_service.clone(),
+        identity_sync_service.clone(),
         config.password_reset.hmac_key.clone(),
     ));
 
     let session_service = Arc::new(SessionService::new(
         session_repo.clone(),
         user_repo.clone(),
-        keycloak_arc.clone(),
+        identity_sessions,
         Some(webhook_service.clone()), // webhook event publisher
     ));
 
@@ -665,14 +717,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         webauthn_instance,
         webauthn_repo,
         Arc::new(cache_manager.clone()),
-        Some(keycloak_arc.clone()),
+        Some(identity_engine.clone()),
         config.webauthn.challenge_ttl_secs,
     ));
 
     let identity_provider_service = Arc::new(IdentityProviderService::new(
         linked_identity_repo.clone(),
-        user_repo.clone(),
-        keycloak_arc,
+        federation_broker,
     ));
 
     let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
@@ -691,7 +742,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         user_repo.clone(),
         scim_group_mapping_repo.clone(),
         scim_log_repo.clone(),
-        Some(keycloak_client.clone()),
+        Some(identity_engine.clone()),
         rbac_repo.clone(),
     ));
 
@@ -699,8 +750,43 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let saml_application_repo = Arc::new(SamlApplicationRepositoryImpl::new(db_pool.clone()));
     let saml_application_service = Arc::new(SamlApplicationService::new(
         saml_application_repo,
-        Arc::new(keycloak_client.clone()),
+        identity_engine.clone(),
     ));
+
+    // Create email verification and required actions services
+    let email_verification_service = Arc::new(EmailVerificationService::new(
+        identity_engine.clone(),
+        app_base_url.clone(),
+    ));
+    let required_actions_service = Arc::new(RequiredActionService::new(identity_engine.clone()));
+
+    // Create MFA services (TOTP + recovery codes)
+    let credential_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
+        Arc::new(
+            auth9_oidc::repository::credential::CredentialRepositoryImpl::new(db_pool.clone()),
+        );
+
+    let totp_encryption_key = match std::env::var("SETTINGS_ENCRYPTION_KEY") {
+        Ok(encoded) if !encoded.is_empty() => {
+            EncryptionKey::from_base64(&encoded).unwrap_or_else(|_| {
+                EncryptionKey::new([0u8; 32]) // Fallback for dev — will fail to decrypt on restart
+            })
+        }
+        _ => {
+            tracing::warn!(
+                "SETTINGS_ENCRYPTION_KEY not set — TOTP secrets will use a zero key (DEV ONLY)"
+            );
+            EncryptionKey::new([0u8; 32])
+        }
+    };
+
+    let totp_service = Arc::new(TotpService::new(
+        credential_repo.clone(),
+        Arc::new(cache_manager.clone()),
+        totp_encryption_key,
+    ));
+
+    let recovery_code_service = Arc::new(RecoveryCodeService::new(credential_repo));
 
     // Create app state
     let state = AppState {
@@ -713,7 +799,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         audit_repo: audit_repo.clone(),
         jwt_manager: jwt_manager.clone(),
         cache_manager: cache_manager.clone(),
-        keycloak_client,
+        identity_engine,
         system_settings_service,
         email_service,
         email_template_service,
@@ -734,6 +820,10 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         scim_group_mapping_repo,
         scim_log_repo,
         saml_application_service,
+        email_verification_service,
+        required_actions_service,
+        totp_service,
+        recovery_code_service,
     };
 
     // Create rate limit state for middleware
@@ -778,8 +868,6 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
             rate_limit_config,
             cache_manager.get_connection_manager(),
             jwt_manager.clone(),
-            config.jwt_tenant_access_allowed_audiences.clone(),
-            config.is_production(),
         )
     } else {
         RateLimitState::noop()
@@ -1254,12 +1342,8 @@ where
     let security_headers_config = state.config().security_headers.clone();
 
     // Create auth middleware state with cache for token blacklist checking
-    let auth_state = AuthMiddlewareState::new(
-        HasServices::jwt_manager(&state).clone(),
-        state.config().jwt_tenant_access_allowed_audiences.clone(),
-        state.config().is_production(),
-    )
-    .with_cache(std::sync::Arc::new(state.cache().clone()));
+    let auth_state = AuthMiddlewareState::new(HasServices::jwt_manager(&state).clone())
+        .with_cache(std::sync::Arc::new(state.cache().clone()));
 
     // ============================================================
     // SCIM PROTOCOL ROUTES (Bearer Token auth, separate from JWT)

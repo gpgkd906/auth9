@@ -1,6 +1,7 @@
-import type { MetaFunction, ActionFunctionArgs } from "react-router";
-import { redirect, Form, Link, useActionData, useNavigation } from "react-router";
-import { LanguageSwitcher } from "~/components/LanguageSwitcher";
+import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { redirect, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
+import { getBrandMark } from "~/components/auth/AuthBrandPanel";
+import { AuthPageShell } from "~/components/AuthPageShell";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -10,20 +11,25 @@ import { useI18n } from "~/i18n";
 import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
 import { mapApiError } from "~/lib/error-messages";
-import { ThemeToggle } from "~/components/ThemeToggle";
-import { userApi, publicBrandingApi } from "~/services/api";
+import { userApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
+import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 
 export const meta: MetaFunction = ({ matches }) => {
   return buildMeta(resolveMetaLocale(matches), "auth.register.metaTitle");
 };
 
-export async function loader() {
+export async function loader(args?: LoaderFunctionArgs) {
+  void args?.request;
+  const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+  let branding: BrandingConfig = DEFAULT_PUBLIC_BRANDING;
+
   try {
-    const { data: branding } = await publicBrandingApi.get();
+    const { data } = await publicBrandingApi.get(clientId);
+    branding = { ...DEFAULT_PUBLIC_BRANDING, ...data };
     if (!branding.allow_registration) {
       return redirect("/login");
     }
-    return null;
+    return { branding };
   } catch {
     // If we can't fetch branding config, default to disallowing registration
     return redirect("/login");
@@ -61,25 +67,32 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function Register() {
   const { t } = useI18n();
+  const loaderData = (useLoaderData<typeof loader>() ?? {}) as { branding?: BrandingConfig };
+  const branding = { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) };
   const actionData = useActionData<{ error?: string }>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
   return (
-    <>
-      {/* Theme Toggle - outside flex container to avoid layout issues */}
-      <div className="fixed top-6 right-6 z-20 flex items-center gap-3">
-        <LanguageSwitcher />
-        <ThemeToggle />
-      </div>
-
-      <div className="min-h-screen flex items-center justify-center px-6 relative">
-        {/* Dynamic Background */}
-        <div className="page-backdrop" />
-
-        <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
+    <AuthPageShell
+      branding={branding}
+      panelEyebrow={t("auth.shared.hostedEyebrow")}
+      panelTitle={t("auth.register.panelTitle")}
+      panelDescription={t("auth.register.panelDescription")}
+    >
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
-          <div className="logo-icon mx-auto mb-4">A9</div>
+          {branding.logo_url ? (
+            <img
+              src={branding.logo_url}
+              alt={branding.company_name || "Auth9"}
+              className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+            />
+          ) : (
+            <div className="logo-icon mx-auto mb-4">{getBrandMark(branding.company_name || "Auth9")}</div>
+          )}
           <CardTitle className="text-2xl">{t("auth.register.title")}</CardTitle>
           <CardDescription>{t("auth.register.description")}</CardDescription>
         </CardHeader>
@@ -129,7 +142,6 @@ export default function Register() {
           </div>
           </CardContent>
         </Card>
-      </div>
-    </>
+    </AuthPageShell>
   );
 }

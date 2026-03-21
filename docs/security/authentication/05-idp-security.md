@@ -14,8 +14,8 @@
 ## 背景知识
 
 Auth9 支持多种登录方式：
-- **Keycloak 本地认证**: 用户名/密码
-- **社交登录 (IdP)**: Google, GitHub 等（通过 Keycloak Identity Brokering）
+- **Auth9 本地认证**: 用户名/密码（Auth9 OIDC Engine）
+- **社交登录 (IdP)**: Google, GitHub 等（通过 Auth9 Identity Brokering）
 - **账户关联**: `linked_identities` 表存储 `(user_id, provider, provider_user_id)`
 
 Auth9 也发送多种邮件通知：
@@ -56,8 +56,8 @@ Auth9 也发送多种邮件通知：
 # 确认每条记录包含 provider, provider_user_id
 
 # 模拟 GitHub 登录（使用与已有用户相同邮箱）
-# 1. 通过 Keycloak GitHub IdP broker 登录
-# 2. Keycloak 收到 GitHub 用户信息（邮箱相同）
+# 1. 通过 Auth9 GitHub IdP broker 登录
+# 2. Auth9 收到 GitHub 用户信息（邮箱相同）
 # 3. 检查 Auth9 的处理逻辑
 
 # 通过 API 尝试直接关联

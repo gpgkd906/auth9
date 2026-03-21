@@ -8,6 +8,30 @@
 
 ## 场景 1：角色层次视图
 
+> **前置条件**: 默认种子数据不包含 `parent_role_id` 层次关系。测试前必须先在数据库中建立角色继承关系。
+>
+> ```sql
+> -- 示例：在目标服务下建立角色层次（请替换为实际 service_id）
+> -- 假设已通过 API 或种子数据创建了 Admin, Editor, Viewer, Moderator 角色
+>
+> -- 查询现有角色
+> SELECT id, name, parent_role_id FROM roles WHERE service_id = '{service_id}';
+>
+> -- 设置 Editor 继承自 Admin
+> UPDATE roles SET parent_role_id = (SELECT id FROM roles WHERE name = 'Admin' AND service_id = '{service_id}')
+>   WHERE name = 'Editor' AND service_id = '{service_id}';
+>
+> -- 设置 Viewer 继承自 Editor
+> UPDATE roles SET parent_role_id = (SELECT id FROM roles WHERE name = 'Editor' AND service_id = '{service_id}')
+>   WHERE name = 'Viewer' AND service_id = '{service_id}';
+>
+> -- 设置 Moderator 继承自 Admin
+> UPDATE roles SET parent_role_id = (SELECT id FROM roles WHERE name = 'Admin' AND service_id = '{service_id}')
+>   WHERE name = 'Moderator' AND service_id = '{service_id}';
+> ```
+>
+> 也可通过「测试数据准备 SQL」章节中的脚本批量创建。
+
 ### 初始状态
 - 服务下存在以下角色结构：
   ```

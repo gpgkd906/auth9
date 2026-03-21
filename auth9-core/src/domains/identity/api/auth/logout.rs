@@ -1,6 +1,5 @@
 //! Logout endpoints.
 
-use super::helpers::build_keycloak_logout_url;
 use crate::cache::CacheOperations;
 use crate::error::{AppError, Result};
 use crate::state::{HasCache, HasServices, HasSessionManagement};
@@ -54,15 +53,11 @@ pub async fn logout_redirect<S: HasServices>(
         }
     }
 
-    let logout_url = build_keycloak_logout_url(
-        &state.config().keycloak.public_url,
-        &state.config().keycloak.realm,
-        params.id_token_hint.as_deref(),
-        params.post_logout_redirect_uri.as_deref(),
-        params.state.as_deref(),
-    )?;
-
-    Ok(Redirect::temporary(&logout_url).into_response())
+    if let Some(ref redirect_uri) = params.post_logout_redirect_uri {
+        Ok(Redirect::temporary(redirect_uri).into_response())
+    } else {
+        Ok(axum::http::StatusCode::OK.into_response())
+    }
 }
 
 #[utoipa::path(
@@ -73,14 +68,14 @@ pub async fn logout_redirect<S: HasServices>(
         (status = 302, description = "Logout and redirect")
     )
 )]
-/// POST logout - revokes session and redirects to Keycloak.
+/// POST logout - revokes session and redirects.
 /// Requires bearer token for session revocation. CSRF-protected by requiring POST.
 pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
     State(state): State<S>,
     auth: Option<TypedHeader<Authorization<Bearer>>>,
     Query(params): Query<LogoutRequest>,
 ) -> Result<Response> {
-    // Try to revoke session from token before redirecting to Keycloak
+    // Try to revoke session from token before redirecting
     if let Some(TypedHeader(Authorization(bearer))) = auth {
         // Use HasServices::jwt_manager to disambiguate (both traits have jwt_manager)
         match HasServices::jwt_manager(&state).verify_identity_token(bearer.token()) {
@@ -187,15 +182,11 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
         }
     }
 
-    let logout_url = build_keycloak_logout_url(
-        &state.config().keycloak.public_url,
-        &state.config().keycloak.realm,
-        params.id_token_hint.as_deref(),
-        params.post_logout_redirect_uri.as_deref(),
-        params.state.as_deref(),
-    )?;
-
-    Ok(Redirect::temporary(&logout_url).into_response())
+    if let Some(ref redirect_uri) = params.post_logout_redirect_uri {
+        Ok(Redirect::temporary(redirect_uri).into_response())
+    } else {
+        Ok(axum::http::StatusCode::OK.into_response())
+    }
 }
 
 #[cfg(test)]

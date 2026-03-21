@@ -1,7 +1,7 @@
 //! System settings service
 
 use crate::crypto::{decrypt, encrypt, EncryptionKey};
-use crate::domains::platform::service::KeycloakSyncService;
+use crate::domains::platform::service::IdentitySyncService;
 use crate::error::{AppError, Result};
 use crate::models::common::StringUuid;
 use crate::models::email::EmailProviderConfig;
@@ -20,7 +20,7 @@ pub struct SystemSettingsService<R: SystemSettingsRepository> {
     repo: Arc<R>,
     malicious_ip_blacklist_repo: Arc<dyn MaliciousIpBlacklistRepository>,
     encryption_key: Option<EncryptionKey>,
-    sync_service: Option<Arc<KeycloakSyncService>>,
+    sync_service: Option<Arc<IdentitySyncService>>,
 }
 
 impl<R: SystemSettingsRepository> SystemSettingsService<R> {
@@ -45,12 +45,12 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
         }
     }
 
-    /// Create a new SystemSettingsService with Keycloak sync support
+    /// Create a new SystemSettingsService with identity sync support
     pub fn with_sync_service(
         repo: Arc<R>,
         malicious_ip_blacklist_repo: Arc<dyn MaliciousIpBlacklistRepository>,
         encryption_key: Option<EncryptionKey>,
-        sync_service: Arc<KeycloakSyncService>,
+        sync_service: Arc<IdentitySyncService>,
     ) -> Self {
         Self {
             repo,
@@ -113,9 +113,9 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
 
         self.repo.upsert(&input).await?;
 
-        // Sync to Keycloak if sync service is configured
+        // Sync to identity backend if sync service is configured
         if let Some(sync_service) = &self.sync_service {
-            let smtp_config = config.to_keycloak_smtp();
+            let smtp_config = config.to_backend_smtp_config();
             sync_service.sync_email_config(smtp_config).await;
         }
 

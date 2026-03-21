@@ -81,11 +81,13 @@ impl<
                 &input.client_id,
                 &secret_hash,
                 Some("Initial Key".to_string()),
+                false,
             )
             .await?;
 
         if let Some(cache) = &self.cache_manager {
             let _ = cache.set_service_config(service.id.0, &service).await;
+            let _ = cache.add_audience(&input.client_id).await;
         }
 
         Ok(ServiceWithClient {
@@ -126,11 +128,13 @@ impl<
                 &input.client_id,
                 &secret_hash,
                 Some("Initial Key".to_string()),
+                false,
             )
             .await?;
 
         if let Some(cache) = &self.cache_manager {
             let _ = cache.set_service_config(service.id.0, &service).await;
+            let _ = cache.add_audience(&input.client_id).await;
         }
 
         Ok(ServiceWithClient {
@@ -146,19 +150,30 @@ impl<
         &self,
         service_id: Uuid,
         name: Option<String>,
+        public_client: bool,
     ) -> Result<ClientWithSecret> {
         // Verify service exists
         let _ = self.get(service_id).await?;
 
         // Generate ID and Secret
         let client_id = Uuid::new_v4().to_string();
-        let client_secret = generate_client_secret();
-        let secret_hash = hash_secret(&client_secret)?;
+        let (client_secret, secret_hash) = if public_client {
+            (String::new(), String::new())
+        } else {
+            let secret = generate_client_secret();
+            let hash = hash_secret(&secret)?;
+            (secret, hash)
+        };
 
         let client = self
             .repo
-            .create_client(service_id, &client_id, &secret_hash, name)
+            .create_client(service_id, &client_id, &secret_hash, name, public_client)
             .await?;
+
+        // Register new client_id in audience validation set
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.add_audience(&client_id).await;
+        }
 
         Ok(ClientWithSecret {
             client,
@@ -172,6 +187,7 @@ impl<
         client_id: String,
         client_secret: String,
         name: Option<String>,
+        public_client: bool,
     ) -> Result<ClientWithSecret> {
         let _ = self.get(service_id).await?;
 
@@ -188,11 +204,20 @@ impl<
             )));
         }
 
-        let secret_hash = hash_secret(&client_secret)?;
+        let secret_hash = if public_client {
+            String::new()
+        } else {
+            hash_secret(&client_secret)?
+        };
         let client = self
             .repo
-            .create_client(service_id, &client_id, &secret_hash, name)
+            .create_client(service_id, &client_id, &secret_hash, name, public_client)
             .await?;
+
+        // Register new client_id in audience validation set
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.add_audience(&client_id).await;
+        }
 
         Ok(ClientWithSecret {
             client,
@@ -290,6 +315,16 @@ impl<
         let service_id = StringUuid(id);
 
         // CASCADE DELETE:
+        // 0. Collect client_ids for audience cache cleanup before deletion
+        let client_ids_to_remove: Vec<String> = self
+            .repo
+            .list_clients(id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| c.client_id)
+            .collect();
+
         // 1. Delete all clients (API keys) for this service
         let deleted_clients = self.repo.delete_clients_by_service(id).await?;
         warn!(
@@ -353,12 +388,20 @@ impl<
         // 8. Clear cache
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_service_config(id).await;
+            // Remove deleted client_ids from audience validation set
+            for client_id in &client_ids_to_remove {
+                let _ = cache.remove_audience(client_id).await;
+            }
         }
         Ok(())
     }
 
     pub async fn delete_client(&self, service_id: Uuid, client_id: &str) -> Result<()> {
-        self.repo.delete_client(service_id, client_id).await
+        self.repo.delete_client(service_id, client_id).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.remove_audience(client_id).await;
+        }
+        Ok(())
     }
 
     /// Update a client's secret hash in the database
@@ -531,13 +574,14 @@ mod tests {
         });
 
         mock.expect_create_client()
-            .returning(move |sid, cid, _hash, name| {
+            .returning(move |sid, cid, _hash, name, public_client| {
                 Ok(crate::models::service::Client {
                     id: StringUuid(Uuid::new_v4()),
                     service_id: StringUuid(sid),
                     client_id: cid.to_string(),
                     client_secret_hash: "hashed".to_string(),
                     name,
+                    public_client,
                     created_at: chrono::Utc::now(),
                 })
             });
@@ -573,6 +617,7 @@ mod tests {
                     client_id: "existing-client".to_string(),
                     client_secret_hash: "hash".to_string(),
                     name: None,
+                    public_client: false,
                     created_at: chrono::Utc::now(),
                 }))
             });
@@ -626,13 +671,14 @@ mod tests {
         });
 
         mock.expect_create_client()
-            .returning(move |sid, cid, _hash, _| {
+            .returning(move |sid, cid, _hash, _, public_client| {
                 Ok(crate::models::service::Client {
                     id: StringUuid::new_v4(),
                     service_id: StringUuid(sid),
                     client_id: cid.to_string(),
                     client_secret_hash: "hash".to_string(),
                     name: None,
+                    public_client,
                     created_at: chrono::Utc::now(),
                 })
             });
@@ -683,13 +729,14 @@ mod tests {
         mock_repo
             .expect_create_client()
             .times(1)
-            .returning(move |sid, cid, _hash, name| {
+            .returning(move |sid, cid, _hash, name, public_client| {
                 Ok(crate::models::service::Client {
                     id: StringUuid(Uuid::new_v4()),
                     service_id: StringUuid(sid),
                     client_id: cid.to_string(),
                     client_secret_hash: "hashed_secret".to_string(),
                     name,
+                    public_client,
                     created_at: chrono::Utc::now(),
                 })
             });
@@ -697,7 +744,7 @@ mod tests {
         let service = create_test_service(mock_repo);
 
         let result = service
-            .create_client(service_id, Some("Client 1".to_string()))
+            .create_client(service_id, Some("Client 1".to_string()), false)
             .await;
 
         assert!(result.is_ok());
@@ -717,7 +764,7 @@ mod tests {
 
         let service = create_test_service(mock);
 
-        let result = service.create_client(service_id, None).await;
+        let result = service.create_client(service_id, None, false).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 
@@ -740,13 +787,14 @@ mod tests {
             .with(eq("custom-client-id"))
             .returning(|_| Ok(None));
 
-        mock.expect_create_client().returning(|sid, cid, _, name| {
+        mock.expect_create_client().returning(|sid, cid, _, name, public_client| {
             Ok(crate::models::service::Client {
                 id: StringUuid::new_v4(),
                 service_id: StringUuid(sid),
                 client_id: cid.to_string(),
                 client_secret_hash: "hash".to_string(),
                 name,
+                public_client,
                 created_at: chrono::Utc::now(),
             })
         });
@@ -759,6 +807,7 @@ mod tests {
                 "custom-client-id".to_string(),
                 "custom-secret".to_string(),
                 Some("Custom Client".to_string()),
+                false,
             )
             .await;
 
@@ -788,6 +837,7 @@ mod tests {
                     client_id: "existing-id".to_string(),
                     client_secret_hash: "hash".to_string(),
                     name: None,
+                    public_client: false,
                     created_at: chrono::Utc::now(),
                 }))
             });
@@ -800,6 +850,7 @@ mod tests {
                 "existing-id".to_string(),
                 "secret".to_string(),
                 None,
+                false,
             )
             .await;
 
@@ -955,6 +1006,7 @@ mod tests {
                     client_id: "client-1".to_string(),
                     client_secret_hash: "hash".to_string(),
                     name: Some("Client 1".to_string()),
+                    public_client: false,
                     created_at: chrono::Utc::now(),
                 }])
             });
@@ -1051,6 +1103,7 @@ mod tests {
                     client_id: client_id.to_string(),
                     client_secret_hash: "old_hash".to_string(),
                     name: None,
+                    public_client: false,
                     created_at: chrono::Utc::now(),
                 }))
             });
@@ -1103,6 +1156,8 @@ mod tests {
                     ..Default::default()
                 }))
             });
+
+        service_repo.expect_list_clients().returning(|_| Ok(vec![]));
 
         service_repo
             .expect_delete_clients_by_service()
@@ -1179,6 +1234,7 @@ mod tests {
                     client_id: "valid-client".to_string(),
                     client_secret_hash: secret_hash.clone(),
                     name: None,
+                    public_client: false,
                     created_at: chrono::Utc::now(),
                 }))
             });
@@ -1227,6 +1283,7 @@ mod tests {
                     client_id: "my-client".to_string(),
                     client_secret_hash: secret_hash.clone(),
                     name: None,
+                    public_client: false,
                     created_at: chrono::Utc::now(),
                 }))
             });
@@ -1251,6 +1308,7 @@ mod tests {
                 client_id: "client".to_string(),
                 client_secret_hash: secret_hash.clone(),
                 name: None,
+                public_client: false,
                 created_at: chrono::Utc::now(),
             }))
         });

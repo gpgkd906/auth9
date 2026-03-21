@@ -1,10 +1,10 @@
 //! Identity Provider service
 //!
 //! Manages social login and enterprise SSO identity providers.
-//! IdP configuration is stored in Keycloak, Auth9 provides the management UI.
+//! Auth9 owns linked_identities as primary data — no external federated identity API calls.
 
 use crate::error::{AppError, Result};
-use crate::keycloak::{KeycloakClient, KeycloakIdentityProvider};
+use crate::identity_engine::{FederationBroker, IdentityProviderRepresentation};
 use crate::models::common::StringUuid;
 use crate::models::identity_provider::{
     CreateIdentityProviderInput, IdentityProvider, IdentityProviderTemplate,
@@ -13,43 +13,37 @@ use crate::models::identity_provider::{
 use crate::models::linked_identity::{
     CreateLinkedIdentityInput, LinkedIdentity, LinkedIdentityInfo,
 };
-use crate::repository::{LinkedIdentityRepository, UserRepository};
+use crate::repository::LinkedIdentityRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 use validator::Validate;
 
-pub struct IdentityProviderService<L: LinkedIdentityRepository, U: UserRepository> {
+pub struct IdentityProviderService<L: LinkedIdentityRepository> {
     linked_identity_repo: Arc<L>,
-    user_repo: Arc<U>,
-    keycloak: Arc<KeycloakClient>,
+    federation_broker: Arc<dyn FederationBroker>,
 }
 
-impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, U> {
-    pub fn new(
-        linked_identity_repo: Arc<L>,
-        user_repo: Arc<U>,
-        keycloak: Arc<KeycloakClient>,
-    ) -> Self {
+impl<L: LinkedIdentityRepository> IdentityProviderService<L> {
+    pub fn new(linked_identity_repo: Arc<L>, federation_broker: Arc<dyn FederationBroker>) -> Self {
         Self {
             linked_identity_repo,
-            user_repo,
-            keycloak,
+            federation_broker,
         }
     }
 
     // ========================================================================
-    // Identity Provider Management (via Keycloak)
+    // Identity Provider Management (via identity engine adapter)
     // ========================================================================
 
     /// List all identity providers
     pub async fn list_providers(&self) -> Result<Vec<IdentityProvider>> {
-        let kc_providers = self.keycloak.list_identity_providers().await?;
+        let kc_providers = self.federation_broker.list_identity_providers().await?;
         Ok(kc_providers.into_iter().map(Into::into).collect())
     }
 
     /// Get an identity provider by alias
     pub async fn get_provider(&self, alias: &str) -> Result<IdentityProvider> {
-        let kc_provider = self.keycloak.get_identity_provider(alias).await?;
+        let kc_provider = self.federation_broker.get_identity_provider(alias).await?;
         Ok(kc_provider.into())
     }
 
@@ -71,7 +65,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             }
         }
 
-        let kc_provider = KeycloakIdentityProvider {
+        let provider = IdentityProviderRepresentation {
             alias: input.alias.clone(),
             display_name: input.display_name,
             provider_id: input.provider_id,
@@ -79,12 +73,15 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             trust_email: input.trust_email,
             store_token: input.store_token,
             link_only: input.link_only,
+            first_login_policy: input.first_login_policy,
             first_broker_login_flow_alias: None,
             config: input.config,
             extra: HashMap::new(),
         };
 
-        self.keycloak.create_identity_provider(&kc_provider).await?;
+        self.federation_broker
+            .create_identity_provider(&provider)
+            .await?;
 
         // Fetch the created provider
         self.get_provider(&input.alias).await
@@ -99,10 +96,10 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
         input.validate()?;
 
         // Get existing provider
-        let existing = self.keycloak.get_identity_provider(alias).await?;
+        let existing = self.federation_broker.get_identity_provider(alias).await?;
 
-        // Merge updates (preserve extra Keycloak fields like internalId for round-trip)
-        let updated = KeycloakIdentityProvider {
+        // Merge updates (preserve extra fields like internalId for round-trip)
+        let updated = IdentityProviderRepresentation {
             alias: existing.alias,
             display_name: input.display_name.or(existing.display_name),
             provider_id: existing.provider_id,
@@ -110,12 +107,15 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             trust_email: input.trust_email.unwrap_or(existing.trust_email),
             store_token: input.store_token.unwrap_or(existing.store_token),
             link_only: input.link_only.unwrap_or(existing.link_only),
+            first_login_policy: input
+                .first_login_policy
+                .unwrap_or(existing.first_login_policy),
             first_broker_login_flow_alias: existing.first_broker_login_flow_alias,
             config: input.config.unwrap_or(existing.config),
             extra: existing.extra,
         };
 
-        self.keycloak
+        self.federation_broker
             .update_identity_provider(alias, &updated)
             .await?;
 
@@ -125,7 +125,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
 
     /// Delete an identity provider
     pub async fn delete_provider(&self, alias: &str) -> Result<()> {
-        self.keycloak.delete_identity_provider(alias).await
+        self.federation_broker.delete_identity_provider(alias).await
     }
 
     /// Get available provider templates
@@ -166,70 +166,37 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             ));
         }
 
-        // Get the user to get their Keycloak ID
-        let user = self
-            .user_repo
-            .find_by_id(user_id)
-            .await?
-            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
-
-        // Remove from Keycloak
-        self.keycloak
-            .remove_user_federated_identity(&user.keycloak_id, &identity.provider_alias)
-            .await?;
-
-        // Remove from our database
+        // Remove from our database (Auth9 is sole owner of linked_identities)
         self.linked_identity_repo.delete(identity_id).await
     }
 
-    /// Sync federated identities from Keycloak to our database
-    ///
-    /// Called after user login to keep our linked_identities table in sync
-    pub async fn sync_user_identities(
+    /// Create a linked identity directly
+    pub async fn create_linked_identity(
         &self,
-        user_id: StringUuid,
-        keycloak_user_id: &str,
-    ) -> Result<()> {
-        // Get current identities from Keycloak
-        let kc_identities = self
-            .keycloak
-            .get_user_federated_identities(keycloak_user_id)
-            .await?;
+        input: &CreateLinkedIdentityInput,
+    ) -> Result<LinkedIdentity> {
+        self.linked_identity_repo.create(input).await
+    }
 
-        // Get current identities from our database
-        let db_identities = self.linked_identity_repo.list_by_user(user_id).await?;
-
-        // Build a set of existing identities for quick lookup
-        let existing: HashMap<String, LinkedIdentity> = db_identities
-            .into_iter()
-            .map(|i| (format!("{}:{}", i.provider_alias, i.external_user_id), i))
-            .collect();
-
-        // Add any new identities from Keycloak
-        for kc_identity in kc_identities {
-            let key = format!("{}:{}", kc_identity.identity_provider, kc_identity.user_id);
-            if !existing.contains_key(&key) {
-                let input = CreateLinkedIdentityInput {
-                    user_id,
-                    provider_type: kc_identity.identity_provider.clone(),
-                    provider_alias: kc_identity.identity_provider,
-                    external_user_id: kc_identity.user_id,
-                    external_email: kc_identity.user_name,
-                };
-                let _ = self.linked_identity_repo.create(&input).await;
-            }
-        }
-
-        Ok(())
+    /// Find a linked identity by provider alias and external user ID
+    pub async fn find_linked_identity(
+        &self,
+        provider_alias: &str,
+        external_user_id: &str,
+    ) -> Result<Option<LinkedIdentity>> {
+        self.linked_identity_repo
+            .find_by_provider(provider_alias, external_user_id)
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity_engine::adapters::auth9_oidc::Auth9OidcFederationBrokerAdapter;
     use crate::repository::linked_identity::MockLinkedIdentityRepository;
-    use crate::repository::user::MockUserRepository;
     use mockall::predicate::*;
+    use std::sync::Arc;
 
     #[test]
     fn test_provider_templates() {
@@ -276,7 +243,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_identities_empty() {
         let mut linked_mock = MockLinkedIdentityRepository::new();
-        let user_mock = MockUserRepository::new();
         let user_id = StringUuid::new_v4();
 
         linked_mock
@@ -284,12 +250,8 @@ mod tests {
             .with(eq(user_id))
             .returning(|_| Ok(vec![]));
 
-        let keycloak = create_test_keycloak_client();
-        let service = IdentityProviderService::new(
-            Arc::new(linked_mock),
-            Arc::new(user_mock),
-            Arc::new(keycloak),
-        );
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let identities = service.get_user_identities(user_id).await.unwrap();
         assert!(identities.is_empty());
@@ -298,7 +260,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_identities_multiple() {
         let mut linked_mock = MockLinkedIdentityRepository::new();
-        let user_mock = MockUserRepository::new();
         let user_id = StringUuid::new_v4();
 
         linked_mock
@@ -321,12 +282,8 @@ mod tests {
                 ])
             });
 
-        let keycloak = create_test_keycloak_client();
-        let service = IdentityProviderService::new(
-            Arc::new(linked_mock),
-            Arc::new(user_mock),
-            Arc::new(keycloak),
-        );
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let identities = service.get_user_identities(user_id).await.unwrap();
         assert_eq!(identities.len(), 2);
@@ -337,7 +294,6 @@ mod tests {
     #[tokio::test]
     async fn test_unlink_identity_not_found() {
         let mut linked_mock = MockLinkedIdentityRepository::new();
-        let user_mock = MockUserRepository::new();
         let user_id = StringUuid::new_v4();
         let identity_id = StringUuid::new_v4();
 
@@ -346,12 +302,8 @@ mod tests {
             .with(eq(identity_id))
             .returning(|_| Ok(None));
 
-        let keycloak = create_test_keycloak_client();
-        let service = IdentityProviderService::new(
-            Arc::new(linked_mock),
-            Arc::new(user_mock),
-            Arc::new(keycloak),
-        );
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.unlink_identity(user_id, identity_id).await;
         assert!(result.is_err());
@@ -361,7 +313,6 @@ mod tests {
     #[tokio::test]
     async fn test_unlink_identity_wrong_user() {
         let mut linked_mock = MockLinkedIdentityRepository::new();
-        let user_mock = MockUserRepository::new();
         let user_id = StringUuid::new_v4();
         let other_user_id = StringUuid::new_v4();
         let identity_id = StringUuid::new_v4();
@@ -379,12 +330,8 @@ mod tests {
                 }))
             });
 
-        let keycloak = create_test_keycloak_client();
-        let service = IdentityProviderService::new(
-            Arc::new(linked_mock),
-            Arc::new(user_mock),
-            Arc::new(keycloak),
-        );
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.unlink_identity(user_id, identity_id).await;
         assert!(result.is_err());
@@ -392,9 +339,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unlink_identity_user_not_found() {
+    async fn test_unlink_identity_success() {
         let mut linked_mock = MockLinkedIdentityRepository::new();
-        let mut user_mock = MockUserRepository::new();
         let user_id = StringUuid::new_v4();
         let identity_id = StringUuid::new_v4();
 
@@ -411,34 +357,24 @@ mod tests {
                 }))
             });
 
-        user_mock
-            .expect_find_by_id()
-            .with(eq(user_id))
-            .returning(|_| Ok(None));
+        linked_mock
+            .expect_delete()
+            .with(eq(identity_id))
+            .returning(|_| Ok(()));
 
-        let keycloak = create_test_keycloak_client();
-        let service = IdentityProviderService::new(
-            Arc::new(linked_mock),
-            Arc::new(user_mock),
-            Arc::new(keycloak),
-        );
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.unlink_identity(user_id, identity_id).await;
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_get_templates() {
         let linked_mock = MockLinkedIdentityRepository::new();
-        let user_mock = MockUserRepository::new();
 
-        let keycloak = create_test_keycloak_client();
-        let service = IdentityProviderService::new(
-            Arc::new(linked_mock),
-            Arc::new(user_mock),
-            Arc::new(keycloak),
-        );
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let templates = service.get_templates();
         assert!(!templates.is_empty());
@@ -468,19 +404,90 @@ mod tests {
         assert_eq!(info.external_email, Some("user@gmail.com".to_string()));
     }
 
-    // Helper to create a test KeycloakClient
-    fn create_test_keycloak_client() -> KeycloakClient {
-        use crate::config::KeycloakConfig;
-        KeycloakClient::new(KeycloakConfig {
-            url: "http://localhost:8081".to_string(),
-            public_url: "http://localhost:8081".to_string(),
-            realm: "auth9".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "".to_string(),
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        })
+    #[tokio::test]
+    async fn test_create_linked_identity_success() {
+        let mut linked_mock = MockLinkedIdentityRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        linked_mock.expect_create().returning(|input| {
+            Ok(LinkedIdentity {
+                id: StringUuid::new_v4(),
+                user_id: input.user_id,
+                provider_type: input.provider_type.clone(),
+                provider_alias: input.provider_alias.clone(),
+                external_user_id: input.external_user_id.clone(),
+                external_email: input.external_email.clone(),
+                linked_at: chrono::Utc::now(),
+            })
+        });
+
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
+
+        let input = CreateLinkedIdentityInput {
+            user_id,
+            provider_type: "google".to_string(),
+            provider_alias: "google".to_string(),
+            external_user_id: "google-ext-123".to_string(),
+            external_email: Some("user@gmail.com".to_string()),
+        };
+        let result = service.create_linked_identity(&input).await;
+        assert!(result.is_ok());
+        let linked = result.unwrap();
+        assert_eq!(linked.user_id, user_id);
+        assert_eq!(linked.provider_type, "google");
+        assert_eq!(linked.external_user_id, "google-ext-123");
+    }
+
+    #[tokio::test]
+    async fn test_find_linked_identity_existing() {
+        let mut linked_mock = MockLinkedIdentityRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        linked_mock
+            .expect_find_by_provider()
+            .with(eq("github"), eq("gh-456"))
+            .returning(move |alias, ext_id| {
+                Ok(Some(LinkedIdentity {
+                    user_id,
+                    provider_alias: alias.to_string(),
+                    external_user_id: ext_id.to_string(),
+                    provider_type: "github".to_string(),
+                    ..Default::default()
+                }))
+            });
+
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
+
+        let result = service.find_linked_identity("github", "gh-456").await;
+        assert!(result.is_ok());
+        let found = result.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().external_user_id, "gh-456");
+    }
+
+    #[tokio::test]
+    async fn test_find_linked_identity_not_found() {
+        let mut linked_mock = MockLinkedIdentityRepository::new();
+
+        linked_mock
+            .expect_find_by_provider()
+            .with(eq("github"), eq("nonexistent"))
+            .returning(|_, _| Ok(None));
+
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
+
+        let result = service.find_linked_identity("github", "nonexistent").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    fn create_test_federation_broker() -> Arc<dyn FederationBroker> {
+        use crate::repository::social_provider::MockSocialProviderRepository;
+        let social_repo: Arc<dyn crate::repository::SocialProviderRepository> =
+            Arc::new(MockSocialProviderRepository::new());
+        Arc::new(Auth9OidcFederationBrokerAdapter::new(social_repo))
     }
 }

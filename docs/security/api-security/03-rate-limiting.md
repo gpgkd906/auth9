@@ -187,6 +187,15 @@ echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
 
 > 使用错误的 token 类型会导致 403 权限错误（而非限流测试目标的 429）。
 
+> **注意**: tenant token exchange 端点 (`POST /api/v1/auth/tenant-token`) 要求请求体同时包含 `tenant_id` 和 `service_id` 字段：
+> ```json
+> {"tenant_id": "...", "service_id": "auth9-portal"}
+> ```
+> 或者直接使用 `gen_tenant_access_token.js` 跳过手动 exchange 步骤：
+> ```bash
+> TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js)
+> ```
+
 ```bash
 # 复杂搜索（需 Tenant Access Token）
 curl -H "Authorization: Bearer $TOKEN" \

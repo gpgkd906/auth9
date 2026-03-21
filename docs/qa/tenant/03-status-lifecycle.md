@@ -194,6 +194,29 @@ SELECT status FROM tenants WHERE id = '{tenant_id}';
 - 所有写操作应被阻止，返回 HTTP 403 错误
 - 错误信息包含「Tenant is not active (status: 'suspended'). Write operations are not allowed on non-active tenants.」
 
+> **故障排除：收到 422 而非 403**
+>
+> 租户状态检查（`require_active()`）在 handler 内部、请求体反序列化**之后**执行。如果请求体格式不正确，axum 会在 handler 代码执行前返回 422 验证错误，根本不会触发租户状态检查。
+>
+> **Invitation 端点** (`POST /api/v1/tenants/{id}/invitations`) 要求 `email` 和 `role_ids`（UUID 数组），不是 `role`（字符串）：
+> ```json
+> {
+>   "email": "invite@example.com",
+>   "role_ids": ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+> }
+> ```
+>
+> **Webhook 端点** (`POST /api/v1/tenants/{id}/webhooks`) 要求 `name`、`url` 和 `events`（字符串数组）：
+> ```json
+> {
+>   "name": "My Webhook",
+>   "url": "https://example.com/hook",
+>   "events": ["user.created", "user.updated"]
+> }
+> ```
+>
+> 使用错误的 payload 格式（如 `{ "email": "...", "role": "admin" }`）会导致 422，这不是 bug，而是请求体不符合 API schema。
+
 ---
 
 ## 测试数据准备 SQL

@@ -1,6 +1,7 @@
-import type { ActionFunctionArgs, MetaFunction } from "react-router";
-import { Form, useActionData, useNavigation, Link } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-router";
 import { useState } from "react";
+import { getBrandMark } from "~/components/auth/AuthBrandPanel";
 import { AuthPageShell } from "~/components/AuthPageShell";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -10,11 +11,24 @@ import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { useI18n } from "~/i18n";
 import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
-import { passwordApi } from "~/services/api";
+import { passwordApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
+import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 
 export const meta: MetaFunction = ({ matches }) => {
   return buildMeta(resolveMetaLocale(matches), "auth.forgotPassword.metaTitle");
 };
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+
+  try {
+    const { data } = await publicBrandingApi.get(clientId);
+    return { branding: { ...DEFAULT_PUBLIC_BRANDING, ...data } };
+  } catch {
+    void request;
+    return { branding: DEFAULT_PUBLIC_BRANDING };
+  }
+}
 
 export async function action({ request }: ActionFunctionArgs) {
   const locale = await resolveLocale(request);
@@ -36,6 +50,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function ForgotPasswordPage() {
   const { t } = useI18n();
+  const loaderData = (useLoaderData<typeof loader>() ?? {}) as { branding?: BrandingConfig };
+  const branding = { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [email, setEmail] = useState("");
@@ -44,10 +60,25 @@ export default function ForgotPasswordPage() {
 
   if (actionData?.success) {
     return (
-      <AuthPageShell>
-        <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <AuthPageShell
+        branding={branding}
+        panelEyebrow={t("auth.shared.hostedEyebrow")}
+        panelTitle={t("auth.forgotPassword.panelTitle")}
+        panelDescription={t("auth.forgotPassword.panelDescription")}
+      >
+        <Card className="w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
-            <div className="logo-icon mx-auto mb-4">A9</div>
+            {branding.logo_url ? (
+              <img
+                src={branding.logo_url}
+                alt={branding.company_name || "Auth9"}
+                className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+              />
+            ) : (
+              <div className="logo-icon mx-auto mb-4">{getBrandMark(branding.company_name || "Auth9")}</div>
+            )}
             <CardTitle className="text-2xl">{t("auth.forgotPassword.successTitle")}</CardTitle>
             <CardDescription className="auth-form-description">
               {t("auth.forgotPassword.successDescription", { email })}
@@ -73,10 +104,25 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <AuthPageShell>
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+    <AuthPageShell
+      branding={branding}
+      panelEyebrow={t("auth.shared.hostedEyebrow")}
+      panelTitle={t("auth.forgotPassword.panelTitle")}
+      panelDescription={t("auth.forgotPassword.panelDescription")}
+    >
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
-          <div className="logo-icon mx-auto mb-4">A9</div>
+          {branding.logo_url ? (
+            <img
+              src={branding.logo_url}
+              alt={branding.company_name || "Auth9"}
+              className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+            />
+          ) : (
+            <div className="logo-icon mx-auto mb-4">{getBrandMark(branding.company_name || "Auth9")}</div>
+          )}
           <CardTitle className="text-2xl">{t("auth.forgotPassword.title")}</CardTitle>
           <CardDescription className="auth-form-description">{t("auth.forgotPassword.description")}</CardDescription>
         </CardHeader>

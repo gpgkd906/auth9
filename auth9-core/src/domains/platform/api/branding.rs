@@ -20,7 +20,7 @@ use axum::{
 
 /// Get branding configuration (public endpoint, no authentication required)
 ///
-/// This endpoint is intended for use by Keycloak themes to fetch branding settings.
+/// This endpoint is intended for use by hosted login pages to fetch branding settings.
 /// Accepts optional `client_id` query parameter to return service-specific branding.
 /// Falls back to system default if no service-level branding is configured.
 ///

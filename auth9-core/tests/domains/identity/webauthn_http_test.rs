@@ -4,8 +4,7 @@
 
 use crate::support::create_test_user;
 use crate::support::http::{
-    delete_json, delete_json_with_auth, get_json, get_json_with_auth, MockKeycloakServer,
-    TestAppState,
+    delete_json, delete_json_with_auth, get_json, get_json_with_auth, TestAppState,
 };
 use auth9_core::http_support::{MessageResponse, SuccessResponse};
 use auth9_core::models::webauthn::WebAuthnCredential;
@@ -17,15 +16,7 @@ use axum::http::StatusCode;
 
 #[tokio::test]
 async fn test_list_passkeys_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    // Mock the credentials endpoint for migration-period Keycloak listing
-    mock_kc
-        .mock_list_user_credentials_any(vec![
-            ("cred-1", "webauthn"),
-            ("cred-2", "webauthn-passwordless"),
-        ])
-        .await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let user = create_test_user(None);
@@ -46,16 +37,13 @@ async fn test_list_passkeys_success() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let credentials = body.unwrap().data;
-    // Keycloak credentials should be prefixed with kc_
-    assert_eq!(credentials.len(), 2);
-    assert!(credentials[0].id.starts_with("kc_"));
+    // NoOp credential store returns empty vec
+    assert_eq!(credentials.len(), 0);
 }
 
 #[tokio::test]
 async fn test_list_passkeys_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_list_user_credentials_any(vec![]).await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -79,8 +67,7 @@ async fn test_list_passkeys_empty() {
 
 #[tokio::test]
 async fn test_list_passkeys_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_passkey_test_router(state);
 
@@ -92,8 +79,7 @@ async fn test_list_passkeys_unauthorized() {
 
 #[tokio::test]
 async fn test_list_passkeys_invalid_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_passkey_test_router(state);
 
@@ -109,9 +95,7 @@ async fn test_list_passkeys_invalid_token() {
 
 #[tokio::test]
 async fn test_delete_passkey_keycloak_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_delete_user_credential_success().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -135,8 +119,7 @@ async fn test_delete_passkey_keycloak_success() {
 
 #[tokio::test]
 async fn test_delete_passkey_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_passkey_test_router(state);
 
@@ -148,8 +131,7 @@ async fn test_delete_passkey_unauthorized() {
 
 #[tokio::test]
 async fn test_delete_passkey_invalid_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_passkey_test_router(state);
 

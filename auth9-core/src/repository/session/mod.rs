@@ -16,7 +16,10 @@ mod tests;
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, input: &CreateSessionInput) -> Result<Session>;
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Session>>;
-    async fn find_by_keycloak_session(&self, keycloak_session_id: &str) -> Result<Option<Session>>;
+    async fn find_by_provider_session_id(
+        &self,
+        provider_session_id: &str,
+    ) -> Result<Option<Session>>;
     async fn list_by_user(&self, user_id: StringUuid) -> Result<Vec<Session>>;
     async fn list_active_by_user(&self, user_id: StringUuid) -> Result<Vec<Session>>;
     async fn update_last_active(&self, id: StringUuid) -> Result<()>;

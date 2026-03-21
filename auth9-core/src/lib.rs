@@ -1,7 +1,7 @@
 //! Auth9 Core - Identity Service Backend
 //!
 //! This crate provides the core functionality for the Auth9 identity service,
-//! including REST API, gRPC services, and integration with Keycloak.
+//! including REST API, gRPC services, and identity engine integration.
 
 pub mod cache;
 pub mod config;
@@ -11,8 +11,8 @@ pub mod email;
 pub mod error;
 pub mod grpc;
 pub mod http_support;
+pub mod identity_engine;
 pub mod jwt;
-pub mod keycloak;
 pub mod middleware;
 pub mod migration;
 pub mod models;

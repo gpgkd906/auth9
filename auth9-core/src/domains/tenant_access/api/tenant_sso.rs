@@ -2,7 +2,6 @@
 
 use crate::error::{AppError, Result};
 use crate::http_support::{write_audit_log_generic, MessageResponse, SuccessResponse};
-use crate::keycloak::KeycloakIdentityProvider;
 use crate::middleware::auth::AuthUser;
 use crate::models::common::StringUuid;
 use crate::models::enterprise_sso::{
@@ -75,24 +74,9 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
         .get(StringUuid::from(tenant_id))
         .await?;
     let alias = input.alias.trim().to_lowercase();
-    let keycloak_alias = format!("{}--{}", tenant.slug, alias);
+    let provider_alias = format!("{}--{}", tenant.slug, alias);
 
-    let keycloak_provider = KeycloakIdentityProvider {
-        alias: keycloak_alias.clone(),
-        display_name: input.display_name.clone(),
-        provider_id: provider_type.clone(),
-        enabled: input.enabled,
-        trust_email: false,
-        store_token: false,
-        link_only: false,
-        first_broker_login_flow_alias: None,
-        config: config.clone(),
-        extra: HashMap::new(),
-    };
-    state
-        .keycloak_client()
-        .create_identity_provider(&keycloak_provider)
-        .await?;
+    // Both OIDC and SAML connectors are handled natively by Auth9
 
     let connector_id = StringUuid::new_v4();
     let insert_result = insert_connector(
@@ -104,19 +88,13 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
         &provider_type,
         input.enabled,
         input.priority,
-        &keycloak_alias,
+        &provider_alias,
         &config,
         &domains,
     )
     .await;
 
-    if let Err(e) = insert_result {
-        let _ = state
-            .keycloak_client()
-            .delete_identity_provider(&keycloak_alias)
-            .await;
-        return Err(e);
-    }
+    insert_result?;
 
     let created = get_connector_by_id(state.db_pool(), tenant_id, connector_id).await?;
     let _ = write_audit_log_generic(
@@ -171,22 +149,7 @@ pub async fn update_connector<S: HasServices + HasDbPool>(
     let priority = input.priority.unwrap_or(before.priority);
     let display_name = input.display_name.or(before.display_name.clone());
 
-    let keycloak_provider = KeycloakIdentityProvider {
-        alias: before.keycloak_alias.clone(),
-        display_name: display_name.clone(),
-        provider_id: before.provider_type.clone(),
-        enabled,
-        trust_email: false,
-        store_token: false,
-        link_only: false,
-        first_broker_login_flow_alias: None,
-        config: config.clone(),
-        extra: HashMap::new(),
-    };
-    state
-        .keycloak_client()
-        .update_identity_provider(&before.keycloak_alias, &keycloak_provider)
-        .await?;
+    // Both OIDC and SAML connectors are handled natively by Auth9
 
     let mut tx = state.db_pool().begin().await?;
     sqlx::query(
@@ -263,10 +226,7 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
     let before =
         get_connector_by_id(state.db_pool(), tenant_id, StringUuid::from(connector_id)).await?;
 
-    state
-        .keycloak_client()
-        .delete_identity_provider(&before.keycloak_alias)
-        .await?;
+    // Both OIDC and SAML connectors are handled natively by Auth9
 
     let mut tx = state.db_pool().begin().await?;
     sqlx::query("DELETE FROM scim_group_role_mappings WHERE connector_id = ?")
@@ -322,19 +282,132 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
     let connector =
         get_connector_by_id(state.db_pool(), tenant_id, StringUuid::from(connector_id)).await?;
 
-    let result = match state
-        .keycloak_client()
-        .get_identity_provider(&connector.keycloak_alias)
-        .await
-    {
-        Ok(_) => ConnectorTestResult {
-            ok: true,
-            message: "Connector is available in Keycloak.".to_string(),
-        },
-        Err(err) => ConnectorTestResult {
-            ok: false,
-            message: format!("Connector check failed: {}", err),
-        },
+    let result = if connector.provider_type == "oidc" {
+        // OIDC: test actual endpoint reachability
+        let auth_url = connector
+            .config
+            .get("authorizationUrl")
+            .cloned()
+            .unwrap_or_default();
+        if auth_url.is_empty() {
+            ConnectorTestResult {
+                ok: false,
+                message: "Missing authorizationUrl in connector config.".to_string(),
+            }
+        } else {
+            match reqwest::Client::new()
+                .get(&auth_url)
+                .timeout(std::time::Duration::from_secs(10))
+                .send()
+                .await
+            {
+                Ok(resp)
+                    if resp.status().is_success()
+                        || resp.status().is_redirection()
+                        || resp.status().as_u16() == 400 =>
+                {
+                    // 400 is expected when hitting an OIDC authorize endpoint without params
+                    ConnectorTestResult {
+                        ok: true,
+                        message: "OIDC authorization endpoint is reachable.".to_string(),
+                    }
+                }
+                Ok(resp) => ConnectorTestResult {
+                    ok: false,
+                    message: format!(
+                        "OIDC authorization endpoint returned unexpected status: {}",
+                        resp.status()
+                    ),
+                },
+                Err(err) => ConnectorTestResult {
+                    ok: false,
+                    message: format!("OIDC authorization endpoint unreachable: {}", err),
+                },
+            }
+        }
+    } else {
+        // SAML: validate certificate and SSO URL
+        let cert = connector
+            .config
+            .get("signingCertificate")
+            .cloned()
+            .unwrap_or_default();
+        let sso_url = connector
+            .config
+            .get("singleSignOnServiceUrl")
+            .cloned()
+            .unwrap_or_default();
+
+        if cert.is_empty() {
+            ConnectorTestResult {
+                ok: false,
+                message: "Missing signingCertificate in connector config.".to_string(),
+            }
+        } else if sso_url.is_empty() {
+            ConnectorTestResult {
+                ok: false,
+                message: "Missing singleSignOnServiceUrl in connector config.".to_string(),
+            }
+        } else {
+            // Validate certificate format
+            let cert_valid = {
+                use base64::{engine::general_purpose::STANDARD, Engine};
+                let cert_bytes = if cert.contains("-----BEGIN") {
+                    let pem_data: String = cert
+                        .lines()
+                        .filter(|l| !l.starts_with("-----"))
+                        .collect::<Vec<_>>()
+                        .join("");
+                    STANDARD.decode(&pem_data).ok()
+                } else {
+                    let cleaned: String = cert.chars().filter(|c| !c.is_whitespace()).collect();
+                    STANDARD.decode(&cleaned).ok()
+                };
+                match cert_bytes {
+                    Some(der) => x509_parser::parse_x509_certificate(&der).is_ok(),
+                    None => false,
+                }
+            };
+
+            if !cert_valid {
+                ConnectorTestResult {
+                    ok: false,
+                    message: "signingCertificate is not a valid X.509 certificate.".to_string(),
+                }
+            } else {
+                // Test SSO URL reachability
+                match reqwest::Client::new()
+                    .get(&sso_url)
+                    .timeout(std::time::Duration::from_secs(10))
+                    .send()
+                    .await
+                {
+                    Ok(resp)
+                        if resp.status().is_success()
+                            || resp.status().is_redirection()
+                            || resp.status().as_u16() == 400
+                            || resp.status().as_u16() == 405 =>
+                    {
+                        ConnectorTestResult {
+                            ok: true,
+                            message: "SAML SSO endpoint is reachable and certificate is valid."
+                                .to_string(),
+                        }
+                    }
+                    Ok(resp) => ConnectorTestResult {
+                        ok: false,
+                        message: format!(
+                            "SAML SSO endpoint returned unexpected status: {}",
+                            resp.status()
+                        ),
+                    },
+                    Err(err) => ConnectorTestResult {
+                        ok: false,
+                        message: format!("SAML SSO endpoint unreachable: {}", err),
+                    },
+                }
+            }
+        }
     };
 
     let _ = write_audit_log_generic(
@@ -358,7 +431,7 @@ pub async fn list_connectors_by_tenant(
     let connector_rows = sqlx::query(
         r#"
         SELECT id, tenant_id, alias, display_name, provider_type, enabled, priority,
-               keycloak_alias, config, created_at, updated_at
+               provider_alias, config, created_at, updated_at
         FROM enterprise_sso_connectors
         WHERE tenant_id = ?
         ORDER BY priority ASC, created_at ASC
@@ -403,7 +476,7 @@ pub async fn list_connectors_by_tenant(
             provider_type: row.try_get("provider_type")?,
             enabled: row.try_get("enabled")?,
             priority: row.try_get("priority")?,
-            keycloak_alias: row.try_get("keycloak_alias")?,
+            provider_alias: row.try_get("provider_alias")?,
             config,
             domains: domains_by_connector.remove(&id).unwrap_or_default(),
             created_at: row.try_get("created_at")?,
@@ -436,7 +509,7 @@ async fn insert_connector(
     provider_type: &str,
     enabled: bool,
     priority: i32,
-    keycloak_alias: &str,
+    provider_alias: &str,
     config: &HashMap<String, String>,
     domains: &[String],
 ) -> Result<()> {
@@ -444,7 +517,7 @@ async fn insert_connector(
     sqlx::query(
         r#"
         INSERT INTO enterprise_sso_connectors
-            (id, tenant_id, alias, display_name, provider_type, enabled, priority, keycloak_alias, config, created_at, updated_at)
+            (id, tenant_id, alias, display_name, provider_type, enabled, priority, provider_alias, config, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         "#,
     )
@@ -455,7 +528,7 @@ async fn insert_connector(
     .bind(provider_type)
     .bind(enabled)
     .bind(priority)
-    .bind(keycloak_alias)
+    .bind(provider_alias)
     .bind(serde_json::to_string(config).map_err(|e| AppError::Internal(e.into()))?)
     .execute(tx.as_mut())
     .await
@@ -527,7 +600,7 @@ fn normalize_config(
                 .or_insert(cert);
         }
     }
-    // Trim all config values to prevent Keycloak "Empty Space not allowed" errors
+    // Trim all config values to prevent empty space errors
     for value in config.values_mut() {
         let trimmed = value.trim().to_string();
         *value = trimmed;
@@ -538,7 +611,13 @@ fn normalize_config(
 fn validate_required_config(provider_type: &str, config: &HashMap<String, String>) -> Result<()> {
     let required: &[&str] = match provider_type {
         "saml" => &["entityId", "singleSignOnServiceUrl", "signingCertificate"],
-        "oidc" => &["clientId", "clientSecret", "authorizationUrl", "tokenUrl"],
+        "oidc" => &[
+            "clientId",
+            "clientSecret",
+            "authorizationUrl",
+            "tokenUrl",
+            "userInfoUrl",
+        ],
         _ => &[],
     };
     let missing: Vec<&str> = required
@@ -818,6 +897,10 @@ mod tests {
                 "tokenUrl".to_string(),
                 "https://idp.example.com/token".to_string(),
             ),
+            (
+                "userInfoUrl".to_string(),
+                "https://idp.example.com/userinfo".to_string(),
+            ),
         ]);
         assert!(validate_required_config("oidc", &config).is_ok());
     }
@@ -831,6 +914,7 @@ mod tests {
                 assert!(msg.contains("clientSecret"));
                 assert!(msg.contains("authorizationUrl"));
                 assert!(msg.contains("tokenUrl"));
+                assert!(msg.contains("userInfoUrl"));
             }
             _ => panic!("Expected Validation error"),
         }

@@ -33,6 +33,9 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String),
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
@@ -42,8 +45,8 @@ pub enum AppError {
     #[error("JWT error: {0}")]
     Jwt(#[from] jsonwebtoken::errors::Error),
 
-    #[error("Keycloak error: {0}")]
-    Keycloak(String),
+    #[error("Identity backend error: {0}")]
+    IdentityBackend(String),
 
     #[error("Action execution failed: {0}")]
     ActionExecutionFailed(String),
@@ -71,6 +74,9 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
             AppError::Validation(msg) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "validation", msg.clone())
+            }
+            AppError::TooManyRequests(msg) => {
+                (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", msg.clone())
             }
             AppError::Database(ref e) => {
                 // Map duplicate entry errors (MySQL 1062 / SQLSTATE 23000) to 409 Conflict
@@ -106,11 +112,11 @@ impl IntoResponse for AppError {
                     "Invalid or expired token".to_string(),
                 )
             }
-            AppError::Keycloak(msg) => {
-                tracing::error!("Keycloak error: {}", msg);
+            AppError::IdentityBackend(msg) => {
+                tracing::error!("Identity backend error: {}", msg);
                 (
                     StatusCode::BAD_GATEWAY,
-                    "keycloak_error",
+                    "identity_backend_error",
                     "Authentication service error".to_string(),
                 )
             }
@@ -285,9 +291,12 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_display() {
-        let err = AppError::Keycloak("Connection refused".to_string());
-        assert_eq!(err.to_string(), "Keycloak error: Connection refused");
+    fn test_identity_backend_display() {
+        let err = AppError::IdentityBackend("Connection refused".to_string());
+        assert_eq!(
+            err.to_string(),
+            "Identity backend error: Connection refused"
+        );
     }
 
     #[test]
@@ -362,9 +371,9 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_error_variant() {
-        let err = AppError::Keycloak("Auth failed".to_string());
-        assert!(matches!(err, AppError::Keycloak(_)));
+    fn test_identity_backend_error_variant() {
+        let err = AppError::IdentityBackend("Auth failed".to_string());
+        assert!(matches!(err, AppError::IdentityBackend(_)));
     }
 
     #[test]
@@ -438,7 +447,7 @@ mod tests {
             AppError::Forbidden("Admin access required".to_string()),
             AppError::Conflict("Email already registered".to_string()),
             AppError::Validation("Password too short".to_string()),
-            AppError::Keycloak("Failed to authenticate".to_string()),
+            AppError::IdentityBackend("Failed to authenticate".to_string()),
         ];
 
         for err in errors {

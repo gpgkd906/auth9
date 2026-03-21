@@ -8,15 +8,46 @@
 **OWASP ASVS 5.0**: V6.7,V6.8,V7.3
 **回归任务映射**: Backlog #20
 
+---
+
+> **前置条件（所有场景通用）**: 本文档中的所有场景均需要至少一个已启用 TOTP 的用户账户。默认 Docker 开发环境（`./scripts/reset-docker.sh`）**不会** 自动创建 TOTP 用户。测试前需手动设置：
+>
+> **通过 Portal UI 设置 TOTP 用户**:
+> 1. 以管理员身份登录 Portal（http://localhost:3000）
+> 2. 进入用户详情页，找到「Security」/「Multi-Factor Authentication」区域
+> 3. 点击「Enable TOTP」，使用 Google Authenticator 等应用扫描二维码完成注册
+>
+> **通过 API 设置 TOTP 用户**:
+> ```bash
+> # 1. 开始 TOTP 注册（获取 secret 和 QR code）
+> curl -s -X POST http://localhost:8080/api/v1/mfa/totp/enroll \
+>   -H "Authorization: Bearer $TOKEN" | jq .
+>
+> # 2. 使用 Authenticator 应用生成验证码，完成注册
+> curl -s -X POST http://localhost:8080/api/v1/mfa/totp/enroll/verify \
+>   -H "Authorization: Bearer $TOKEN" \
+>   -H "Content-Type: application/json" \
+>   -d '{"code": "123456"}'
+> ```
 
 ---
 
 ## 背景知识
 
-Auth9 通过 Keycloak 支持多种 MFA 方式：
-- **TOTP**: 基于时间的一次性密码 (Google Authenticator)
-- **WebAuthn/Passkeys**: 硬件安全密钥或平台认证
+Auth9 自行管理多种 MFA 方式：
+- **TOTP**: 基于时间的一次性密码 (Google Authenticator) — Auth9 本地 enroll/verify/replay 防护
+- **WebAuthn/Passkeys**: 硬件安全密钥或平台认证 — Auth9 本地注册/认证
+- **Recovery Code**: 8 组 10 位一次性恢复码，SHA-256 哈希存储
 - **Email OTP**: 邮件验证码
+
+MFA 挑战端点（公开）：
+- `POST /api/v1/mfa/challenge/totp` — TOTP 验证（Redis 90s 重放防护）
+- `POST /api/v1/mfa/challenge/recovery-code` — Recovery Code 消费
+
+MFA 管理端点（需认证）：
+- `GET /api/v1/mfa/status` — 查询启用状态
+- `POST /api/v1/mfa/totp/enroll` / `POST /api/v1/mfa/totp/enroll/verify` — TOTP 注册
+- `POST /api/v1/mfa/recovery-codes/generate` / `GET /api/v1/mfa/recovery-codes/remaining` — Recovery Code 管理
 
 ---
 
@@ -26,15 +57,21 @@ Auth9 通过 Keycloak 支持多种 MFA 方式：
 - 启用了 TOTP 的用户账户
 - 已知用户名和密码
 
-### 步骤 0: 验证 Keycloak Brute Force 防护已配置
+### 步骤 0: 配置并验证暴力破解保护
+
+> **重要**: `lockout_threshold` 默认值为 **0**（禁用）。测试前必须先显式配置。
 
 ```bash
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" | jq -r '.access_token')
-curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" | \
-  jq '{bruteForceProtected, failureFactor, maxDeltaTimeSeconds, waitIncrementSeconds}'
-# 必须输出: bruteForceProtected=true, failureFactor=5
-# 如果 bruteForceProtected 为 null/false，执行 ./scripts/reset-docker.sh 重建环境
+# 1. 先配置锁定阈值（默认为 0，必须手动设置）
+curl -s -X PUT http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"lockout_threshold": 5, "lockout_duration_mins": 15}'
+
+# 2. 验证配置已生效
+curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H "Authorization: Bearer $TOKEN" | jq '{lockout_threshold, lockout_duration_mins}'
+# 预期: lockout_threshold = 5, lockout_duration_mins = 15
 ```
 
 ### 攻击目标
@@ -54,30 +91,29 @@ curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC
 
 ### 验证方法
 ```bash
-# 1. 确认 realm 安全配置已生效（init 后执行）
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" | jq -r '.access_token')
-curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" | \
-  jq '{bruteForceProtected, failureFactor, maxDeltaTimeSeconds, waitIncrementSeconds}'
-# 预期: bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600, waitIncrementSeconds=60
+# 1. 确认暴力破解保护已生效
+curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H "Authorization: Bearer $TOKEN" | jq '{lockout_threshold}'
+# 预期: lockout_threshold=5
 
-# 2. 使用脚本快速提交错误 TOTP
+# 2. 使用脚本快速提交错误 TOTP（通过 Auth9 MFA challenge 端点）
 for i in {1..20}; do
-  curl -X POST "http://localhost:8081/realms/auth9/login-actions/authenticate" \
-    -d "session_code=xxx&otp=$i"
+  curl -X POST "http://localhost:8080/api/v1/mfa/challenge/totp" \
+    -H "Content-Type: application/json" \
+    -d "{\"code\":\"$(printf '%06d' $i)\",\"session_id\":\"xxx\"}"
   sleep 0.1
 done
 
 # 检查是否被锁定或限速
-# 预期: 第 6 次后返回 "Account locked temporarily"
+# 预期: 第 6 次后返回错误或出现显著延迟
 ```
 
 ### 常见误报排查
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| bruteForceProtected 为 null | 环境未执行 `auth9-core init`，或 init 后 Keycloak 被重建 | 执行 `./scripts/reset-docker.sh` 重建环境 |
-| realm 配置存在但未生效 | Keycloak 缓存 | 重启 Keycloak 容器 |
+| lockout_threshold 为 null 或 0 | 密码策略默认未配置锁定阈值（默认值为 0） | **必须先执行步骤 0** 通过 `PUT /api/v1/tenants/{id}/password-policy` 配置 `lockout_threshold=5` |
+| 配置存在但未生效 | auth9-core 缓存 | 重启 auth9-core 服务 |
 
 ### 修复建议
 - 实现指数退避锁定策略
@@ -92,7 +128,7 @@ done
 ### 前置条件
 - 启用 TOTP 的用户账户
 - 能够获取用户的 TOTP 密钥 (模拟泄露场景)
-- **环境必须已执行 `auth9-core init`**（seeder 会配置 OTP 策略: otpPolicyType=totp, otpPolicyDigits=6, otpPolicyPeriod=30, otpPolicyLookAheadWindow=1）
+- **环境必须已执行 `auth9-core init`**（Auth9 OIDC Engine 使用默认 OTP 策略: type=totp, digits=6, period=30, lookAheadWindow=1）
 
 ### 攻击目标
 验证 TOTP 时间窗口容忍度是否过大
@@ -112,12 +148,11 @@ done
 
 ### 验证方法
 ```bash
-# 1. 确认 OTP 策略已配置（init 后执行）
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" | jq -r '.access_token')
-curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" | \
-  jq '{otpPolicyType, otpPolicyDigits, otpPolicyPeriod, otpPolicyLookAheadWindow, otpPolicyAlgorithm}'
-# 预期: otpPolicyType="totp", otpPolicyDigits=6, otpPolicyPeriod=30, otpPolicyLookAheadWindow=1
+# 1. 确认 OTP 策略已配置（Auth9 OIDC Engine 内置默认策略）
+# Auth9 使用 TOTP 默认配置: digits=6, period=30s, lookAheadWindow=1
+# 可通过 MFA 状态 API 验证 TOTP 已启用:
+curl -s http://localhost:8080/api/v1/mfa/status \
+  -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
 ```python
@@ -137,8 +172,8 @@ for offset in [-120, -60, -30, 0, 30, 60, 120]:
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| otpPolicy 字段全为 null | 环境未执行 `auth9-core init` | 执行 `./scripts/reset-docker.sh` 重建环境 |
-| 配置正确但窗口过大 | Keycloak 缓存了旧配置 | 重启 Keycloak 容器 |
+| TOTP 验证失败 | 环境未执行 `auth9-core init` | 执行 `./scripts/reset-docker.sh` 重建环境 |
+| 配置正确但窗口过大 | 缓存了旧配置 | 重启 auth9-core 服务 |
 
 ### 修复建议
 - 时间窗口不超过 ± 30 秒
@@ -284,7 +319,7 @@ curl -X DELETE http://localhost:8080/api/v1/users/{other_user_id}/mfa \
 | 2 | TOTP 时间窗口攻击 | ✅ PASS | 2026-02-25 | QA Test | otpPolicyLookAheadWindow=1, 系统拒绝时间偏移代码 |
 | 3 | MFA 绕过测试 | ✅ PASS | 2026-02-25 | QA Test | 登录时正确要求 MFA 验证 |
 | 4 | MFA 注册流程安全 | ✅ PASS | 2026-02-25 | QA Test | 启用MFA需要密码确认 |
-| 5 | MFA 恢复机制安全 | ⚠️ 部分验证 | 2026-02-25 | QA Test | 管理员启用MFA需要密码确认；系统无备份码功能 |
+| 5 | MFA 恢复机制安全 | ⚠️ 待重测 | 2026-02-25 | QA Test | Phase 3 FR4 已实现 Recovery Code（8 组/SHA-256 哈希/一次性消费），需重新执行验证 |
 
 ---
 
@@ -316,7 +351,7 @@ curl -X DELETE http://localhost:8080/api/v1/users/{other_user_id}/mfa \
 ### 回归记录表
 | 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
 |---|---|---|---|---|
-| M-AUTH-03-C01 | PASS | Low | Keycloak brute force protection: bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600 | V6.7 暴力破解防护 |
+| M-AUTH-03-C01 | PASS | Low | Auth9 暴力破解保护已启用: lockout_threshold=5 | V6.7 暴力破解防护 |
 | M-AUTH-03-C02 | PASS | Low | OTP policy: otpPolicyLookAheadWindow=1, otpPolicyDigits=6 | V6.8 TOTP 时间窗口 |
 | M-AUTH-03-C03 | PASS | Medium | 登录流程正确要求 MFA 验证，管理员启用 MFA 需要密码确认 | V7.3 MFA 绕过防护 |
 

@@ -188,26 +188,11 @@ pub(crate) fn extract_actor_id_generic<S: HasServices>(
         return Uuid::parse_str(&claims.sub).ok();
     }
 
-    let allowed = &state.config().jwt_tenant_access_allowed_audiences;
-    if !allowed.is_empty() {
-        if let Ok(claims) = state
-            .jwt_manager()
-            .verify_tenant_access_token_strict(token, allowed)
-        {
-            return Uuid::parse_str(&claims.sub).ok();
-        }
-    } else if !state.config().is_production() {
-        if let Ok(claims) = {
-            #[allow(deprecated)]
-            state.jwt_manager().verify_tenant_access_token(token, None)
-        } {
-            ::metrics::counter!(
-                "auth9_jwt_legacy_fallback_total",
-                "caller" => "http_support_extract_user"
-            )
-            .increment(1);
-            return Uuid::parse_str(&claims.sub).ok();
-        }
+    if let Ok(claims) = state
+        .jwt_manager()
+        .verify_tenant_access_token_any_audience(token)
+    {
+        return Uuid::parse_str(&claims.sub).ok();
     }
 
     None

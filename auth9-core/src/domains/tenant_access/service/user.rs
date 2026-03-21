@@ -2,7 +2,6 @@
 
 use crate::domains::integration::service::WebhookEventPublisher;
 use crate::error::{AppError, Result};
-use crate::keycloak::KeycloakClient;
 use crate::models::analytics::WebhookEvent;
 use crate::models::common::StringUuid;
 use crate::models::user::{
@@ -15,7 +14,6 @@ use crate::repository::{
 use chrono::Utc;
 use sqlx::MySqlPool;
 use std::sync::Arc;
-use tracing::warn;
 use validator::Validate;
 
 /// Repository bundle for UserService
@@ -92,7 +90,6 @@ pub struct UserService<
     security_alert_repo: Arc<SA>,
     audit_repo: Arc<A>,
     rbac_repo: Arc<Rbac>,
-    keycloak: Option<KeycloakClient>,
     webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
     /// Database pool for transactional cascade deletes.
     /// When available, delete operations are wrapped in a transaction.
@@ -110,10 +107,9 @@ impl<
         Rbac: RbacRepository,
     > UserService<R, S, P, L, LE, SA, A, Rbac>
 {
-    /// Create a new UserService with repository bundle, keycloak client, and webhook publisher
+    /// Create a new UserService with repository bundle, identity engine, and webhook publisher
     pub fn new(
         repos: UserRepositoryBundle<R, S, P, L, LE, SA, A, Rbac>,
-        keycloak: Option<KeycloakClient>,
         webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
     ) -> Self {
         Self {
@@ -125,7 +121,6 @@ impl<
             security_alert_repo: repos.security_alert,
             audit_repo: repos.audit,
             rbac_repo: repos.rbac,
-            keycloak,
             webhook_publisher,
             pool: None,
         }
@@ -137,14 +132,18 @@ impl<
         self
     }
 
-    pub async fn create(&self, keycloak_id: &str, input: CreateUserInput) -> Result<User> {
+    pub async fn create(&self, identity_subject: &str, input: CreateUserInput) -> Result<User> {
         input.validate()?;
 
-        // Check for duplicate keycloak_id
-        if self.repo.find_by_keycloak_id(keycloak_id).await?.is_some() {
+        if self
+            .repo
+            .find_by_identity_subject(identity_subject)
+            .await?
+            .is_some()
+        {
             return Err(AppError::Conflict(format!(
-                "User with keycloak_id '{}' already exists",
-                keycloak_id
+                "User with identity_subject '{}' already exists",
+                identity_subject
             )));
         }
 
@@ -156,7 +155,7 @@ impl<
             )));
         }
 
-        let user = self.repo.create(keycloak_id, &input).await?;
+        let user = self.repo.create(identity_subject, &input).await?;
 
         // Trigger user.created webhook event
         if let Some(publisher) = &self.webhook_publisher {
@@ -193,9 +192,9 @@ impl<
             .ok_or_else(|| AppError::NotFound(format!("User '{}' not found", email)))
     }
 
-    pub async fn get_by_keycloak_id(&self, keycloak_id: &str) -> Result<User> {
+    pub async fn get_by_identity_subject(&self, identity_subject: &str) -> Result<User> {
         self.repo
-            .find_by_keycloak_id(keycloak_id)
+            .find_by_identity_subject(identity_subject)
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
@@ -243,7 +242,7 @@ impl<
     /// Delete a user with cascade delete of all related data.
     ///
     /// When a database pool is available, all cascade operations run within a single
-    /// transaction. External operations (Keycloak delete, webhooks) run after commit.
+    /// transaction. External operations (identity engine delete, webhooks) run after commit.
     ///
     /// Cascade order (within transaction):
     /// 1. Delete user_tenant_roles for all tenant memberships
@@ -257,7 +256,7 @@ impl<
     /// 9. Delete users record
     ///
     /// After commit:
-    /// 10. Delete user from Keycloak (tolerant of NotFound)
+    /// 10. Delete user from identity engine (tolerant of NotFound)
     /// 11. Trigger user.deleted webhook event
     pub async fn delete(&self, id: StringUuid) -> Result<()> {
         let user = self.get(id).await?;
@@ -374,22 +373,7 @@ impl<
             self.repo.delete(id).await?;
         }
 
-        // 10. Delete from Keycloak AFTER transaction commit
-        // (external operation cannot be rolled back, so run after DB is consistent)
-        if let Some(ref keycloak) = self.keycloak {
-            match keycloak.delete_user(&user.keycloak_id).await {
-                Ok(_) => {}
-                Err(AppError::NotFound(_)) => {
-                    warn!(
-                        "User {} not found in Keycloak during delete, continuing",
-                        user.keycloak_id
-                    );
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        // 11. Trigger user.deleted webhook event
+        // 10. Trigger user.deleted webhook event
         if let Some(publisher) = &self.webhook_publisher {
             if let Err(e) = publisher
                 .trigger_event(WebhookEvent {
@@ -514,6 +498,15 @@ impl<
     ) -> Result<Vec<TenantUserWithTenant>> {
         self.repo.find_user_tenants_with_tenant(user_id).await
     }
+
+    /// Update locked_until timestamp (None to unlock)
+    pub async fn update_locked_until(
+        &self,
+        id: StringUuid,
+        locked_until: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<()> {
+        self.repo.update_locked_until(id, locked_until).await
+    }
 }
 
 #[cfg(test)]
@@ -579,14 +572,14 @@ mod tests {
             Arc::new(MockAuditRepository::new()),
             Arc::new(MockRbacRepository::new()),
         );
-        UserService::new(repos, None, None)
+        UserService::new(repos, None)
     }
 
     #[tokio::test]
     async fn test_create_user_success() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("kc-123"))
             .returning(|_| Ok(None));
 
@@ -594,9 +587,9 @@ mod tests {
             .with(eq("test@example.com"))
             .returning(|_| Ok(None));
 
-        mock.expect_create().returning(|keycloak_id, input| {
+        mock.expect_create().returning(|identity_subject, input| {
             Ok(User {
-                keycloak_id: keycloak_id.to_string(),
+                identity_subject: identity_subject.to_string(),
                 email: input.email.clone(),
                 display_name: input.display_name.clone(),
                 ..Default::default()
@@ -619,14 +612,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_duplicate_keycloak_id() {
+    async fn test_create_user_duplicate_identity_subject() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("kc-existing"))
             .returning(|_| {
                 Ok(Some(User {
-                    keycloak_id: "kc-existing".to_string(),
+                    identity_subject: "kc-existing".to_string(),
                     email: "existing@example.com".to_string(),
                     ..Default::default()
                 }))
@@ -730,36 +723,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_by_keycloak_id_success() {
+    async fn test_get_by_identity_subject_success() {
         let mut mock = MockUserRepository::new();
         let user = User {
-            keycloak_id: "kc-123".to_string(),
+            identity_subject: "kc-123".to_string(),
             ..Default::default()
         };
         let user_clone = user.clone();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("kc-123"))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
         let service = create_test_service(mock);
 
-        let result = service.get_by_keycloak_id("kc-123").await;
+        let result = service.get_by_identity_subject("kc-123").await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().keycloak_id, "kc-123");
+        assert_eq!(result.unwrap().identity_subject, "kc-123");
     }
 
     #[tokio::test]
-    async fn test_get_by_keycloak_id_not_found() {
+    async fn test_get_by_identity_subject_not_found() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("nonexistent"))
             .returning(|_| Ok(None));
 
         let service = create_test_service(mock);
 
-        let result = service.get_by_keycloak_id("nonexistent").await;
+        let result = service.get_by_identity_subject("nonexistent").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 
@@ -951,7 +944,7 @@ mod tests {
             Arc::new(mock_audit),
             Arc::new(mock_rbac),
         );
-        let service = UserService::new(repos, None, None);
+        let service = UserService::new(repos, None);
 
         let result = service.delete(id).await;
         assert!(result.is_ok());
@@ -1062,7 +1055,7 @@ mod tests {
             Arc::new(mock_audit),
             Arc::new(mock_rbac),
         );
-        let service = UserService::new(repos, None, None);
+        let service = UserService::new(repos, None);
 
         let result = service.delete(id).await;
         assert!(result.is_ok());
@@ -1205,7 +1198,7 @@ mod tests {
             Arc::new(MockAuditRepository::new()),
             Arc::new(mock_rbac),
         );
-        let service = UserService::new(repos, None, None);
+        let service = UserService::new(repos, None);
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());
@@ -1240,7 +1233,7 @@ mod tests {
             Arc::new(MockAuditRepository::new()),
             Arc::new(mock_rbac),
         );
-        let service = UserService::new(repos, None, None);
+        let service = UserService::new(repos, None);
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());

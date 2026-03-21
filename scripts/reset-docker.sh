@@ -49,12 +49,6 @@ compute_hash() {
     auth9-demo)
       hash_input=$(set +eo pipefail; find auth9-demo/src sdk/packages/core/src sdk/packages/node/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-demo/package.json auth9-demo/package-lock.json auth9-demo/tsconfig.json auth9-demo/Dockerfile sdk/packages/core/package.json sdk/packages/node/package.json 2>/dev/null; true)
       ;;
-    auth9-theme-builder)
-      hash_input=$(set +eo pipefail; find auth9-keycloak-theme/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-keycloak-theme/package.json auth9-keycloak-theme/package-lock.json auth9-keycloak-theme/Dockerfile 2>/dev/null; true)
-      ;;
-    auth9-keycloak-events-builder)
-      hash_input=$(cat auth9-keycloak-events/Dockerfile 2>/dev/null; true)
-      ;;
   esac
 
   echo "$hash_input" | shasum -a 256 | cut -d' ' -f1
@@ -98,16 +92,12 @@ save_hash() {
 REBUILD_CORE=false
 REBUILD_PORTAL=false
 REBUILD_DEMO=false
-REBUILD_THEME=false
-REBUILD_EVENTS=false
-for comp in auth9-core auth9-portal auth9-demo auth9-theme-builder auth9-keycloak-events-builder; do
+for comp in auth9-core auth9-portal auth9-demo; do
   if needs_rebuild "$comp"; then
     case "$comp" in
-      auth9-core)                    REBUILD_CORE=true ;;
-      auth9-portal)                  REBUILD_PORTAL=true ;;
-      auth9-demo)                    REBUILD_DEMO=true ;;
-      auth9-theme-builder)           REBUILD_THEME=true ;;
-      auth9-keycloak-events-builder) REBUILD_EVENTS=true ;;
+      auth9-core)   REBUILD_CORE=true ;;
+      auth9-portal) REBUILD_PORTAL=true ;;
+      auth9-demo)   REBUILD_DEMO=true ;;
     esac
   fi
 done
@@ -123,8 +113,6 @@ else
   [ "$REBUILD_CORE" = true ]   && echo "    auth9-core                    → REBUILD" || echo "    auth9-core                    → skip (unchanged)"
   [ "$REBUILD_PORTAL" = true ] && echo "    auth9-portal                  → REBUILD" || echo "    auth9-portal                  → skip (unchanged)"
   [ "$REBUILD_DEMO" = true ]   && echo "    auth9-demo                    → REBUILD" || echo "    auth9-demo                    → skip (unchanged)"
-  [ "$REBUILD_THEME" = true ]  && echo "    auth9-theme-builder           → REBUILD" || echo "    auth9-theme-builder           → skip (unchanged)"
-  [ "$REBUILD_EVENTS" = true ] && echo "    auth9-keycloak-events-builder → REBUILD" || echo "    auth9-keycloak-events-builder  → skip (unchanged)"
 fi
 
 # Step 0: Ensure dev certificates exist (JWT + gRPC TLS)
@@ -172,24 +160,22 @@ fi
 
 # Step 1: Stop and remove all containers and volumes
 echo "[1/7] Stopping containers..."
-$DC --profile build down -v --remove-orphans > /dev/null 2>&1 || true
+$DC down -v --remove-orphans > /dev/null 2>&1 || true
 
 # Step 2: Remove project images (only those that need rebuilding)
 echo "[2/7] Removing images..."
 if [ "$PURGE" = true ]; then
-  docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-demo auth9-auth9-theme-builder auth9-auth9-keycloak-events-builder 2>/dev/null || true
+  docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-demo 2>/dev/null || true
   docker rmi $(docker images -q 'auth9-*' 2>/dev/null) 2>/dev/null || true
 else
   [ "$REBUILD_CORE" = true ]   && { docker rmi auth9-auth9-core auth9-auth9-init 2>/dev/null || true; }
   [ "$REBUILD_PORTAL" = true ] && { docker rmi auth9-auth9-portal 2>/dev/null || true; }
   [ "$REBUILD_DEMO" = true ]   && { docker rmi auth9-auth9-demo 2>/dev/null || true; }
-  [ "$REBUILD_THEME" = true ]  && { docker rmi auth9-auth9-theme-builder 2>/dev/null || true; }
-  [ "$REBUILD_EVENTS" = true ] && { docker rmi auth9-auth9-keycloak-events-builder 2>/dev/null || true; }
 fi
 
 # Step 3: Remove any remaining volumes
 echo "[3/7] Removing volumes..."
-docker volume rm auth9_tidb-data auth9_redis-data auth9_keycloak-theme auth9_prometheus-data auth9_grafana-data auth9_loki-data auth9_tempo-data 2>/dev/null || true
+docker volume rm auth9_tidb-data auth9_redis-data auth9_prometheus-data auth9_grafana-data auth9_loki-data auth9_tempo-data 2>/dev/null || true
 
 # Step 4: Prune builder cache (only in --purge mode)
 if [ "$PURGE" = true ]; then
@@ -204,11 +190,6 @@ fi
 # Step 5: Build images (only changed components)
 echo "[5/7] Building images..."
 
-# Build Keycloak plugins (only if needed)
-PLUGIN_BUILD_TARGETS=""
-[ "$REBUILD_THEME" = true ]  && PLUGIN_BUILD_TARGETS="$PLUGIN_BUILD_TARGETS auth9-theme-builder"
-[ "$REBUILD_EVENTS" = true ] && PLUGIN_BUILD_TARGETS="$PLUGIN_BUILD_TARGETS auth9-keycloak-events-builder"
-
 # Build app images (only if needed)
 APP_BUILD_TARGETS=""
 [ "$REBUILD_CORE" = true ]   && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-core"
@@ -217,42 +198,21 @@ APP_BUILD_TARGETS=""
 
 # auth9-init shares the same Dockerfile as auth9-core; tag it after build instead of building twice
 
-BUILD_PLUGINS_PID=""
-BUILD_APP_PID=""
 BUILD_LOG_DIR=$(mktemp -d)
 
-if [ -n "$PLUGIN_BUILD_TARGETS" ]; then
-  echo "  Building plugins:$PLUGIN_BUILD_TARGETS"
-  ( $DC --profile build build --no-cache --parallel $PLUGIN_BUILD_TARGETS > "$BUILD_LOG_DIR/plugins.log" 2>&1 ) &
-  BUILD_PLUGINS_PID=$!
-else
-  echo "  Plugins: all unchanged, skipping"
-fi
-
 if [ -n "$APP_BUILD_TARGETS" ]; then
-  echo "  Building apps:$APP_BUILD_TARGETS"
+  echo "  Building:$APP_BUILD_TARGETS"
   ( $DC build --no-cache --parallel $APP_BUILD_TARGETS > "$BUILD_LOG_DIR/apps.log" 2>&1 ) &
   BUILD_APP_PID=$!
-else
-  echo "  Apps: all unchanged, skipping"
-fi
 
-# Wait for builds to complete
-if [ -n "$BUILD_PLUGINS_PID" ]; then
-  if ! wait $BUILD_PLUGINS_PID; then
-    echo "ERROR: Plugin build failed. Log:"
-    tail -20 "$BUILD_LOG_DIR/plugins.log" 2>/dev/null
-    rm -rf "$BUILD_LOG_DIR"
-    exit 1
-  fi
-fi
-if [ -n "$BUILD_APP_PID" ]; then
   if ! wait $BUILD_APP_PID; then
-    echo "ERROR: App build failed. Log:"
+    echo "ERROR: Build failed. Log:"
     tail -20 "$BUILD_LOG_DIR/apps.log" 2>/dev/null
     rm -rf "$BUILD_LOG_DIR"
     exit 1
   fi
+else
+  echo "  All images unchanged, skipping"
 fi
 rm -rf "$BUILD_LOG_DIR"
 
@@ -265,14 +225,6 @@ fi
 [ "$REBUILD_CORE" = true ]   && save_hash "auth9-core"
 [ "$REBUILD_PORTAL" = true ] && save_hash "auth9-portal"
 [ "$REBUILD_DEMO" = true ]   && save_hash "auth9-demo"
-[ "$REBUILD_THEME" = true ]  && save_hash "auth9-theme-builder"
-[ "$REBUILD_EVENTS" = true ] && save_hash "auth9-keycloak-events-builder"
-
-# Run plugin builders to copy JARs to volumes (always needed since volumes are recreated)
-echo "  Copying Keycloak plugin JARs..."
-$DC --profile build up auth9-theme-builder auth9-keycloak-events-builder > /dev/null 2>&1 &
-PLUGINS_PID=$!
-wait $PLUGINS_PID || { echo "WARNING: Plugin builders failed (non-fatal)"; }
 
 # Step 6: Start all services and wait for health checks
 echo "[6/7] Starting services..."
@@ -353,9 +305,8 @@ $DC ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || $DC ps
 
 echo ""
 echo "URLs:"
-echo "  Portal:     http://localhost:3000  (admin / SecurePass123!)"
+echo "  Portal:     http://localhost:3000  (admin@auth9.local / SecurePass123!)"
 echo "  Demo:       http://localhost:3002  (SDK integration guide)"
-echo "  Keycloak:   http://localhost:8081  (admin / admin)"
 echo "  Mailpit:    http://localhost:8025"
 echo "  Grafana:    http://localhost:3001"
 echo "  Prometheus: http://localhost:9090"

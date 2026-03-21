@@ -22,4 +22,6 @@ export * from "./tenant-service";
 export * from "./security-alert";
 export * from "./action";
 export * from "./email-otp";
+export * from "./hosted-login";
+export * from "./mfa";
 export * from "./saml-application";

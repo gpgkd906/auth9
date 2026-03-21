@@ -15,8 +15,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
             r#"
             INSERT INTO login_events (user_id, email, tenant_id, event_type, ip_address,
                                       user_agent, device_type, location, session_id,
-                                      failure_reason, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                                      failure_reason, provider_alias, provider_type, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             "#,
         )
         .bind(input.user_id)
@@ -29,6 +29,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         .bind(&input.location)
         .bind(input.session_id)
         .bind(&input.failure_reason)
+        .bind(&input.provider_alias)
+        .bind(&input.provider_type)
         .execute(&self.pool)
         .await?;
 
@@ -39,7 +41,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         let event = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
-                   device_type, location, session_id, failure_reason, created_at
+                   device_type, location, session_id, failure_reason, provider_alias,
+                   provider_type, created_at
             FROM login_events
             WHERE id = ?
             "#,
@@ -55,7 +58,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         let events = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
-                   device_type, location, session_id, failure_reason, created_at
+                   device_type, location, session_id, failure_reason, provider_alias,
+                   provider_type, created_at
             FROM login_events
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -78,7 +82,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         let events = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
-                   device_type, location, session_id, failure_reason, created_at
+                   device_type, location, session_id, failure_reason, provider_alias,
+                   provider_type, created_at
             FROM login_events
             WHERE user_id = ?
             ORDER BY created_at DESC
@@ -103,7 +108,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         let events = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
-                   device_type, location, session_id, failure_reason, created_at
+                   device_type, location, session_id, failure_reason, provider_alias,
+                   provider_type, created_at
             FROM login_events
             WHERE tenant_id = ?
             ORDER BY created_at DESC
@@ -146,7 +152,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         let events = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
-                   device_type, location, session_id, failure_reason, created_at
+                   device_type, location, session_id, failure_reason, provider_alias,
+                   provider_type, created_at
             FROM login_events
             WHERE email = ?
             ORDER BY created_at DESC
@@ -186,8 +193,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
             r#"
             SELECT
                 COUNT(*) as total,
-                CAST(COALESCE(SUM(CASE WHEN event_type = 'success' OR event_type = 'social' THEN 1 ELSE 0 END), 0) AS SIGNED) as successful,
-                CAST(COALESCE(SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked') THEN 1 ELSE 0 END), 0) AS SIGNED) as failed,
+                CAST(COALESCE(SUM(CASE WHEN event_type IN ('success', 'social', 'federation_success') THEN 1 ELSE 0 END), 0) AS SIGNED) as successful,
+                CAST(COALESCE(SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked', 'federation_failed') THEN 1 ELSE 0 END), 0) AS SIGNED) as failed,
                 COUNT(DISTINCT user_id) as unique_users
             FROM login_events
             WHERE created_at BETWEEN ? AND ?{}
@@ -342,6 +349,27 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         Ok(result.rows_affected())
     }
 
+    async fn count_federation_failed_by_provider(
+        &self,
+        provider_alias: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM login_events
+            WHERE provider_alias = ?
+              AND event_type = 'federation_failed'
+              AND created_at >= ?
+            "#,
+        )
+        .bind(provider_alias)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
     async fn get_daily_trend(
         &self,
         tenant_id: Option<StringUuid>,
@@ -358,8 +386,8 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
             SELECT
                 DATE_FORMAT(created_at, '%Y-%m-%d') as date,
                 COUNT(*) as total,
-                CAST(COALESCE(SUM(CASE WHEN event_type = 'success' OR event_type = 'social' THEN 1 ELSE 0 END), 0) AS SIGNED) as successful,
-                CAST(COALESCE(SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked') THEN 1 ELSE 0 END), 0) AS SIGNED) as failed
+                CAST(COALESCE(SUM(CASE WHEN event_type IN ('success', 'social', 'federation_success') THEN 1 ELSE 0 END), 0) AS SIGNED) as successful,
+                CAST(COALESCE(SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked', 'federation_failed') THEN 1 ELSE 0 END), 0) AS SIGNED) as failed
             FROM login_events
             WHERE created_at BETWEEN ? AND ?{}
             GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')

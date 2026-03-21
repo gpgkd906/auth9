@@ -15,7 +15,7 @@
 
 Auth9 TLS 终端点：
 - **反向代理**: Nginx/Cloudflare Tunnel (TLS 终止)
-- **Keycloak**: 内部 HTTPS
+- **Auth9 OIDC Engine**: 内部通信
 - **gRPC**: 可选 mTLS
 
 安全要求：
@@ -243,16 +243,16 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
 
 | 症状 | 原因 | 解决方法 |
 |------|------|---------|
-| Keycloak HTTP 端口 (8081) 返回 HSTS 头 | Keycloak 26.x 原生在所有响应中添加 HSTS 头，与协议无关 | 这是 Keycloak 内部行为，**非 Auth9 配置问题**。浏览器会忽略 HTTP 上的 HSTS 头，无安全影响。本场景应在生产 HTTPS 端点上验证 |
+| 内部服务端口返回 HSTS 头 | 某些服务在所有响应中添加 HSTS 头，与协议无关 | 浏览器会忽略 HTTP 上的 HSTS 头，无安全影响。本场景应在生产 HTTPS 端点上验证 |
 | 本地 Docker 环境无 HTTPS 端点 | 本地开发使用 HTTP | HSTS 测试仅适用于**生产环境**（有 TLS 终止的 Nginx/Cloudflare），本地 Docker 环境跳过此场景 |
 
-> **注意**: Auth9 Core 的 HSTS 实现（`security_headers.rs`）默认 `hsts_https_only=true`，仅在 HTTPS 请求上返回 HSTS 头。Keycloak 的 HSTS 行为由 Keycloak 自身控制，非 Auth9 可配置。
+> **注意**: Auth9 Core 的 HSTS 实现（`security_headers.rs`）默认 `hsts_https_only=true`，仅在 HTTPS 请求上返回 HSTS 头。
 
 ---
 
 ## 场景 5：内部服务通信安全
 
-> **注意：本场景仅适用于生产/Kubernetes 环境。** 本地 Docker 开发环境有意使用明文连接（Redis `redis://`、TiDB `mysql://`、Keycloak `SSL_REQUIRED=none`），这是预期行为，不构成安全缺陷。docker-compose.yml 中已标注生产环境应启用 TLS。
+> **注意：本场景仅适用于生产/Kubernetes 环境。** 本地 Docker 开发环境有意使用明文连接（Redis `redis://`、TiDB `mysql://`），这是预期行为，不构成安全缺陷。docker-compose.yml 中已标注生产环境应启用 TLS。
 
 ### 前置条件
 - **生产或预发布环境**（非本地 Docker 开发环境）
@@ -264,7 +264,7 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
 ### 攻击步骤
 1. 检查服务间通信：
    - Portal → Core (HTTP?)
-   - Core → Keycloak (HTTPS?)
+   - Core → Auth9 OIDC Engine (内部通信)
    - Core → TiDB (加密?)
    - Core → Redis (加密?)
 2. 测试 mTLS (如果启用)
@@ -280,9 +280,8 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
 # 在 Pod 内部测试
 kubectl exec -it auth9-core-xxx -- sh
 
-# 检查到 Keycloak 的连接
-curl -v https://keycloak:8443/health
-# 应该是 HTTPS
+# 检查内部服务通信安全
+# Auth9 OIDC Engine 为内置组件，无需独立 TLS 配置
 
 # 检查到 TiDB 的连接
 # 查看连接字符串是否使用 TLS

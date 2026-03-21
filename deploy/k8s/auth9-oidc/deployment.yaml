@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth9-oidc
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: auth9-oidc
+    app.kubernetes.io/component: identity-backend
+    app.kubernetes.io/part-of: auth9
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth9-oidc
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth9-oidc
+        app.kubernetes.io/component: identity-backend
+        app.kubernetes.io/part-of: auth9
+    spec:
+      serviceAccountName: auth9
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1002
+        fsGroup: 1002
+      containers:
+        - name: auth9-oidc
+          image: ghcr.io/c9r-io/auth9-oidc:latest
+          imagePullPolicy: Always
+          command: ["auth9-oidc"]
+          ports:
+            - name: http
+              containerPort: 8090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: auth9-config
+            - secretRef:
+                name: auth9-secrets
+          env:
+            - name: HTTP_PORT
+              value: "8090"
+            - name: IDENTITY_BACKEND
+              value: "auth9_oidc"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

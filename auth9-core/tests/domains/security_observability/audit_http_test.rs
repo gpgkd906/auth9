@@ -1,6 +1,6 @@
 //! Audit HTTP API handler tests
 
-use crate::support::http::{get_json_with_auth, MockKeycloakServer, TestAppState};
+use crate::support::http::{get_json_with_auth, TestAppState};
 use auth9_core::http_support::PaginatedResponse;
 use auth9_core::repository::audit::{AuditLogWithActor, CreateAuditLogInput};
 use auth9_core::repository::AuditRepository;
@@ -13,8 +13,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_list_audit_logs_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
@@ -34,8 +33,7 @@ async fn test_list_audit_logs_empty() {
 
 #[tokio::test]
 async fn test_list_audit_logs_with_data() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
@@ -72,8 +70,7 @@ async fn test_list_audit_logs_with_data() {
 
 #[tokio::test]
 async fn test_list_audit_logs_with_resource_type_filter() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
@@ -121,8 +118,7 @@ async fn test_list_audit_logs_with_resource_type_filter() {
 
 #[tokio::test]
 async fn test_list_audit_logs_with_action_filter() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
@@ -169,8 +165,7 @@ async fn test_list_audit_logs_with_action_filter() {
 
 #[tokio::test]
 async fn test_list_audit_logs_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
@@ -207,8 +202,7 @@ async fn test_list_audit_logs_pagination() {
 
 #[tokio::test]
 async fn test_list_audit_logs_with_actor_filter() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))

@@ -50,7 +50,7 @@ export function ServiceSecretDialog({ secretDialog, onOpenChange }: ServiceSecre
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 shrink-0"
+                className="h-8 w-8 min-h-0 min-w-0 shrink-0"
                 onClick={() => secretDialog && handleCopy(secretDialog.clientId, "dialog-id")}
               >
                 {copiedField === "dialog-id" ? (
@@ -70,7 +70,7 @@ export function ServiceSecretDialog({ secretDialog, onOpenChange }: ServiceSecre
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 shrink-0"
+                className="h-8 w-8 min-h-0 min-w-0 shrink-0"
                 onClick={() => secretDialog && handleCopy(secretDialog.secret, "dialog-secret")}
               >
                 {copiedField === "dialog-secret" ? (

@@ -218,8 +218,8 @@ describe("mapApiError", () => {
     expect(mapApiError(err)).toBe("Your session has expired. Please sign in again.");
   });
 
-  it("maps keycloak_error to auth service error", () => {
-    const err = makeApiError("keycloak_error", "Authentication service error", 502);
+  it("maps identity_backend_error to auth service error", () => {
+    const err = makeApiError("identity_backend_error", "Authentication service error", 502);
     expect(mapApiError(err)).toBe(
       "The authentication service is temporarily unavailable. Please try again later."
     );

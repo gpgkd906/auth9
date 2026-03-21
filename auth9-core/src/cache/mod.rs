@@ -115,6 +115,89 @@ pub trait CacheOperations: Send + Sync {
 
     /// Set a flag key with TTL. Returns true if the key already existed.
     async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool>;
+
+    // ==================== TOTP ====================
+
+    /// Store TOTP enrollment setup state
+    async fn store_totp_setup(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get TOTP enrollment setup state
+    async fn get_totp_setup(&self, token: &str) -> Result<Option<String>>;
+
+    /// Remove TOTP enrollment setup state
+    async fn remove_totp_setup(&self, token: &str) -> Result<()>;
+
+    /// Check if a TOTP code time step has been used (replay protection)
+    async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool>;
+
+    /// Mark a TOTP code time step as used (replay protection)
+    async fn mark_totp_code_used(&self, user_id: &str, time_step: u64, ttl_secs: u64)
+        -> Result<()>;
+
+    // ==================== MFA Session ====================
+
+    /// Store MFA session data (temporary token after password auth, before MFA verification)
+    async fn store_mfa_session(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get MFA session data
+    async fn get_mfa_session(&self, token: &str) -> Result<Option<String>>;
+
+    /// Consume (get + delete) MFA session data
+    async fn consume_mfa_session(&self, token: &str) -> Result<Option<String>>;
+
+    // ==================== Login Challenge ====================
+
+    /// Store a login challenge (OIDC authorize → hosted login → authorize_complete)
+    async fn store_login_challenge(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Consume (get + delete) a login challenge
+    async fn consume_login_challenge(&self, id: &str) -> Result<Option<String>>;
+
+    // ==================== Authorization Code ====================
+
+    /// Store an authorization code (authorize_complete → token endpoint)
+    async fn store_authorization_code(&self, code: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Consume (get + delete) an authorization code (one-time use)
+    async fn consume_authorization_code(&self, code: &str) -> Result<Option<String>>;
+
+    // ==================== Social Login State ====================
+
+    /// Store social login state (social authorize → provider → callback)
+    async fn store_social_login_state(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Consume (get + delete) a social login state
+    async fn consume_social_login_state(&self, id: &str) -> Result<Option<String>>;
+
+    // ==================== Enterprise SSO State ====================
+
+    /// Store enterprise SSO login state (enterprise authorize → IdP → callback)
+    async fn store_enterprise_sso_state(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Consume (get + delete) an enterprise SSO login state
+    async fn consume_enterprise_sso_state(&self, id: &str) -> Result<Option<String>>;
+
+    // ==================== Pending Merge ====================
+
+    /// Store pending merge state (confirm-link flow for first_login_policy=prompt_confirm)
+    async fn store_pending_merge(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Consume (get + delete) a pending merge state
+    async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>>;
+
+    // ==================== Audience Validation ====================
+
+    /// Check if a client_id is a registered audience (SISMEMBER on Redis SET).
+    async fn is_valid_audience(&self, client_id: &str) -> Result<bool>;
+
+    /// Replace the entire audience set with the given list (DEL + SADD).
+    async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()>;
+
+    /// Add a single audience to the set (SADD).
+    async fn add_audience(&self, client_id: &str) -> Result<()>;
+
+    /// Remove a single audience from the set (SREM).
+    async fn remove_audience(&self, client_id: &str) -> Result<()>;
 }
 
 /// Cache key prefixes
@@ -134,6 +217,15 @@ pub(crate) mod keys {
     pub const OTP_COOLDOWN: &str = "auth9:otp_cooldown";
     pub const OTP_DAILY: &str = "auth9:otp_daily";
     pub const OTP_FAIL: &str = "auth9:otp_fail";
+    pub const TOTP_SETUP: &str = "auth9:totp_setup";
+    pub const TOTP_USED: &str = "auth9:totp_used";
+    pub const MFA_SESSION: &str = "auth9:mfa_session";
+    pub const LOGIN_CHALLENGE: &str = "auth9:login_challenge";
+    pub const AUTH_CODE: &str = "auth9:auth_code";
+    pub const SOCIAL_STATE: &str = "auth9:social_state";
+    pub const ENTERPRISE_SSO_STATE: &str = "auth9:enterprise_sso_state";
+    pub const PENDING_MERGE: &str = "auth9:pending_merge";
+    pub const VALID_AUDIENCES: &str = "auth9:valid_audiences";
 }
 
 /// Default TTLs

@@ -8,7 +8,6 @@ use crate::support::http::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
 };
-use crate::support::mock_keycloak::MockKeycloakServer;
 use auth9_core::http_support::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::models::service::{Client, Service, ServiceStatus};
 use axum::http::StatusCode;
@@ -56,8 +55,7 @@ pub struct TestClientWithSecret {
 
 #[tokio::test]
 async fn test_list_services() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
 
@@ -84,8 +82,7 @@ async fn test_list_services() {
 
 #[tokio::test]
 async fn test_list_services_with_tenant_filter() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant1 = Uuid::new_v4();
     let tenant2 = Uuid::new_v4();
@@ -117,8 +114,7 @@ async fn test_list_services_with_tenant_filter() {
 
 #[tokio::test]
 async fn test_list_services_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -133,8 +129,7 @@ async fn test_list_services_empty() {
 
 #[tokio::test]
 async fn test_list_services_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add 25 services
     for i in 1..=25 {
@@ -163,8 +158,7 @@ async fn test_list_services_pagination() {
 
 #[tokio::test]
 async fn test_get_service() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let mut service = create_test_service(Some(service_id), None);
@@ -185,8 +179,7 @@ async fn test_get_service() {
 
 #[tokio::test]
 async fn test_get_service_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -207,14 +200,7 @@ async fn test_get_service_not_found() {
 
 #[tokio::test]
 async fn test_create_service() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let client_uuid = "kc-client-12345";
-    let client_secret = "super-secret-value";
-    mock_kc
-        .setup_for_service_creation(client_uuid, client_secret)
-        .await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -234,20 +220,16 @@ async fn test_create_service() {
     assert!(body.is_some());
     let response = body.unwrap();
     assert_eq!(response.data.name, "New Service");
-    // The client_secret should be returned in the response
-    assert_eq!(response.data.client.client_secret, client_secret);
+    // The client_secret is returned from the identity engine (NoOp returns "test-secret")
+    assert_eq!(response.data.client.client_secret, "test-secret");
 }
 
 #[tokio::test]
 async fn test_create_service_with_logout_uris() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let client_uuid = "kc-client-logout";
-    let client_secret = "secret-with-logout";
-    mock_kc
-        .setup_for_service_creation(client_uuid, client_secret)
-        .await;
+    let _client_uuid = "kc-client-logout";
+    let _client_secret = "secret-with-logout";
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -275,12 +257,7 @@ async fn test_create_service_with_logout_uris() {
 
 #[tokio::test]
 async fn test_create_service_minimal() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc
-        .setup_for_service_creation("kc-minimal", "minimal-secret")
-        .await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -301,29 +278,8 @@ async fn test_create_service_minimal() {
     assert_eq!(response.data.name, "Minimal Service");
 }
 
-#[tokio::test]
-async fn test_create_service_keycloak_conflict() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_oidc_client_conflict().await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let app = build_test_router(state);
-    let token = create_test_tenant_access_token();
-
-    let tenant_id = Uuid::new_v4();
-    let input = json!({
-        "tenant_id": tenant_id.to_string(),
-        "name": "Existing Service",
-        "client_id": "existing-client",
-        "redirect_uris": []
-    });
-
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json_with_auth(&app, "/api/v1/services", &input, &token).await;
-
-    // Keycloak 409 is translated to Conflict
-    assert_eq!(status, StatusCode::CONFLICT);
-}
+// test_create_service_keycloak_conflict removed — NoOp identity engine always succeeds;
+// conflict detection requires a real identity backend.
 
 // ============================================================================
 // Update Service Tests
@@ -331,8 +287,7 @@ async fn test_create_service_keycloak_conflict() {
 
 #[tokio::test]
 async fn test_update_service() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -361,8 +316,7 @@ async fn test_update_service() {
 
 #[tokio::test]
 async fn test_update_service_status() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -391,8 +345,7 @@ async fn test_update_service_status() {
 
 #[tokio::test]
 async fn test_update_service_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -418,10 +371,7 @@ async fn test_update_service_not_found() {
 
 #[tokio::test]
 async fn test_delete_service() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.setup_for_service_deletion().await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -441,8 +391,7 @@ async fn test_delete_service() {
 
 #[tokio::test]
 async fn test_delete_service_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -463,8 +412,7 @@ async fn test_delete_service_not_found() {
 
 #[tokio::test]
 async fn test_list_clients() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -477,6 +425,7 @@ async fn test_list_clients() {
         client_id: "client-1".to_string(),
         name: Some("Client 1".to_string()),
         client_secret_hash: "hash1".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     let client2 = Client {
@@ -485,6 +434,7 @@ async fn test_list_clients() {
         client_id: "client-2".to_string(),
         name: Some("Client 2".to_string()),
         client_secret_hash: "hash2".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
 
@@ -515,15 +465,7 @@ async fn test_list_clients() {
 
 #[tokio::test]
 async fn test_create_client() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc
-        .mock_create_oidc_client_success("kc-new-client")
-        .await;
-    mock_kc
-        .mock_get_client_secret_any("new-client-secret")
-        .await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -548,18 +490,13 @@ async fn test_create_client() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let response = body.unwrap();
-    assert_eq!(response.data.client_secret, "new-client-secret");
+    // NoOp identity engine returns "test-secret" for get_client_secret
+    assert_eq!(response.data.client_secret, "test-secret");
 }
 
 #[tokio::test]
 async fn test_create_client_without_name() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc
-        .mock_create_oidc_client_success("kc-nameless-client")
-        .await;
-    mock_kc.mock_get_client_secret_any("nameless-secret").await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -585,11 +522,7 @@ async fn test_create_client_without_name() {
 
 #[tokio::test]
 async fn test_delete_client() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_get_client_uuid_not_found().await;
-    mock_kc.mock_delete_oidc_client_success().await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -601,6 +534,7 @@ async fn test_delete_client() {
         client_id: "client-to-delete".to_string(),
         name: Some("Client to Delete".to_string()),
         client_secret_hash: "hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -623,16 +557,9 @@ async fn test_delete_client() {
 
 #[tokio::test]
 async fn test_regenerate_client_secret() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let kc_uuid = "kc-client-uuid";
-    mock_kc
-        .mock_get_client_uuid_by_client_id("existing-client", kc_uuid)
-        .await;
-    mock_kc
-        .mock_regenerate_client_secret(kc_uuid, "brand-new-secret")
-        .await;
+    let _kc_uuid = "kc-client-uuid";
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -644,6 +571,7 @@ async fn test_regenerate_client_secret() {
         client_id: "existing-client".to_string(),
         name: Some("Existing Client".to_string()),
         client_secret_hash: "old-hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -666,7 +594,8 @@ async fn test_regenerate_client_secret() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let response = body.unwrap();
-    assert_eq!(response.data["client_secret"], "brand-new-secret");
+    // NoOp identity engine returns "test-secret" for regenerate_client_secret
+    assert_eq!(response.data["client_secret"], "test-secret");
     assert_eq!(response.data["client_id"], "existing-client");
 }
 
@@ -676,12 +605,7 @@ async fn test_regenerate_client_secret() {
 
 #[tokio::test]
 async fn test_service_with_multiple_redirect_uris() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc
-        .setup_for_service_creation("kc-multi-uri", "multi-uri-secret")
-        .await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -713,17 +637,9 @@ async fn test_service_with_multiple_redirect_uris() {
 
 #[tokio::test]
 async fn test_integration_info_success() {
-    let mock_kc = MockKeycloakServer::new().await;
     // Register specific mock first (wiremock matches FIFO)
-    mock_kc
-        .mock_get_client_secret("kc-uuid-1", "the-secret-value")
-        .await;
     // Then register broader client lookup mock
-    mock_kc
-        .mock_get_client_uuid_by_client_id("test-client", "kc-uuid-1")
-        .await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -736,6 +652,7 @@ async fn test_integration_info_success() {
         client_id: "test-client".to_string(),
         name: Some("Main Client".to_string()),
         client_secret_hash: "hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -761,7 +678,8 @@ async fn test_integration_info_success() {
     let clients = data["clients"].as_array().unwrap();
     assert_eq!(clients.len(), 1);
     assert_eq!(clients[0]["client_id"], "test-client");
-    assert_eq!(clients[0]["client_secret"], "the-secret-value");
+    // NoOp identity engine returns "test-secret" for get_client_secret
+    assert_eq!(clients[0]["client_secret"], "test-secret");
     assert_eq!(clients[0]["public_client"], false);
 
     // Verify endpoints
@@ -790,13 +708,12 @@ async fn test_integration_info_success() {
         .any(|v| v["key"] == "AUTH9_CLIENT_ID" && v["value"] == "test-client"));
     assert!(env_vars
         .iter()
-        .any(|v| v["key"] == "AUTH9_CLIENT_SECRET" && v["value"] == "the-secret-value"));
+        .any(|v| v["key"] == "AUTH9_CLIENT_SECRET" && v["value"] == "test-secret"));
 }
 
 #[tokio::test]
 async fn test_integration_info_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let token = create_test_tenant_access_token();
 
@@ -813,8 +730,7 @@ async fn test_integration_info_not_found() {
 
 #[tokio::test]
 async fn test_integration_info_no_clients() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);
@@ -843,8 +759,7 @@ async fn test_integration_info_no_clients() {
 
 #[tokio::test]
 async fn test_update_service_redirect_uris() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let service_id = Uuid::new_v4();
     let service = create_test_service(Some(service_id), None);

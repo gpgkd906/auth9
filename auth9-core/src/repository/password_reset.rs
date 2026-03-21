@@ -22,6 +22,10 @@ pub trait PasswordResetRepository: Send + Sync {
         &self,
         input: &CreatePasswordResetTokenInput,
     ) -> Result<PasswordResetToken>;
+    /// Store a password hash in the password history table.
+    async fn store_password_hash(&self, user_id: StringUuid, password_hash: &str) -> Result<()>;
+    /// Get the most recent password hashes for a user, ordered newest first.
+    async fn get_password_history(&self, user_id: StringUuid, limit: u32) -> Result<Vec<String>>;
 }
 
 pub struct PasswordResetRepositoryImpl {
@@ -238,6 +242,42 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
 
         Ok(token)
     }
+
+    async fn store_password_hash(&self, user_id: StringUuid, password_hash: &str) -> Result<()> {
+        let id = StringUuid::new_v4();
+
+        sqlx::query(
+            r#"
+            INSERT INTO password_history (id, user_id, password_hash, created_at)
+            VALUES (?, ?, ?, NOW())
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(password_hash)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_password_history(&self, user_id: StringUuid, limit: u32) -> Result<Vec<String>> {
+        let rows = sqlx::query_as::<_, (String,)>(
+            r#"
+            SELECT password_hash
+            FROM password_history
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|(hash,)| hash).collect())
+    }
 }
 
 impl PasswordResetRepositoryImpl {
@@ -387,5 +427,52 @@ mod tests {
         let result = mock.replace_for_user(&input).await.unwrap();
         assert_eq!(result.user_id, user_id);
         assert_eq!(result.token_hash, "new-hash");
+    }
+
+    #[tokio::test]
+    async fn test_mock_store_password_hash() {
+        let mut mock = MockPasswordResetRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_store_password_hash()
+            .with(eq(user_id), eq("$argon2id$test-hash"))
+            .returning(|_, _| Ok(()));
+
+        let result = mock
+            .store_password_hash(user_id, "$argon2id$test-hash")
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_get_password_history() {
+        let mut mock = MockPasswordResetRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_get_password_history()
+            .with(eq(user_id), eq(5u32))
+            .returning(|_, _| {
+                Ok(vec![
+                    "$argon2id$hash1".to_string(),
+                    "$argon2id$hash2".to_string(),
+                ])
+            });
+
+        let result = mock.get_password_history(user_id, 5).await.unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "$argon2id$hash1");
+    }
+
+    #[tokio::test]
+    async fn test_mock_get_password_history_empty() {
+        let mut mock = MockPasswordResetRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_get_password_history()
+            .with(eq(user_id), eq(5u32))
+            .returning(|_, _| Ok(vec![]));
+
+        let result = mock.get_password_history(user_id, 5).await.unwrap();
+        assert!(result.is_empty());
     }
 }

@@ -16,14 +16,14 @@ auth9-demo (localhost:3002)
    ↓ GET /api/v1/auth/authorize
 Auth9 Core (localhost:8080)
    ↓ 302 Redirect (redirect_uri=Auth9 Core callback)
-Keycloak (localhost:8081)
+Auth9 OIDC 引擎
    ↓ 用户登录后 302 回 Auth9 Core
 Auth9 Core /api/v1/auth/callback
    ↓ 存储 state → 重定向到 demo /auth/callback
 auth9-demo /auth/callback
    ↓ POST /api/v1/auth/token (exchange code for Auth9-signed Identity Token)
 Auth9 Core
-   ↓ Exchange with Keycloak (public client, no secret)
+   ↓ 验证并签发 Identity Token (public client, no secret)
    ↓ Return Auth9-signed Identity Token
 auth9-demo /dashboard
    ↓ POST /demo/exchange-token (gRPC)
@@ -32,10 +32,10 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
 
 关键点：
 - auth9-demo 是 **public client**（无 client_secret），token exchange 不传 secret
-- auth9-demo 在 Keycloak 中配置了 `pkce.code.challenge.method=S256`，**强制要求 PKCE**
-- Auth9 Core 的 callback URL 必须在 Keycloak 的 redirect_uris 中注册
+- auth9-demo 配置了 `pkce.code.challenge.method=S256`，**强制要求 PKCE**
+- Auth9 Core 的 callback URL 必须在 OIDC client 的 redirect_uris 中注册
 - gRPC exchangeToken 的 `tenantId` 支持 UUID 和 slug 两种格式
-- Demo 使用 Auth9-signed `access_token`（非 Keycloak 的 `id_token`）进行 gRPC 调用
+- Demo 使用 Auth9-signed `access_token` 进行 gRPC 调用
 
 > **与 Portal 登录流程的区别**：auth9-demo 是独立的第三方示例应用，其「Login with Auth9」按钮直接调用 `/api/v1/auth/authorize`（不带 `connector_alias`），进入 Auth9 托管的密码认证链路。这等价于 Auth9 Portal `/login` 页面上的「**Sign in with password**」路径。Demo 应用不涉及 Enterprise SSO 或 Passkey。
 
@@ -95,11 +95,7 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
 docker exec auth9-redis redis-cli PING
 # 预期: PONG
 
-# 2. Keycloak 健康且可访问
-curl -sf http://localhost:8081/health/ready
-# 预期: HTTP 200
-
-# 3. auth9-core 健康
+# 2. auth9-core 健康
 curl -sf http://localhost:8080/health
 # 预期: HTTP 200
 ```
@@ -137,7 +133,7 @@ WHERE email = 'admin@auth9.local';
   - Email: `admin@auth9.local`
   - Name: `Admin User`
 - Authentication Debug 区域:
-  - 标签为 "Identity Token (Auth9-signed)"（非 "from Keycloak"）
+  - 标签为 "Identity Token (Auth9-signed)"
   - Decoded Payload 包含 `sub`, `email`, `name` 字段
   - 展开 "View raw token" 显示 JWT 字符串（以 `eyJ` 开头）
 - 页面右上角显示 "Logout" 链接
@@ -148,15 +144,15 @@ WHERE email = 'admin@auth9.local';
 | 现象 | 原因 | 解决方法 |
 |------|------|----------|
 | "Missing state" 或 "Invalid state" 错误 | Redis 未运行或 state key 已过期（TTL=300s） | `docker exec auth9-redis redis-cli PING` 确认 Redis 可达；若登录耗时超过 5 分钟需重新发起 |
-| "Missing state" 但 Redis 正常 | Keycloak 未在重定向中保留 state 参数 | 检查 Keycloak realm 的 Valid Redirect URIs 配置，确认包含 `http://localhost:8080/api/v1/auth/callback` |
+| "Missing state" 但 Redis 正常 | OIDC 引擎未在重定向中保留 state 参数 | 检查 OIDC client 的 Valid Redirect URIs 配置，确认包含 `http://localhost:8080/api/v1/auth/callback` |
 | callback 返回 500 或连接拒绝 | auth9-demo 的 `AUTH9_URL` 配置错误，指向了错误的 auth9-core 地址 | 检查 docker-compose 中 `AUTH9_URL` 环境变量，应为 `http://localhost:8080`（或容器内地址） |
 | 登录后停留在空白页 | 浏览器 cookie 阻止了跨域重定向 | 使用 Chrome 无痕模式，或确认 `localhost` 域名一致（不要混用 `127.0.0.1`） |
 
 ### 预期数据状态
 ```sql
 -- Auth9 Core 应创建用户记录
-SELECT id, keycloak_id, email, display_name FROM users WHERE email = 'admin@auth9.local';
--- 预期: 存在记录，keycloak_id 非空
+SELECT id, identity_subject, email, display_name FROM users WHERE email = 'admin@auth9.local';
+-- 预期: 存在记录，identity_subject 非空
 
 -- 应创建 session
 SELECT id, user_id, created_at FROM sessions
@@ -240,6 +236,6 @@ echo "<accessToken>" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
 |--------|----------|----------|
 | OIDC redirect_uri | seeder 在 auth9-demo 客户端注册 Auth9 Core callback URL | 场景 2 |
 | Public client token exchange | auth9-core 对 public client 不传 client_secret | 场景 3 |
-| Identity Token 来源 | demo 使用 Auth9-signed `access_token`（非 Keycloak `id_token`） | 场景 3, 4 |
+| Identity Token 来源 | demo 使用 Auth9-signed `access_token` | 场景 3, 4 |
 | gRPC tenant slug 支持 | exchangeToken 接受 tenant slug（如 `demo`）而非仅 UUID | 场景 4 |
 | AUTH9_AUDIENCE 配置 | docker-compose 中 `AUTH9_AUDIENCE=auth9-demo`（匹配 client_id） | 场景 4 |

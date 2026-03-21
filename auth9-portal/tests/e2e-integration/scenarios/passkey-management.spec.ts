@@ -152,34 +152,6 @@ test.describe("Scenario: WebAuthn API", () => {
   });
 });
 
-/**
- * Scenario: Keycloak WebAuthn Integration
- *
- * Tests the Keycloak WebAuthn configuration.
- */
-test.describe("Scenario: Keycloak WebAuthn Integration", () => {
-  test("1. Keycloak realm has WebAuthn enabled", async ({ request }) => {
-    const response = await request.get(
-      `${TEST_CONFIG.keycloakUrl}/realms/${TEST_CONFIG.keycloakRealm}/.well-known/openid-configuration`
-    );
-
-    expect(response.ok()).toBeTruthy();
-    const config = await response.json();
-    expect(config).toHaveProperty("issuer");
-  });
-
-  test("2. WebAuthn registration redirects to Keycloak", async ({ page }) => {
-    await loginAsTestUser(page);
-    await page.goto("/dashboard/settings/passkeys");
-
-    const addButton = page.getByRole("button", { name: /add passkey|register/i });
-    if (await addButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      // Note: Clicking would redirect to Keycloak, we just verify button exists
-      await expect(addButton).toBeVisible();
-    }
-  });
-});
-
 // Helper function
 async function loginAsTestUser(page: Page): Promise<void> {
   const testUser = TEST_CONFIG.testUsers.standard;

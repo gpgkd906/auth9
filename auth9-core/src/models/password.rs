@@ -34,12 +34,10 @@ impl Default for PasswordResetToken {
 
 /// Password policy configuration for a tenant
 ///
-/// Defaults must match the Keycloak realm password policy configured in
-/// `seeder.rs::configure_realm_security` to avoid Keycloak rejecting
-/// passwords that pass auth9 validation.
+/// Defaults define sensible password policy constraints for the tenant.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct PasswordPolicy {
-    /// Minimum password length (default: 12, matches Keycloak realm `length(12)`)
+    /// Minimum password length (default: 12)
     #[serde(default = "default_min_length")]
     pub min_length: u32,
     /// Require at least one uppercase letter
@@ -51,17 +49,17 @@ pub struct PasswordPolicy {
     /// Require at least one number
     #[serde(default = "default_true")]
     pub require_numbers: bool,
-    /// Require at least one symbol (matches Keycloak realm `specialChars(1)`)
+    /// Require at least one symbol
     #[serde(default = "default_true")]
     pub require_symbols: bool,
     /// Maximum password age in days (0 = no expiry)
     #[serde(default)]
     pub max_age_days: u32,
-    /// Number of previous passwords to remember (0 = disabled, matches Keycloak `passwordHistory(5)`)
+    /// Number of previous passwords to remember (0 = disabled)
     #[serde(default = "default_history_count")]
     pub history_count: u32,
     /// Number of failed attempts before lockout (0 = disabled)
-    #[serde(default)]
+    #[serde(default = "default_lockout_threshold")]
     pub lockout_threshold: u32,
     /// Lockout duration in minutes
     #[serde(default = "default_lockout_duration")]
@@ -78,7 +76,7 @@ impl Default for PasswordPolicy {
             require_symbols: true,
             max_age_days: 0,
             history_count: 5,
-            lockout_threshold: 0,
+            lockout_threshold: 5,
             lockout_duration_mins: 15,
         }
     }
@@ -93,6 +91,10 @@ fn default_min_length() -> u32 {
 }
 
 fn default_history_count() -> u32 {
+    5
+}
+
+fn default_lockout_threshold() -> u32 {
     5
 }
 
@@ -217,7 +219,7 @@ mod tests {
         assert!(policy.require_symbols);
         assert_eq!(policy.max_age_days, 0);
         assert_eq!(policy.history_count, 5);
-        assert_eq!(policy.lockout_threshold, 0);
+        assert_eq!(policy.lockout_threshold, 5);
         assert_eq!(policy.lockout_duration_mins, 15);
     }
 

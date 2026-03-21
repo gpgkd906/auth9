@@ -94,7 +94,9 @@ ORDER BY created_at DESC LIMIT 1;
 
 ### 初始状态
 - 场景 1 已创建 Engineering Group
-- 已有第二个 SCIM 用户
+- **已通过 `POST /api/v1/scim/v2/Users` 创建第二个 SCIM 用户**（SCIM 创建的用户会自动加入 SCIM connector 对应的租户）
+
+> **重要**: 第二个用户必须通过 SCIM `/Users` 端点创建，以确保自动创建 `tenant_users` 记录。手动在 `users` 表中插入的用户不会有 `tenant_users` 关联，导致 PATCH 操作失败并返回 `"User not in tenant"` 错误。
 
 ### 目的
 验证 PATCH /Groups/{id} 支持 add/remove members 操作，自动同步 Auth9 角色分配
@@ -292,6 +294,8 @@ ORDER BY created_at DESC LIMIT 1;
 | `FORBIDDEN: Identity token is only allowed for tenant selection and exchange` | 使用了 Identity Token 访问 `/api/v1/tenants/*` 路径 | 使用 `gen-test-tokens.js tenant-owner` 生成 Tenant Access Token |
 | `UNAUTHORIZED` | Token 过期或签名无效 | 重新生成 Token，确保 `jwt_private_clean.key` 存在 |
 | `404 Not Found` on group-mappings | `tenant_id` 或 `connector_id` 不正确 | 从数据库查询正确的 ID：`SELECT id, tenant_id FROM sso_connectors;` |
+| `500: User not in tenant` | PATCH 添加成员时用户未关联到租户 | 用户必须通过 SCIM `/Users` 端点创建（自动创建 `tenant_users` 记录），不能手动 INSERT 到 users 表 |
+| `500: SCIM group mapping not found` on DELETE | 场景 4 PUT 替换了所有映射，原映射被删除 | DELETE 已改为幂等操作，返回 204 即使映射不存在 |
 
 ## 检查清单
 

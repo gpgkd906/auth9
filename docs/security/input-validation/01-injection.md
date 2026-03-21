@@ -16,7 +16,7 @@
 Auth9 技术栈注入风险点：
 - **SQL**: TiDB (MySQL 兼容)，使用 sqlx 参数化查询
 - **Redis**: 可能的命令注入
-- **Keycloak API**: HTTP 参数注入
+- **OIDC Engine API**: HTTP 参数注入
 
 ---
 
@@ -167,14 +167,14 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 ---
 
-## 场景 4：LDAP / Keycloak 注入
+## 场景 4：LDAP / OIDC Engine 注入
 
 ### 前置条件
-- 系统与 Keycloak 集成
+- 系统使用 Auth9 OIDC Engine
 - 用户搜索功能
 
 ### 攻击目标
-验证 Keycloak Admin API 调用是否存在注入
+验证用户搜索 API 调用是否存在注入
 
 ### 攻击步骤
 1. 找到用户搜索/同步功能
@@ -190,18 +190,18 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 ### 验证方法
 ```bash
-# Keycloak 用户搜索
+# 用户搜索
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users?search=*)(%26"
 # 预期: 空结果或 400 错误
 
-# 检查 Keycloak 日志是否有异常查询
-docker logs keycloak 2>&1 | grep -i "search"
+# 检查 auth9-core 日志是否有异常查询
+docker logs auth9-core 2>&1 | grep -i "search"
 ```
 
 ### 修复建议
 - 转义 LDAP 特殊字符
-- 使用 Keycloak SDK 的安全方法
+- 使用参数化查询的安全方法
 - 限制搜索返回字段
 - 输入白名单验证
 
@@ -266,7 +266,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 1 | SQL 注入 - 认证绕过 | ✅ | 2026-02-15 | QA测试 | 通过 - 无漏洞 |
 | 2 | SQL 注入 - 数据提取 | ✅ | 2026-02-15 | QA测试 | 通过 - 无漏洞 |
 | 3 | NoSQL / Redis 注入 | ✅ | 2026-02-15 | QA测试 | 通过 - 无漏洞 |
-| 4 | LDAP / Keycloak 注入 | ✅ | 2026-02-15 | QA测试 | 通过 - 无漏洞 |
+| 4 | LDAP / OIDC Engine 注入 | ✅ | 2026-02-15 | QA测试 | 通过 - 无漏洞 |
 | 5 | 命令注入 | ✅ | 2026-02-15 | QA测试 | 通过 - 无漏洞 |
 
 ---

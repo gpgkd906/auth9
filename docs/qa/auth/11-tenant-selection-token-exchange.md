@@ -2,7 +2,7 @@
 
 **模块**: 认证流程
 **测试范围**: 登录后 tenant 选择页、切换 tenant 时 token exchange、Identity Token 权限收敛、gRPC 使用 tenant token
-**场景数**: 5
+**场景数**: 6
 **优先级**: 高
 
 ---
@@ -134,7 +134,64 @@ curl -i http://localhost:8080/api/v1/tenants/{tenant_id}/users \
 
 ---
 
-## 场景 5：gRPC 业务调用使用 tenant token（identity token 仅用于 exchange）
+## 场景 5：不同 service_id 的 token exchange 均成功（动态 audience 验证）
+
+### 初始状态
+- 已有 `{identity_token}`
+- 用户属于 `{tenant_id}`
+- 该 tenant 下有至少两个 Service（如 `auth9-portal` 和 `auth9-demo`）
+
+### 目的
+验证 token exchange 不受静态白名单限制，任何已注册 client_id 均可 exchange 并使用
+
+> **回归背景**：早期版本中 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 是静态环境变量，只有白名单中的 `aud` 能通过 middleware。动态创建的 Service 的 client_id 不在白名单中，签发出的 tenant token 会被 401 拒绝。该 bug 在社交登录全链路 QA 中发现。
+
+### 测试操作流程
+1. 使用 `auth9-portal` 做 exchange：
+
+```bash
+curl -s -X POST "http://localhost:8080/api/v1/auth/tenant-token" \
+  -H "Authorization: Bearer {identity_token}" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":"{tenant_id}","service_id":"auth9-portal"}'
+```
+
+2. 使用 `auth9-demo` 做 exchange：
+
+```bash
+curl -s -X POST "http://localhost:8080/api/v1/auth/tenant-token" \
+  -H "Authorization: Bearer {identity_token}" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":"{tenant_id}","service_id":"auth9-demo"}'
+```
+
+3. 使用两个 token 分别访问 protected endpoint：
+
+```bash
+# auth9-portal token
+curl -i http://localhost:8080/api/v1/identity-providers \
+  -H "Authorization: Bearer {tenant_token_portal}"
+
+# auth9-demo token
+curl -i http://localhost:8080/api/v1/identity-providers \
+  -H "Authorization: Bearer {tenant_token_demo}"
+```
+
+### 预期结果
+- 两次 exchange 均返回 `200`
+- 两个 token 均可访问 protected endpoint（返回 `200`）
+- `auth9-demo` token（`aud=auth9-demo`）**不应**返回 `401`
+
+### 常见误报
+
+| 症状 | 原因 | 结论 |
+|------|------|------|
+| `auth9-portal` 通过但 `auth9-demo` 返回 401 | audience 仍走静态白名单 | **BUG** — 必须使用动态 Redis SET 验证 |
+| 两个都返回 401 | Redis audience SET 未种子化 | 检查启动日志 `Audience validation set loaded into Redis` |
+
+---
+
+## 场景 6：gRPC 业务调用使用 tenant token（identity token 仅用于 exchange）
 
 ### 初始状态
 - 已登录 auth9-demo，session 中有 `identityToken`
@@ -182,4 +239,5 @@ curl -i http://localhost:3002/api/resources \
 | 2 | 单租户用户自动 exchange 并进入 Dashboard | ☐ | | | |
 | 3 | Dashboard 切换 tenant 必须重新 exchange | ☐ | | | |
 | 4 | Identity Token 访问 tenant 业务接口被拒绝 | ☐ | | | |
-| 5 | gRPC 业务调用使用 tenant token（identity token 仅用于 exchange） | ☐ | | | |
+| 5 | 不同 service_id 的 token exchange 均成功 | ☐ | | | **核心回归点** |
+| 6 | gRPC 业务调用使用 tenant token（identity token 仅用于 exchange） | ☐ | | | |

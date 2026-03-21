@@ -2,9 +2,7 @@
 //!
 //! Tests for invitation management endpoints.
 
-use crate::support::http::{
-    get_json_with_auth, post_json, post_json_with_auth, MockKeycloakServer, TestAppState,
-};
+use crate::support::http::{get_json_with_auth, post_json, post_json_with_auth, TestAppState};
 use crate::support::{
     create_test_identity_token, create_test_role, create_test_service, create_test_tenant,
 };
@@ -20,8 +18,7 @@ use chrono::Utc;
 
 #[tokio::test]
 async fn test_list_invitations_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -47,8 +44,7 @@ async fn test_list_invitations_empty() {
 
 #[tokio::test]
 async fn test_list_invitations_with_data() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -91,8 +87,7 @@ async fn test_list_invitations_with_data() {
 
 #[tokio::test]
 async fn test_list_invitations_filter_by_status() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -158,8 +153,7 @@ async fn test_list_invitations_filter_by_status() {
 
 #[tokio::test]
 async fn test_create_invitation_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -202,8 +196,7 @@ async fn test_create_invitation_success() {
 
 #[tokio::test]
 async fn test_create_invitation_no_auth() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -234,8 +227,7 @@ async fn test_create_invitation_no_auth() {
 
 #[tokio::test]
 async fn test_get_invitation_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let invitation = Invitation {
         id: StringUuid::new_v4(),
@@ -272,8 +264,7 @@ async fn test_get_invitation_success() {
 
 #[tokio::test]
 async fn test_get_invitation_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_invitation_test_router(state);
     let token = create_test_identity_token();
@@ -296,8 +287,7 @@ async fn test_get_invitation_not_found() {
 
 #[tokio::test]
 async fn test_revoke_invitation_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let invitation = Invitation {
         id: StringUuid::new_v4(),
@@ -335,8 +325,7 @@ async fn test_revoke_invitation_success() {
 
 #[tokio::test]
 async fn test_revoke_invitation_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_invitation_test_router(state);
     let token = create_test_identity_token();
@@ -360,8 +349,7 @@ async fn test_revoke_invitation_not_found() {
 
 #[tokio::test]
 async fn test_delete_invitation_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let invitation = Invitation {
         id: StringUuid::new_v4(),
@@ -397,8 +385,7 @@ async fn test_delete_invitation_success() {
 
 #[tokio::test]
 async fn test_delete_invitation_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_invitation_test_router(state);
     let token = create_test_identity_token();
@@ -422,8 +409,7 @@ async fn test_delete_invitation_not_found() {
 #[tokio::test]
 async fn test_resend_invitation_no_email_provider() {
     // When email provider is not configured, resend should return 400
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -462,8 +448,7 @@ async fn test_resend_invitation_no_email_provider() {
 
 #[tokio::test]
 async fn test_resend_invitation_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_invitation_test_router(state);
     let token = create_test_identity_token();
@@ -482,8 +467,7 @@ async fn test_resend_invitation_not_found() {
 
 #[tokio::test]
 async fn test_resend_revoked_invitation_fails() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let invitation = Invitation {
         id: StringUuid::new_v4(),
@@ -522,8 +506,7 @@ async fn test_resend_revoked_invitation_fails() {
 
 #[tokio::test]
 async fn test_accept_invitation_empty_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_invitation_test_router(state);
 
@@ -540,8 +523,7 @@ async fn test_accept_invitation_empty_token() {
 
 #[tokio::test]
 async fn test_accept_invitation_invalid_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_invitation_test_router(state);
 
@@ -562,8 +544,7 @@ async fn test_accept_invitation_invalid_token() {
 
 #[tokio::test]
 async fn test_list_invitations_service_client_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -588,8 +569,7 @@ async fn test_list_invitations_service_client_returns_403() {
 
 #[tokio::test]
 async fn test_list_invitations_non_admin_identity_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -611,8 +591,7 @@ async fn test_list_invitations_non_admin_identity_returns_403() {
 
 #[tokio::test]
 async fn test_list_invitations_tenant_access_wrong_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -645,8 +624,7 @@ async fn test_list_invitations_tenant_access_wrong_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_list_invitations_tenant_access_same_tenant_succeeds() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -680,8 +658,7 @@ async fn test_list_invitations_tenant_access_same_tenant_succeeds() {
 
 #[tokio::test]
 async fn test_create_invitation_service_client_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -712,8 +689,7 @@ async fn test_create_invitation_service_client_returns_403() {
 
 #[tokio::test]
 async fn test_create_invitation_tenant_access_member_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -752,8 +728,7 @@ async fn test_create_invitation_tenant_access_member_returns_403() {
 
 #[tokio::test]
 async fn test_create_invitation_cross_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -792,8 +767,7 @@ async fn test_create_invitation_cross_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_create_invitation_non_admin_identity_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -820,8 +794,7 @@ async fn test_create_invitation_non_admin_identity_returns_403() {
 
 #[tokio::test]
 async fn test_create_invitation_user_already_member_returns_409() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -864,8 +837,7 @@ async fn test_create_invitation_user_already_member_returns_409() {
 
 #[tokio::test]
 async fn test_create_invitation_invalid_role_returns_400() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -897,8 +869,7 @@ async fn test_create_invitation_invalid_role_returns_400() {
 
 #[tokio::test]
 async fn test_list_invitations_with_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -989,8 +960,7 @@ fn create_pending_invitation(
 async fn test_accept_invitation_existing_user_success() {
     use auth9_core::models::user::User;
 
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1003,7 +973,7 @@ async fn test_accept_invitation_existing_user_success() {
     // Add existing user matching the invitation email
     let user = User {
         id: StringUuid::new_v4(),
-        keycloak_id: "kc-user-1".to_string(),
+        identity_subject: "kc-user-1".to_string(),
         email: "existing@example.com".to_string(),
         display_name: Some("Existing User".to_string()),
         ..Default::default()
@@ -1027,10 +997,7 @@ async fn test_accept_invitation_existing_user_success() {
 
 #[tokio::test]
 async fn test_accept_invitation_new_user_with_keycloak_creation() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_user_success("new-kc-user-id").await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1060,8 +1027,7 @@ async fn test_accept_invitation_new_user_with_keycloak_creation() {
 
 #[tokio::test]
 async fn test_accept_invitation_new_user_without_password_fails() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1086,8 +1052,7 @@ async fn test_accept_invitation_new_user_without_password_fails() {
 
 #[tokio::test]
 async fn test_accept_invitation_expired() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1112,8 +1077,7 @@ async fn test_accept_invitation_expired() {
 
 #[tokio::test]
 async fn test_accept_invitation_already_accepted() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1140,8 +1104,7 @@ async fn test_accept_invitation_already_accepted() {
 
 #[tokio::test]
 async fn test_accept_invitation_email_mismatch() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1168,8 +1131,7 @@ async fn test_accept_invitation_email_mismatch() {
 async fn test_accept_invitation_with_role_assignment() {
     use auth9_core::models::user::User;
 
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1191,7 +1153,7 @@ async fn test_accept_invitation_with_role_assignment() {
     // Add existing user
     let user = User {
         id: StringUuid::new_v4(),
-        keycloak_id: "kc-role-user".to_string(),
+        identity_subject: "kc-role-user".to_string(),
         email: "roleuser@example.com".to_string(),
         display_name: Some("Role User".to_string()),
         ..Default::default()
@@ -1219,8 +1181,7 @@ async fn test_accept_invitation_with_role_assignment() {
 
 #[tokio::test]
 async fn test_create_invitation_role_service_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -1255,8 +1216,7 @@ async fn test_create_invitation_role_service_not_found() {
 
 #[tokio::test]
 async fn test_create_invitation_role_from_different_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;

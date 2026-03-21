@@ -2,7 +2,7 @@
 //!
 //! Tests for analytics/stats and login events endpoints.
 
-use crate::support::http::{get_json, MockKeycloakServer, TestAppState};
+use crate::support::http::{get_json, TestAppState};
 use crate::support::{create_test_tenant, create_test_user};
 use auth9_core::http_support::{PaginatedResponse, SuccessResponse};
 use auth9_core::models::analytics::{LoginEvent, LoginEventType, LoginStats};
@@ -16,8 +16,7 @@ use chrono::Utc;
 
 #[tokio::test]
 async fn test_get_stats_daily_period() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add some login events
     add_test_login_events(&state, 5).await;
@@ -35,8 +34,7 @@ async fn test_get_stats_daily_period() {
 
 #[tokio::test]
 async fn test_get_stats_weekly_period() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 10).await;
 
@@ -53,8 +51,7 @@ async fn test_get_stats_weekly_period() {
 
 #[tokio::test]
 async fn test_get_stats_monthly_period() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 15).await;
 
@@ -71,8 +68,7 @@ async fn test_get_stats_monthly_period() {
 
 #[tokio::test]
 async fn test_get_stats_custom_days() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 8).await;
 
@@ -89,8 +85,7 @@ async fn test_get_stats_custom_days() {
 
 #[tokio::test]
 async fn test_get_stats_default() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 3).await;
 
@@ -108,8 +103,7 @@ async fn test_get_stats_default() {
 
 #[tokio::test]
 async fn test_get_stats_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_analytics_test_router(state);
 
@@ -130,8 +124,7 @@ async fn test_get_stats_empty() {
 
 #[tokio::test]
 async fn test_list_events_with_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 25).await;
 
@@ -151,8 +144,7 @@ async fn test_list_events_with_pagination() {
 
 #[tokio::test]
 async fn test_list_events_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_analytics_test_router(state);
 
@@ -168,8 +160,7 @@ async fn test_list_events_empty() {
 
 #[tokio::test]
 async fn test_list_user_events() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -194,8 +185,7 @@ async fn test_list_user_events() {
 
 #[tokio::test]
 async fn test_list_tenant_events() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
     let tenant_id = tenant.id;
@@ -223,8 +213,7 @@ async fn test_list_tenant_events() {
 
 #[tokio::test]
 async fn test_get_stats_with_start_end_dates() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 12).await;
 
@@ -248,9 +237,54 @@ async fn test_get_stats_with_start_end_dates() {
 }
 
 #[tokio::test]
+async fn test_get_stats_with_date_only_format() {
+    let state = TestAppState::new("http://localhost:8081");
+
+    add_test_login_events(&state, 8).await;
+
+    let app = build_analytics_test_router(state);
+
+    // Use current year date-only format (YYYY-MM-DD)
+    let now = Utc::now();
+    let start = format!("{}-01-01", now.format("%Y"));
+    let end = format!("{}-12-31", now.format("%Y"));
+
+    let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) = get_json(
+        &app,
+        &format!("/api/v1/analytics/login-stats?start={}&end={}", start, end),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let stats = body.unwrap().data;
+    assert_eq!(stats.total_logins, 8);
+}
+
+#[tokio::test]
+async fn test_get_stats_future_date_returns_zero() {
+    let state = TestAppState::new("http://localhost:8081");
+
+    add_test_login_events(&state, 5).await;
+
+    let app = build_analytics_test_router(state);
+
+    // Future dates should return 0 events
+    let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) = get_json(
+        &app,
+        "/api/v1/analytics/login-stats?start=2027-01-01&end=2027-01-31",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let stats = body.unwrap().data;
+    assert_eq!(stats.total_logins, 0);
+}
+
+#[tokio::test]
 async fn test_get_stats_with_invalid_dates_falls_back() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 5).await;
 
@@ -269,8 +303,7 @@ async fn test_get_stats_with_invalid_dates_falls_back() {
 
 #[tokio::test]
 async fn test_get_stats_period_aliases() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 6).await;
 
@@ -297,8 +330,7 @@ async fn test_get_stats_period_aliases() {
 
 #[tokio::test]
 async fn test_list_events_filter_by_email() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add events with specific email
     for i in 0..5 {
@@ -314,6 +346,8 @@ async fn test_list_events_filter_by_email() {
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;
@@ -339,8 +373,7 @@ async fn test_list_events_filter_by_email() {
 
 #[tokio::test]
 async fn test_list_events_second_page() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     add_test_login_events(&state, 30).await;
 
@@ -359,8 +392,7 @@ async fn test_list_events_second_page() {
 
 #[tokio::test]
 async fn test_list_user_events_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -410,6 +442,8 @@ async fn add_test_login_events(state: &TestAppState, count: usize) {
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;
@@ -430,6 +464,8 @@ async fn add_test_login_events_for_user(state: &TestAppState, user_id: StringUui
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;
@@ -454,6 +490,8 @@ async fn add_test_login_events_for_tenant(
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;

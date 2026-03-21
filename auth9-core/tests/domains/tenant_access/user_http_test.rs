@@ -6,7 +6,6 @@ use crate::support::http::{
     build_test_router, delete_json_body_with_auth, delete_json_with_auth, get_json_with_auth,
     post_json, post_json_with_auth, put_json_with_auth, TestAppState,
 };
-use crate::support::mock_keycloak::MockKeycloakServer;
 use crate::support::{
     create_test_identity_token_for_user, create_test_tenant, create_test_tenant_access_token,
     create_test_tenant_access_token_for_tenant, create_test_tenant_access_token_for_user,
@@ -24,8 +23,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_list_users_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
@@ -62,8 +60,7 @@ async fn test_list_users_returns_200() {
 
 #[tokio::test]
 async fn test_list_users_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
@@ -100,8 +97,7 @@ async fn test_list_users_pagination() {
 
 #[tokio::test]
 async fn test_list_users_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
@@ -121,8 +117,7 @@ async fn test_list_users_empty() {
 
 #[tokio::test]
 async fn test_get_user_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -146,8 +141,7 @@ async fn test_get_user_returns_200() {
 
 #[tokio::test]
 async fn test_get_user_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     // Use token with same user_id as the requested user to pass auth check
@@ -165,11 +159,7 @@ async fn test_get_user_returns_404() {
 
 #[tokio::test]
 async fn test_create_user_returns_201() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let keycloak_user_id = "kc-user-12345";
-    mock_kc.mock_create_user_success(keycloak_user_id).await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     state.enable_public_registration().await;
     let app = build_test_router(state);
 
@@ -187,16 +177,15 @@ async fn test_create_user_returns_201() {
     let response = body.unwrap();
     assert_eq!(response.data.email, "newuser@example.com");
     assert_eq!(response.data.display_name, Some("New User".to_string()));
-    assert_eq!(response.data.keycloak_id, keycloak_user_id);
+    // identity_subject is not exposed in API responses (skip_serializing)
+    assert_eq!(response.data.identity_subject, "");
 }
 
 #[tokio::test]
 async fn test_create_user_without_password() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let keycloak_user_id = "kc-user-no-pwd";
-    mock_kc.mock_create_user_success(keycloak_user_id).await;
+    let _keycloak_user_id = "kc-user-no-pwd";
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     state.enable_public_registration().await;
     let app = build_test_router(state);
 
@@ -213,25 +202,8 @@ async fn test_create_user_without_password() {
     assert_eq!(response.data.email, "nopwd@example.com");
 }
 
-#[tokio::test]
-async fn test_create_user_keycloak_conflict() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_user_conflict().await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
-    state.enable_public_registration().await;
-    let app = build_test_router(state);
-
-    let input = json!({
-        "email": "existing@example.com"
-    });
-
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/users", &input).await;
-
-    // Should return 409 Conflict (translated from Keycloak error)
-    assert_eq!(status, StatusCode::CONFLICT);
-}
+// test_create_user_keycloak_conflict removed — NoOp identity engine always succeeds;
+// conflict detection requires a real identity backend.
 
 // ============================================================================
 // Update User Tests
@@ -239,16 +211,14 @@ async fn test_create_user_keycloak_conflict() {
 
 #[tokio::test]
 async fn test_update_user_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-to-update";
-    mock_kc.mock_update_user_success(keycloak_user_id).await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin can update users
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.display_name = Some("Old Name".to_string());
     state.user_repo.add_user(user).await;
 
@@ -269,10 +239,8 @@ async fn test_update_user_returns_200() {
 
 #[tokio::test]
 async fn test_update_user_avatar_only() {
-    let mock_kc = MockKeycloakServer::new().await;
     // No Keycloak mock needed for avatar-only update (display_name not changed)
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin can update users
 
     let user_id = Uuid::new_v4();
@@ -299,8 +267,7 @@ async fn test_update_user_avatar_only() {
 
 #[tokio::test]
 async fn test_update_user_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin can update users
     let app = build_test_router(state);
 
@@ -326,16 +293,14 @@ async fn test_update_user_returns_404() {
 
 #[tokio::test]
 async fn test_delete_user_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-to-delete";
-    mock_kc.mock_delete_user_success(keycloak_user_id).await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin can delete users
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     state.user_repo.add_user(user).await;
 
     let app = build_test_router(state);
@@ -351,15 +316,12 @@ async fn test_delete_user_returns_200() {
 
 #[tokio::test]
 async fn test_delete_user_keycloak_not_found_still_succeeds() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_delete_user_not_found().await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin can delete users
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = "nonexistent-kc-user".to_string();
+    user.identity_subject = "nonexistent-kc-user".to_string();
     state.user_repo.add_user(user).await;
 
     let app = build_test_router(state);
@@ -374,8 +336,7 @@ async fn test_delete_user_keycloak_not_found_still_succeeds() {
 
 #[tokio::test]
 async fn test_delete_user_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin can delete users
     let app = build_test_router(state);
 
@@ -392,8 +353,7 @@ async fn test_delete_user_returns_404() {
 
 #[tokio::test]
 async fn test_add_user_to_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let auth_user_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
@@ -440,8 +400,7 @@ async fn test_add_user_to_tenant() {
 
 #[tokio::test]
 async fn test_remove_user_from_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let auth_user_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
@@ -488,8 +447,7 @@ async fn test_remove_user_from_tenant() {
 
 #[tokio::test]
 async fn test_get_user_tenants() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let tenant_id1 = Uuid::new_v4();
@@ -534,8 +492,7 @@ async fn test_get_user_tenants() {
 
 #[tokio::test]
 async fn test_list_users_by_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
     let user1_id = Uuid::new_v4();
@@ -590,24 +547,20 @@ async fn test_list_users_by_tenant() {
 
 #[tokio::test]
 async fn test_enable_mfa() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa";
     let admin_id = Uuid::new_v4();
     let admin_kc_id = admin_id.to_string();
-    mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
-    mock_kc.mock_get_user_success(&admin_kc_id).await;
-    mock_kc.mock_validate_password_valid().await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token_for_user(admin_id, Uuid::new_v4());
 
     let mut admin_user = create_test_user(Some(admin_id));
-    admin_user.keycloak_id = admin_kc_id;
+    admin_user.identity_subject = admin_kc_id;
     state.user_repo.add_user(admin_user).await;
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.mfa_enabled = false;
     state.user_repo.add_user(user).await;
 
@@ -629,26 +582,21 @@ async fn test_enable_mfa() {
 
 #[tokio::test]
 async fn test_disable_mfa() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa-disable";
     let admin_id = Uuid::new_v4();
     let admin_kc_id = admin_id.to_string();
-    mock_kc.setup_for_mfa_disable(keycloak_user_id).await;
-    // Mock admin password verification
-    mock_kc.mock_get_user_success(&admin_kc_id).await;
-    mock_kc.mock_validate_password_valid().await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token_for_user(admin_id, Uuid::new_v4());
 
     // Add admin user to repo (needed for password verification lookup)
     let mut admin_user = create_test_user(Some(admin_id));
-    admin_user.keycloak_id = admin_kc_id.clone();
+    admin_user.identity_subject = admin_kc_id.clone();
     state.user_repo.add_user(admin_user).await;
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.mfa_enabled = true;
     state.user_repo.add_user(user).await;
 
@@ -670,13 +618,10 @@ async fn test_disable_mfa() {
 
 #[tokio::test]
 async fn test_enable_mfa_user_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
     let admin_id = Uuid::new_v4();
-    let admin_kc_id = admin_id.to_string();
-    mock_kc.mock_get_user_success(&admin_kc_id).await;
-    mock_kc.mock_validate_password_valid().await;
+    let _admin_kc_id = admin_id.to_string();
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token_for_user(admin_id, Uuid::new_v4());
     let app = build_test_router(state);
 
@@ -698,8 +643,7 @@ async fn test_enable_mfa_user_not_found() {
 
 #[tokio::test]
 async fn test_get_me_returns_current_user() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -726,15 +670,13 @@ async fn test_get_me_returns_current_user() {
 
 #[tokio::test]
 async fn test_update_me_changes_display_name() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-me-update";
-    mock_kc.mock_update_user_success(keycloak_user_id).await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.display_name = Some("Old Name".to_string());
     state.user_repo.add_user(user).await;
 
@@ -760,15 +702,13 @@ async fn test_update_me_changes_display_name() {
 
 #[tokio::test]
 async fn test_self_update_succeeds_without_admin() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-self-update";
-    mock_kc.mock_update_user_success(keycloak_user_id).await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.display_name = Some("Original".to_string());
     state.user_repo.add_user(user).await;
 
@@ -791,8 +731,7 @@ async fn test_self_update_succeeds_without_admin() {
 
 #[tokio::test]
 async fn test_update_other_user_requires_admin() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let other_user_id = Uuid::new_v4();
@@ -824,8 +763,7 @@ async fn test_update_other_user_requires_admin() {
 
 #[tokio::test]
 async fn test_list_users_non_admin_identity_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Non-admin identity token (email not in platform_admin_emails)
     let token = create_test_identity_token_for_user(Uuid::new_v4());
@@ -839,8 +777,7 @@ async fn test_list_users_non_admin_identity_returns_403() {
 
 #[tokio::test]
 async fn test_list_users_service_client_with_tenant() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
 
@@ -861,8 +798,7 @@ async fn test_list_users_service_client_with_tenant() {
 
 #[tokio::test]
 async fn test_list_users_service_client_no_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // ServiceClient token without tenant context
     let jwt_manager = crate::support::create_test_jwt_manager();
@@ -880,8 +816,7 @@ async fn test_list_users_service_client_no_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_list_users_tenant_access_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
@@ -922,8 +857,7 @@ async fn test_list_users_tenant_access_token() {
 
 #[tokio::test]
 async fn test_get_user_service_client_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let user = create_test_user(Some(user_id));
@@ -944,8 +878,7 @@ async fn test_get_user_service_client_returns_403() {
 
 #[tokio::test]
 async fn test_get_user_tenant_access_no_admin_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let other_user_id = Uuid::new_v4();
@@ -975,8 +908,7 @@ async fn test_get_user_tenant_access_no_admin_returns_403() {
 
 #[tokio::test]
 async fn test_get_user_tenant_access_with_admin_role() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let other_user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -1018,8 +950,7 @@ async fn test_get_user_tenant_access_with_admin_role() {
 
 #[tokio::test]
 async fn test_get_user_cross_tenant_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let other_user_id = Uuid::new_v4();
     let user = create_test_user(Some(other_user_id));
@@ -1062,8 +993,7 @@ async fn test_get_user_cross_tenant_returns_404() {
 
 #[tokio::test]
 async fn test_create_user_public_registration_disabled_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     // Don't call enable_public_registration - it's disabled by default
     let app = build_test_router(state);
 
@@ -1079,8 +1009,7 @@ async fn test_create_user_public_registration_disabled_returns_403() {
 
 #[tokio::test]
 async fn test_create_user_with_invalid_auth_header_returns_401() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let input = json!({
@@ -1096,10 +1025,7 @@ async fn test_create_user_with_invalid_auth_header_returns_401() {
 
 #[tokio::test]
 async fn test_create_user_admin_can_create_without_registration() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_user_success("kc-admin-created").await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     // Don't enable public registration - admin can always create
     // Add active tenant matching the token's tenant_id (require_active check)
     let tenant_id = Uuid::new_v4();
@@ -1121,8 +1047,7 @@ async fn test_create_user_admin_can_create_without_registration() {
 
 #[tokio::test]
 async fn test_delete_user_non_admin_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let user = create_test_user(Some(user_id));
@@ -1140,8 +1065,7 @@ async fn test_delete_user_non_admin_returns_403() {
 
 #[tokio::test]
 async fn test_delete_user_service_client_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let user = create_test_user(Some(user_id));
@@ -1162,8 +1086,7 @@ async fn test_delete_user_service_client_returns_403() {
 
 #[tokio::test]
 async fn test_add_user_to_tenant_invalid_role_returns_400() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -1203,8 +1126,7 @@ async fn test_add_user_to_tenant_invalid_role_returns_400() {
 
 #[tokio::test]
 async fn test_add_user_to_tenant_service_client_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -1237,8 +1159,7 @@ async fn test_add_user_to_tenant_service_client_returns_403() {
 
 #[tokio::test]
 async fn test_list_users_with_search() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
@@ -1273,8 +1194,7 @@ async fn test_list_users_with_search() {
 
 #[tokio::test]
 async fn test_list_users_with_empty_search() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
@@ -1306,16 +1226,14 @@ async fn test_list_users_with_empty_search() {
 
 #[tokio::test]
 async fn test_tenant_access_with_user_write_permission_can_delete() {
-    let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-to-delete-by-perm";
-    mock_kc.mock_delete_user_success(keycloak_user_id).await;
 
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     state.user_repo.add_user(user).await;
     // Add the target user to the same tenant as the caller's token
     state
@@ -1356,10 +1274,7 @@ async fn test_tenant_access_with_user_write_permission_can_delete() {
 
 #[tokio::test]
 async fn test_create_user_with_special_email() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_user_success("kc-special-email").await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     state.enable_public_registration().await;
     let app = build_test_router(state);
 
@@ -1379,10 +1294,7 @@ async fn test_create_user_with_special_email() {
 
 #[tokio::test]
 async fn test_create_user_minimal() {
-    let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_user_success("kc-minimal").await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     state.enable_public_registration().await;
     let app = build_test_router(state);
 

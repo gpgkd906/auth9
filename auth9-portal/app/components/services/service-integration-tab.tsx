@@ -112,7 +112,7 @@ export function ServiceIntegrationTab({ integration }: { integration: ServiceInt
                       </div>
                     ) : (
                       <span className="text-sm italic text-[var(--text-secondary)]">
-                        {t("services.integration.keycloakUnavailable")}
+                        {t("services.integration.clientSecretUnavailable")}
                       </span>
                     )}
                   </div>

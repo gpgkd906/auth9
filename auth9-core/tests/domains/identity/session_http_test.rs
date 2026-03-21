@@ -5,7 +5,7 @@
 use crate::support::create_test_user;
 use crate::support::http::{
     delete_json_with_auth, get_json, get_json_with_auth, post_json, post_json_with_auth,
-    MockKeycloakServer, TestAppState,
+    TestAppState,
 };
 use auth9_core::domains::identity::api::session::RevokeSessionsResponse;
 use auth9_core::http_support::{MessageResponse, SuccessResponse};
@@ -21,8 +21,7 @@ use chrono::Utc;
 
 #[tokio::test]
 async fn test_list_user_sessions_admin() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -42,7 +41,7 @@ async fn test_list_user_sessions_admin() {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: Some(format!("Chrome on macOS {}", i)),
             ip_address: Some("192.168.1.1".to_string()),
@@ -73,8 +72,7 @@ async fn test_list_user_sessions_admin() {
 
 #[tokio::test]
 async fn test_list_user_sessions_admin_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -111,10 +109,8 @@ async fn test_list_user_sessions_admin_empty() {
 
 #[tokio::test]
 async fn test_force_logout_user() {
-    let mock_kc = MockKeycloakServer::new().await;
     // Mock the logout endpoint in Keycloak
-    mock_kc.mock_logout_user_success().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -134,7 +130,7 @@ async fn test_force_logout_user() {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: None,
             ip_address: None,
@@ -174,10 +170,8 @@ async fn test_force_logout_user() {
 
 #[tokio::test]
 async fn test_force_logout_user_no_sessions() {
-    let mock_kc = MockKeycloakServer::new().await;
     // Mock the logout endpoint in Keycloak
-    mock_kc.mock_logout_user_success().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -210,8 +204,7 @@ async fn test_force_logout_user_no_sessions() {
 
 #[tokio::test]
 async fn test_force_logout_user_rejects_non_admin() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Create a tenant access token with viewer role (non-admin)
     let tenant_id = uuid::Uuid::new_v4();
@@ -251,8 +244,7 @@ async fn test_force_logout_user_rejects_non_admin() {
 
 #[tokio::test]
 async fn test_session_info_device_details() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -269,7 +261,7 @@ async fn test_session_info_device_details() {
     let session = Session {
         id: StringUuid::new_v4(),
         user_id,
-        keycloak_session_id: Some("kc-123".to_string()),
+        provider_session_id: Some("kc-123".to_string()),
         device_type: Some("mobile".to_string()),
         device_name: Some("Safari on iPhone".to_string()),
         ip_address: Some("10.0.0.1".to_string()),
@@ -312,8 +304,7 @@ async fn test_session_info_device_details() {
 
 #[tokio::test]
 async fn test_list_my_sessions_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let user = create_test_user(None);
@@ -330,7 +321,7 @@ async fn test_list_my_sessions_success() {
                 StringUuid::new_v4()
             },
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: Some(format!("Chrome on macOS {}", i)),
             ip_address: Some("192.168.1.1".to_string()),
@@ -367,8 +358,7 @@ async fn test_list_my_sessions_success() {
 
 #[tokio::test]
 async fn test_list_my_sessions_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user with no sessions
     let user = create_test_user(None);
@@ -400,8 +390,7 @@ async fn test_list_my_sessions_empty() {
 
 #[tokio::test]
 async fn test_list_my_sessions_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_my_session_test_router(state);
 
@@ -414,8 +403,7 @@ async fn test_list_my_sessions_unauthorized() {
 
 #[tokio::test]
 async fn test_list_my_sessions_invalid_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_my_session_test_router(state);
 
@@ -428,8 +416,7 @@ async fn test_list_my_sessions_invalid_token() {
 
 #[tokio::test]
 async fn test_revoke_session_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let user = create_test_user(None);
@@ -441,7 +428,7 @@ async fn test_revoke_session_success() {
     let current_session = Session {
         id: current_session_id,
         user_id,
-        keycloak_session_id: Some("kc-current-session".to_string()),
+        provider_session_id: Some("kc-current-session".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: None,
         ip_address: None,
@@ -458,7 +445,7 @@ async fn test_revoke_session_success() {
     let session = Session {
         id: session_id,
         user_id,
-        keycloak_session_id: Some("kc-session-to-revoke".to_string()),
+        provider_session_id: Some("kc-session-to-revoke".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: None,
         ip_address: None,
@@ -502,8 +489,7 @@ async fn test_revoke_session_success() {
 
 #[tokio::test]
 async fn test_revoke_current_session_rejected() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -513,7 +499,7 @@ async fn test_revoke_current_session_rejected() {
     let current_session = Session {
         id: current_session_id,
         user_id,
-        keycloak_session_id: Some("kc-current".to_string()),
+        provider_session_id: Some("kc-current".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: Some("Chrome".to_string()),
         ip_address: None,
@@ -566,8 +552,7 @@ async fn test_revoke_current_session_rejected() {
 
 #[tokio::test]
 async fn test_revoke_session_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user (but no sessions)
     let user = create_test_user(None);
@@ -601,8 +586,7 @@ async fn test_revoke_session_not_found() {
 
 #[tokio::test]
 async fn test_revoke_session_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_my_session_test_router(state);
 
@@ -617,8 +601,7 @@ async fn test_revoke_session_unauthorized() {
 
 #[tokio::test]
 async fn test_revoke_other_sessions_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let user = create_test_user(None);
@@ -630,7 +613,7 @@ async fn test_revoke_other_sessions_success() {
     let current_session = Session {
         id: current_session_id,
         user_id,
-        keycloak_session_id: Some("kc-current-session".to_string()),
+        provider_session_id: Some("kc-current-session".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: None,
         ip_address: None,
@@ -647,7 +630,7 @@ async fn test_revoke_other_sessions_success() {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: None,
             ip_address: None,
@@ -695,8 +678,7 @@ async fn test_revoke_other_sessions_success() {
 
 #[tokio::test]
 async fn test_revoke_other_sessions_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_my_session_test_router(state);
 
@@ -709,8 +691,7 @@ async fn test_revoke_other_sessions_unauthorized() {
 
 #[tokio::test]
 async fn test_revoke_other_sessions_no_other_sessions() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user with no sessions
     let user = create_test_user(None);

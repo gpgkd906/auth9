@@ -70,6 +70,11 @@ export function ManageUserTenantsDialog({
                       <span className="font-medium text-[var(--text-primary)]">
                         {userTenant.tenant?.name ?? t("usersPage.unknownTenant")}
                       </span>
+                      {userTenant.joined_at && (
+                        <span className="text-xs text-[var(--text-tertiary)]">
+                          {new Date(userTenant.joined_at).toLocaleDateString()}
+                        </span>
+                      )}
                       <Select
                         key={`${userTenant.tenant_id}-${userTenant.role_in_tenant}`}
                         defaultValue={userTenant.role_in_tenant}

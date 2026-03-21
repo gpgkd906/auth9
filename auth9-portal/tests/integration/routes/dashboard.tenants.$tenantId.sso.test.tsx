@@ -75,6 +75,7 @@ describe("Tenant SSO Page", () => {
     expect(result).toEqual({
       tenant: mockTenant,
       connectors: [],
+      corePublicUrl: "http://localhost:8080",
     });
   });
 
@@ -93,6 +94,7 @@ describe("Tenant SSO Page", () => {
     formData.append("client_secret", "client-credential-placeholder");
     formData.append("authorization_url", "https://idp.example.com/auth");
     formData.append("token_url", "https://idp.example.com/token");
+    formData.append("userinfo_url", "https://idp.example.com/userinfo");
 
     const request = buildEnglishRequest("http://localhost/dashboard/tenants/tenant-1/sso", {
       method: "POST",
@@ -120,6 +122,7 @@ describe("Tenant SSO Page", () => {
           clientSecret: "client-credential-placeholder", // pragma: allowlist secret
           authorizationUrl: "https://idp.example.com/auth",
           tokenUrl: "https://idp.example.com/token",
+          userInfoUrl: "https://idp.example.com/userinfo",
         },
       },
       "test-token"
@@ -131,7 +134,7 @@ describe("Tenant SSO Page", () => {
       {
         path: "/dashboard/tenants/:tenantId/sso",
         Component: WrappedPage,
-        loader: () => ({ tenant: mockTenant, connectors: [] }),
+        loader: () => ({ tenant: mockTenant, connectors: [], corePublicUrl: "http://localhost:8080" }),
       },
     ]);
 
@@ -152,7 +155,7 @@ describe("Tenant SSO Page", () => {
       {
         path: "/dashboard/tenants/:tenantId/sso",
         Component: WrappedPage,
-        loader: () => ({ tenant: mockTenant, connectors: [] }),
+        loader: () => ({ tenant: mockTenant, connectors: [], corePublicUrl: "http://localhost:8080" }),
       },
     ]);
 
@@ -176,7 +179,7 @@ describe("Tenant SSO Page", () => {
       {
         path: "/dashboard/tenants/:tenantId/sso",
         Component: WrappedPage,
-        loader: () => ({ tenant: mockTenant, connectors: [] }),
+        loader: () => ({ tenant: mockTenant, connectors: [], corePublicUrl: "http://localhost:8080" }),
         action: async ({ request }) => {
           const formData = await request.formData();
           expect(formData.get("intent")).toBe("create");

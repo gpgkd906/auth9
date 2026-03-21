@@ -60,6 +60,13 @@ pub trait LoginEventRepository: Send + Sync {
     /// Delete all login events for a tenant (when tenant is deleted)
     async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
 
+    /// Count failed federation login events for a specific provider
+    async fn count_federation_failed_by_provider(
+        &self,
+        provider_alias: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64>;
+
     /// Get daily trend data (per-day breakdown of logins)
     async fn get_daily_trend(
         &self,

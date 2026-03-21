@@ -180,25 +180,20 @@ main() {
         exit 1
     fi
 
-    local app_base_url auth9_core_public_url auth9_portal_url keycloak_public_url jwt_issuer cors_allowed_origins
-    local keycloak_auth9_api_url keycloak_hostname tracing_enabled tracing_endpoint
+    local app_base_url auth9_core_public_url auth9_portal_url jwt_issuer cors_allowed_origins
+    local tracing_enabled tracing_endpoint
     local portal_envfrom_secret portal_session_secret_ref
 
     app_base_url="$(cfg auth9-config APP_BASE_URL)"
     auth9_core_public_url="$(cfg auth9-config AUTH9_CORE_PUBLIC_URL)"
     auth9_portal_url="$(cfg auth9-config AUTH9_PORTAL_URL)"
-    keycloak_public_url="$(cfg auth9-config KEYCLOAK_PUBLIC_URL)"
     jwt_issuer="$(cfg auth9-config JWT_ISSUER)"
     cors_allowed_origins="$(cfg auth9-config CORS_ALLOWED_ORIGINS)"
     tracing_enabled="$(cfg auth9-config OTEL_TRACING_ENABLED)"
     tracing_endpoint="$(cfg auth9-config OTEL_EXPORTER_OTLP_ENDPOINT)"
 
-    keycloak_auth9_api_url="$(cfg keycloak-config AUTH9_API_URL)"
-    keycloak_hostname="$(cfg keycloak-config KC_HOSTNAME)"
-
     check_rollout deploy auth9-core
     check_rollout deploy auth9-portal
-    check_rollout deploy keycloak
 
     if kubectl get job/auth9-init -n "$NAMESPACE" >/dev/null 2>&1; then
         if kubectl wait --for=condition=complete job/auth9-init -n "$NAMESPACE" --timeout=5s >/dev/null 2>&1; then
@@ -215,18 +210,13 @@ main() {
     check_nonempty "APP_BASE_URL" "$app_base_url"
     check_nonempty "AUTH9_CORE_PUBLIC_URL" "$auth9_core_public_url"
     check_nonempty "AUTH9_PORTAL_URL" "$auth9_portal_url"
-    check_nonempty "KEYCLOAK_PUBLIC_URL" "$keycloak_public_url"
     check_nonempty "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins"
     check_equals "APP_BASE_URL" "$app_base_url" "$auth9_portal_url"
     check_equals "JWT_ISSUER" "$jwt_issuer" "$auth9_core_public_url"
-    check_equals "keycloak-config.AUTH9_API_URL" "$keycloak_auth9_api_url" "$auth9_core_public_url"
-    check_equals "keycloak-config.KC_HOSTNAME" "$keycloak_hostname" "$keycloak_public_url"
     check_csv_contains "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins" "$auth9_portal_url"
-    check_csv_contains "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins" "$keycloak_public_url"
     check_not_example_domain "APP_BASE_URL" "$app_base_url"
     check_not_example_domain "AUTH9_CORE_PUBLIC_URL" "$auth9_core_public_url"
     check_not_example_domain "AUTH9_PORTAL_URL" "$auth9_portal_url"
-    check_not_example_domain "KEYCLOAK_PUBLIC_URL" "$keycloak_public_url"
 
     if [[ "$tracing_enabled" == "true" ]]; then
         check_nonempty "OTEL_EXPORTER_OTLP_ENDPOINT" "$tracing_endpoint"
@@ -260,7 +250,6 @@ main() {
     print_info "检查公网可达性"
     check_http "Portal /login" "$auth9_portal_url/login" "HTTP/[12](\\.[0-9])? 200"
     check_http "Core /health" "$auth9_core_public_url/health" "HTTP/[12](\\.[0-9])? 200"
-    check_http "Keycloak realm" "$keycloak_public_url/realms/auth9" "HTTP/[12](\\.[0-9])? 200"
     check_http "Public branding" "$auth9_core_public_url/api/v1/public/branding?client_id=auth9-portal" "HTTP/[12](\\.[0-9])? 200"
 
     echo ""

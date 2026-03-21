@@ -13,7 +13,7 @@
 
 ## 背景知识
 
-Auth9 使用 Keycloak 作为 OIDC Provider，关键端点：
+Auth9 使用内置 OIDC Engine（auth9-oidc）作为 OIDC Provider，关键端点：
 - `/.well-known/openid-configuration` - OIDC 发现端点
 - `/api/v1/auth/authorize` - 授权入口
 - `/api/v1/auth/callback` - 回调处理
@@ -56,9 +56,9 @@ curl -X POST http://localhost:8080/api/v1/auth/token \
 ```
 
 ### 安全加固状态
-- ✅ Code 一次性使用 (RFC 6749 Section 4.1.2) — Keycloak 默认实现
-- ✅ **PKCE (RFC 7636) 已实现** — Portal 在每次授权请求时生成 `code_verifier`/`code_challenge`（S256），通过 auth9-core 透传到 Keycloak；token exchange 时发送 `code_verifier`。Public client（如 auth9-demo）在 Keycloak 中强制要求 PKCE（`pkce.code.challenge.method=S256`）
-- ✅ Code 有效期不超过 10 分钟 — Keycloak 默认实现
+- ✅ Code 一次性使用 (RFC 6749 Section 4.1.2) — Auth9 OIDC Engine 默认实现
+- ✅ **PKCE (RFC 7636) 已实现** — Portal 在每次授权请求时生成 `code_verifier`/`code_challenge`（S256），通过 auth9-core 透传到 Auth9 OIDC Engine；token exchange 时发送 `code_verifier`。Public client（如 auth9-demo）强制要求 PKCE（`pkce.code.challenge.method=S256`）
+- ✅ Code 有效期不超过 10 分钟 — Auth9 OIDC Engine 默认实现
 
 ### PKCE 验证方法
 ```bash
@@ -73,7 +73,7 @@ code_challenge_method=S256" 2>&1 | grep -i "location:"
 
 # 验证 public client 必须提供 PKCE（不提供时应失败）
 # 使用 auth9-demo (public client) 不带 PKCE 进行授权
-# 预期: Keycloak 拒绝或 token exchange 阶段失败
+# 预期: Auth9 OIDC Engine 拒绝或 token exchange 阶段失败
 ```
 
 ---
@@ -110,7 +110,7 @@ client_id=auth9-portal&\
 redirect_uri=http://localhost:3000/callback&\
 response_type=code&\
 scope=openid"
-# 预期: 302 重定向到 Keycloak
+# 预期: 302 重定向到 Auth9 托管认证页
 
 # 恶意请求
 curl -v "http://localhost:8080/api/v1/auth/authorize?\
@@ -152,7 +152,7 @@ scope=openid"
 - 回调时验证 state 一致性
 
 > **实现说明**: Auth9 采用服务端 state 管理模式。客户端传入的 `state` 参数仅作为
-> `original_state` 存入 Redis payload 并在回调后原样回传。实际发送给 Keycloak 的
+> `original_state` 存入 Redis payload 并在回调后原样回传。实际发送给 Auth9 OIDC Engine 的
 > `state` 是服务端生成的 UUID v4 nonce，具备足够的随机性和不可预测性。
 > Redis GETDEL 确保每个 state nonce 只能使用一次（防重放），TTL 为 300 秒。
 > 因此，即使客户端传入可预测的 state 值，也不影响 CSRF 防护的安全性。

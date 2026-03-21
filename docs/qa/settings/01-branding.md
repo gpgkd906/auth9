@@ -8,16 +8,16 @@
 
 ## 架构说明
 
-Auth9 采用 Headless Keycloak 架构，品牌设置支持两级配置：
+Auth9 品牌设置支持两级配置：
 
 1. **系统级品牌**（本页面） → 管理员在 Auth9 Portal 的「设置 → 登录页品牌」页面配置颜色、Logo、公司名称等，作为全局默认
 2. **Service 级品牌**（见 [service/06-service-branding.md](../service/06-service-branding.md)） → 在 Service 详情页「Branding」标签页可为单个 Service 覆盖品牌配置
-3. **auth9-keycloak-theme 消费品牌配置** → 托管认证页通过公开端点 `GET /api/v1/public/branding?client_id={client_id}` 获取品牌配置；若该 client 所属 Service 有自定义品牌则优先使用，否则降级到系统默认
-4. **最终用户看到的效果** → 用户在 Auth9 品牌认证页（由 `auth9-keycloak-theme` 承载）的登录/注册/忘记密码等页面上看到品牌风格界面（可能因 Service 不同而不同）
+3. **Auth9 品牌认证页消费品牌配置** → 托管认证页通过公开端点 `GET /api/v1/public/branding?client_id={client_id}` 获取品牌配置；若该 client 所属 Service 有自定义品牌则优先使用，否则降级到系统默认
+4. **最终用户看到的效果** → 用户在 Auth9 品牌认证页的登录/注册/忘记密码等页面上看到品牌风格界面（可能因 Service 不同而不同）
 
 **页面归属**：
 - 「设置 → 登录页品牌」管理页面 → Auth9 Portal
-- 受品牌设置影响的登录/注册页面 → Auth9 品牌认证页（由 `auth9-keycloak-theme` 承载）
+- 受品牌设置影响的登录/注册页面 → Auth9 品牌认证页
 
 **测试原则**：
 - 默认通过 Auth9 登录入口触发并观察品牌化登录页效果
@@ -158,7 +158,7 @@ WHERE category = 'branding' AND setting_key = 'config';
 - 当前允许注册设置为关闭
 
 ### 目的
-验证注册开关功能影响 Auth9 品牌认证页（由 `auth9-keycloak-theme` 承载）
+验证注册开关功能影响 Auth9 品牌认证页
 
 ### 测试操作流程
 1. 进入「设置」→「登录页品牌」
@@ -182,33 +182,12 @@ WHERE category = 'branding' AND setting_key = 'config';
 - 通过 Auth9 登录入口触发认证流程
 - 进入品牌化认证页后应显示注册链接
 
-### 后台同步校验（可选）
-
-> **重要**：如需验证底层 realm 状态，**必须从 Docker 网络内部**发起请求，因为底层认证引擎设置了 `sslRequired: external`，从宿主机通过 HTTP 访问 Admin API 会返回 401。
->
-> ```bash
-> # 正确方式：从 Docker 内部验证（通过 auth9-core 容器）
-> KC_TOKEN=$(docker exec auth9-core curl -s -X POST \
->   "http://keycloak:8080/realms/master/protocol/openid-connect/token" \
->   -d "client_id=admin-cli" -d "username=admin" -d "password=admin" \
->   -d "grant_type=password" | jq -r '.access_token')
->
-> docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
->   -H "Authorization: Bearer $KC_TOKEN" | jq '{registrationAllowed}'
-> # 预期: {"registrationAllowed": true}
->
-> # 错误方式（会返回 401）：
-> # curl -s "http://localhost:8081/admin/realms/auth9" ...
-> ```
-
 ### 故障排查
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| 从宿主机 `curl localhost:8081/admin/...` 返回 401 | 底层 realm `sslRequired: external` 阻止外部 HTTP 请求 | 使用 `docker exec auth9-core curl http://keycloak:8080/admin/...` 从 Docker 内部验证 |
-| DB 中 `allow_registration = true` 但底层 `registrationAllowed` 未变 | 后台同步是异步 fire-and-forget，可能因底层认证引擎暂时不可达而静默失败 | 检查 auth9-core 日志中 `Failed to sync realm settings to Keycloak` 错误；确认容器健康后重新保存设置 |
-| 保存后 Admin API 返回 401/403 | admin token 过期或权限不足 | 重启 auth9-core 刷新 admin token |
-| 认证页未显示注册链接 | 浏览器缓存或 theme 缓存 | 清除浏览器缓存，或重启相关容器清除 theme 缓存 |
+| DB 中 `allow_registration = true` 但认证页未显示注册链接 | 配置同步延迟或缓存 | 检查 auth9-core 日志；确认 auth9-oidc 容器健康后重新保存设置 |
+| 认证页未显示注册链接 | 浏览器缓存 | 清除浏览器缓存，或重启相关容器 |
 
 ---
 

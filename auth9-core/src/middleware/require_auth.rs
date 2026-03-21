@@ -23,21 +23,13 @@ use std::sync::Arc;
 pub struct AuthMiddlewareState {
     jwt_manager: JwtManager,
     cache: Option<Arc<dyn CacheOperations>>,
-    tenant_access_allowed_audiences: Vec<String>,
-    is_production: bool,
 }
 
 impl AuthMiddlewareState {
-    pub fn new(
-        jwt_manager: JwtManager,
-        tenant_access_allowed_audiences: Vec<String>,
-        is_production: bool,
-    ) -> Self {
+    pub fn new(jwt_manager: JwtManager) -> Self {
         Self {
             jwt_manager,
             cache: None,
-            tenant_access_allowed_audiences,
-            is_production,
         }
     }
 
@@ -96,28 +88,28 @@ pub async fn require_auth_middleware(
     } else if let Ok(claims) = auth_state.jwt_manager.verify_identity_token(token) {
         session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
         Some("identity")
-    } else if !auth_state.tenant_access_allowed_audiences.is_empty() {
-        if let Ok(claims) = auth_state
-            .jwt_manager
-            .verify_tenant_access_token_strict(token, &auth_state.tenant_access_allowed_audiences)
-        {
+    } else if let Ok(claims) = auth_state
+        .jwt_manager
+        .verify_tenant_access_token_any_audience(token)
+    {
+        // Validate audience dynamically via cache (Redis SET of registered client_ids)
+        let audience_valid = if let Some(ref cache) = auth_state.cache {
+            cache.is_valid_audience(&claims.aud).await.unwrap_or(false)
+        } else {
+            // No cache available (e.g., tests) — accept any valid token
+            true
+        };
+
+        if audience_valid {
             session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
             Some("tenant_access")
         } else {
+            tracing::debug!(
+                aud = %claims.aud,
+                "Tenant access token rejected: audience not in registered client set"
+            );
             None
         }
-    } else if auth_state.is_production {
-        None
-    } else if let Ok(claims) = {
-        #[allow(deprecated)]
-        auth_state
-            .jwt_manager
-            .verify_tenant_access_token(token, None)
-    } {
-        metrics::counter!("auth9_jwt_legacy_fallback_total", "caller" => "require_auth_middleware")
-            .increment(1);
-        session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
-        Some("tenant_access")
     } else {
         None
     };
@@ -206,6 +198,11 @@ fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
             && (*method == Method::POST || *method == Method::DELETE))
         // Invitation management (resend, revoke, get by ID)
         || path.starts_with("/api/v1/invitations")
+        // Required actions (checked immediately after login with identity token)
+        || path == "/api/v1/hosted-login/pending-actions"
+        || path == "/api/v1/hosted-login/complete-action"
+        // MFA management (TOTP enrollment, recovery codes, status)
+        || path.starts_with("/api/v1/mfa/")
 }
 
 /// Generate a 503 Service Unavailable response
@@ -256,7 +253,7 @@ mod tests {
     #[tokio::test]
     async fn test_missing_auth_header_returns_401() {
         let jwt_manager = create_test_jwt_manager();
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
+        let auth_state = AuthMiddlewareState::new(jwt_manager);
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -278,7 +275,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_bearer_scheme_returns_401() {
         let jwt_manager = create_test_jwt_manager();
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
+        let auth_state = AuthMiddlewareState::new(jwt_manager);
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -301,7 +298,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_token_returns_401() {
         let jwt_manager = create_test_jwt_manager();
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
+        let auth_state = AuthMiddlewareState::new(jwt_manager);
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -331,7 +328,7 @@ mod tests {
             .create_identity_token(user_id, "test@example.com", Some("Test User"))
             .unwrap();
 
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
+        let auth_state = AuthMiddlewareState::new(jwt_manager);
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -375,8 +372,7 @@ mod tests {
             .times(2)
             .returning(|_| Err(anyhow::anyhow!("Redis connection refused").into()));
 
-        let auth_state =
-            AuthMiddlewareState::new(jwt_manager, vec![], false).with_cache(Arc::new(mock_cache));
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -432,8 +428,7 @@ mod tests {
                 }
             });
 
-        let auth_state =
-            AuthMiddlewareState::new(jwt_manager, vec![], false).with_cache(Arc::new(mock_cache));
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -476,8 +471,7 @@ mod tests {
             .expect_is_token_blacklisted()
             .returning(|_| Ok(true));
 
-        let auth_state =
-            AuthMiddlewareState::new(jwt_manager, vec![], false).with_cache(Arc::new(mock_cache));
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -569,6 +563,16 @@ mod tests {
         assert!(is_identity_token_path_allowed(
             "/api/v1/invitations/some-uuid",
             &get
+        ));
+
+        // Required actions (identity token needed post-login)
+        assert!(is_identity_token_path_allowed(
+            "/api/v1/hosted-login/pending-actions",
+            &get
+        ));
+        assert!(is_identity_token_path_allowed(
+            "/api/v1/hosted-login/complete-action",
+            &Method::POST
         ));
 
         // Non-allowed paths

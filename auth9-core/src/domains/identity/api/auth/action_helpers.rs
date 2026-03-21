@@ -8,6 +8,7 @@ use sqlx::Row;
 
 /// Resolve service_id and tenant_id for action execution.
 /// Returns (service_id, tenant_id) -- both optional.
+#[allow(dead_code)]
 pub(super) async fn resolve_service_ids_for_actions<S: HasServices>(
     state: &S,
     client_id: &str,
@@ -27,6 +28,7 @@ pub(super) async fn resolve_service_ids_for_actions<S: HasServices>(
 
 /// Resolve (service_id, tenant_id) for action execution at post-login.
 /// Falls back to the user's first tenant membership if no service-level tenant found.
+#[allow(dead_code)]
 pub(super) async fn resolve_action_ids<S: HasServices>(
     state: &S,
     client_id: &str,
@@ -61,6 +63,7 @@ pub(super) async fn resolve_action_ids<S: HasServices>(
     }
 }
 
+#[allow(dead_code)]
 pub(super) async fn resolve_action_tenant_profile<S: HasServices>(
     state: &S,
     tenant_id: StringUuid,
@@ -78,7 +81,7 @@ pub(super) async fn discover_connector_by_domain(
     let row = sqlx::query(
         r#"
         SELECT c.tenant_id, t.slug as tenant_slug, c.alias as connector_alias,
-               c.keycloak_alias, c.provider_type
+               c.provider_alias, c.provider_type
         FROM enterprise_sso_domains d
         INNER JOIN enterprise_sso_connectors c ON c.id = d.connector_id
         INNER JOIN tenants t ON t.id = c.tenant_id
@@ -101,7 +104,7 @@ pub(super) async fn discover_connector_by_domain(
         tenant_id: row.try_get("tenant_id")?,
         tenant_slug: row.try_get("tenant_slug")?,
         connector_alias: row.try_get("connector_alias")?,
-        keycloak_alias: row.try_get("keycloak_alias")?,
+        provider_alias: row.try_get("provider_alias")?,
         provider_type: row.try_get("provider_type")?,
     })
 }

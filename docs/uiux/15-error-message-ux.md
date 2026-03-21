@@ -12,7 +12,7 @@
 Auth9 Portal 的错误消息来自多个来源：
 1. 前端表单验证（本地）
 2. `auth9-core` REST API 响应的错误码（`{ error: "error_code", message: "..." }` 格式）
-3. Keycloak 认证失败的错误描述
+3. Auth9 OIDC Engine 认证失败的错误描述
 
 ### 错误映射架构（两层映射）
 
@@ -44,7 +44,7 @@ UI 内联展示（红色文字 / role="alert"）
 | `conflict` | `apiErrors.conflict` | 具有相同标识的资源已存在。 | A resource with this identifier already exists. |
 | `database_error` / `cache_error` / `internal_error` | `apiErrors.serverError` | 服务器发生错误，请稍后重试。 | A server error occurred. Please try again later. |
 | `jwt_error` | `apiErrors.sessionExpired` | 您的会话已过期，请重新登录。 | Your session has expired. Please sign in again. |
-| `keycloak_error` | `apiErrors.authServiceError` | 认证服务暂时不可用，请稍后重试。 | The authentication service is temporarily unavailable. |
+| `auth_service_error` | `apiErrors.authServiceError` | 认证服务暂时不可用，请稍后重试。 | The authentication service is temporarily unavailable. |
 | `rate_limited` | `apiErrors.rateLimited` | 请求过于频繁，请稍后再试。 | Too many requests. Please wait a moment and try again. |
 | (unknown) | `apiErrors.unknown` | 发生未知错误，请重试。 | Something went wrong. Please try again. |
 
@@ -77,7 +77,7 @@ UI 内联展示（红色文字 / role="alert"）
 5. 切换语言后重复步骤 2~4
 
 **触发错误码（预期被映射）**：
-- Keycloak `invalid_grant` → 认证页显示友好错误文本
+- OIDC `invalid_grant` → 认证页显示友好错误文本
 - Portal 内部登录失败 → 通过 `mapApiError` 映射
 
 ### 预期视觉效果
@@ -190,7 +190,7 @@ fieldErrors.forEach((el, i) => {
 - Slug 冲突（`conflict`）：「具有相同标识的资源已存在。」
 - 权限不足（`forbidden`）：「您没有权限执行此操作。」
 - 服务器错误（`internal_error`）：「服务器发生错误，请稍后重试。」
-- 认证服务异常（`keycloak_error`）：「认证服务暂时不可用，请稍后重试。」
+- 认证服务异常（`auth_service_error`）：「认证服务暂时不可用，请稍后重试。」
 - 请求频率过高（`rate_limited`）：「请求过于频繁，请稍后再试。」
 
 **禁止出现**：
@@ -331,6 +331,7 @@ console.log('Error text:', document.querySelector('[class*="error"], [class*="no
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Keycloak login error shows "Invalid username or password." in English | This is Keycloak's native login page, not Portal. Login errors are rendered by the Keycloak theme, not Portal's `mapApiError()`. | Keycloak theme i18n is a separate concern. The `ui_locales` parameter controls Keycloak's display language. See `docs/keycloak-theme.md` for theme customization. |
+| Auth9 login error shows "Invalid username or password." in English | This is the Auth9 hosted login page. Login errors are rendered by the Auth9 品牌认证页, not Portal's `mapApiError()`. | Auth9 login page i18n is controlled by the `ui_locales` parameter. |
 | 404 page shows English text despite Chinese locale | Playwright browser defaults to `Accept-Language: en`. During client-side navigation, the root loader resolves locale from Accept-Language. SSR renders correctly (verified via `curl`). | Set `auth9_locale` cookie before testing, or configure Playwright's `locale` option in the test config. Verify SSR with `curl -s http://localhost:3000/nonexistent \| rg 'lang='`. |
+| 404 page text not translated (suspected missing i18n) | ErrorBoundary in `root.tsx` correctly uses `translate(locale, ...)` for all 404 page text. Translations exist in all three locales: en-US "Page not found", zh-CN "页面不存在", ja "ページが見つかりません". This is NOT a missing translation bug. | Verify the `auth9_locale` cookie is set to the correct locale value. The root loader reads locale from this cookie (or falls back to `Accept-Language`). If the cookie is absent or set to `en-US`, English text is expected behavior. |
 | Language switch on 404 page not working | The ErrorBoundary 404 page is minimal and does not include a language switcher. | Navigate away from the 404 page, switch language on a normal page, then return to the nonexistent URL. |

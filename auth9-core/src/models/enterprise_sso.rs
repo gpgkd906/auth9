@@ -17,7 +17,7 @@ pub struct EnterpriseSsoConnector {
     pub provider_type: String,
     pub enabled: bool,
     pub priority: i32,
-    pub keycloak_alias: String,
+    pub provider_alias: String,
     pub config: HashMap<String, String>,
     pub domains: Vec<String>,
     pub created_at: DateTime<Utc>,
@@ -65,7 +65,7 @@ pub struct EnterpriseSsoDiscoveryResult {
     pub tenant_id: StringUuid,
     pub tenant_slug: String,
     pub connector_alias: String,
-    pub keycloak_alias: String,
+    pub provider_alias: String,
     pub provider_type: String,
 }
 
@@ -262,7 +262,7 @@ mod tests {
             provider_type: "saml".to_string(),
             enabled: true,
             priority: 100,
-            keycloak_alias: "acme--okta-saml".to_string(),
+            provider_alias: "acme--okta-saml".to_string(),
             config: HashMap::from([(
                 "entityId".to_string(),
                 "https://okta.example.com".to_string(),
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(json["provider_type"], "saml");
         assert_eq!(json["enabled"], true);
         assert_eq!(json["priority"], 100);
-        assert_eq!(json["keycloak_alias"], "acme--okta-saml");
+        assert_eq!(json["provider_alias"], "acme--okta-saml");
 
         let deserialized: EnterpriseSsoConnector = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.alias, connector.alias);
@@ -295,14 +295,14 @@ mod tests {
             tenant_id: StringUuid::new_v4(),
             tenant_slug: "acme".to_string(),
             connector_alias: "okta-saml".to_string(),
-            keycloak_alias: "acme--okta-saml".to_string(),
+            provider_alias: "acme--okta-saml".to_string(),
             provider_type: "saml".to_string(),
         };
 
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["tenant_slug"], "acme");
         assert_eq!(json["connector_alias"], "okta-saml");
-        assert_eq!(json["keycloak_alias"], "acme--okta-saml");
+        assert_eq!(json["provider_alias"], "acme--okta-saml");
         assert_eq!(json["provider_type"], "saml");
     }
 

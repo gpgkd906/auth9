@@ -38,8 +38,8 @@
 
 ### 预期数据状态
 ```sql
--- Keycloak Admin API 验证
--- GET /admin/realms/auth9/identity-provider/instances
+-- Auth9 管理 API 验证
+-- GET /api/v1/identity-providers
 ```
 
 ---
@@ -86,8 +86,8 @@
 
 ### 预期数据状态
 ```sql
--- Keycloak Admin API 验证
--- GET /admin/realms/auth9/identity-provider/instances/google
+-- Auth9 管理 API 验证
+-- GET /api/v1/identity-providers/google
 -- 预期: 存在 alias=google, providerId=google, enabled=true
 ```
 
@@ -122,8 +122,8 @@
 
 ### 预期数据状态
 ```sql
--- Keycloak Admin API 验证
--- GET /admin/realms/auth9/identity-provider/instances/custom-oidc
+-- Auth9 管理 API 验证
+-- GET /api/v1/identity-providers/custom-oidc
 -- 预期: 存在配置，config 包含 authorizationUrl 和 tokenUrl
 ```
 
@@ -153,8 +153,8 @@
 
 ### 预期数据状态
 ```sql
--- Keycloak Admin API 验证
--- GET /admin/realms/auth9/identity-provider/instances/{alias}
+-- Auth9 管理 API 验证
+-- GET /api/v1/identity-providers/{alias}
 -- 预期: displayName 已更新
 ```
 
@@ -181,8 +181,8 @@
 
 ### 预期数据状态
 ```sql
--- Keycloak Admin API 验证
--- GET /admin/realms/auth9/identity-provider/instances/{alias}
+-- Auth9 管理 API 验证
+-- GET /api/v1/identity-providers/{alias}
 -- 预期: 404 Not Found
 ```
 

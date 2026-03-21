@@ -2,6 +2,7 @@
 
 use crate::config::JwtConfig;
 use crate::error::{AppError, Result};
+use base64::Engine;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -85,6 +86,58 @@ pub struct ServiceClientClaims {
     /// The tenant_id this service belongs to (if any)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<String>,
+    /// Issued at (Unix timestamp)
+    pub iat: i64,
+    /// Expiration (Unix timestamp)
+    pub exp: i64,
+}
+
+/// OIDC ID Token claims (per OIDC Core spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdTokenClaims {
+    /// Subject (user ID)
+    pub sub: String,
+    /// Email
+    pub email: String,
+    /// Display name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Nonce (from authorize request, for replay protection)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+    /// Access token hash (left 128 bits of SHA-256 of access_token, base64url)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at_hash: Option<String>,
+    /// Issuer
+    pub iss: String,
+    /// Audience (client_id)
+    pub aud: String,
+    /// Session ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sid: Option<String>,
+    /// Token type discriminator
+    #[serde(default)]
+    pub token_type: String,
+    /// Issued at (Unix timestamp)
+    pub iat: i64,
+    /// Expiration (Unix timestamp)
+    pub exp: i64,
+}
+
+/// OIDC Refresh Token claims (Auth9-managed, for OIDC authorization code flow)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OidcRefreshClaims {
+    /// Subject (user ID)
+    pub sub: String,
+    /// Session ID (for session binding)
+    pub sid: String,
+    /// Issuer
+    pub iss: String,
+    /// Audience (client_id)
+    pub aud: String,
+    /// Token type discriminator
+    #[serde(default)]
+    pub token_type: String,
     /// Issued at (Unix timestamp)
     pub iat: i64,
     /// Expiration (Unix timestamp)
@@ -330,6 +383,89 @@ impl JwtManager {
         encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
+    /// Create an OIDC ID Token (per OIDC Core spec)
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_id_token(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        name: Option<&str>,
+        nonce: Option<&str>,
+        client_id: &str,
+        session_id: Option<Uuid>,
+        access_token: &str,
+    ) -> Result<String> {
+        use sha2::{Digest, Sha256};
+        let now = Utc::now();
+        let exp = now + Duration::seconds(self.config.access_token_ttl_secs);
+
+        // Compute at_hash: left 128 bits of SHA-256 of access_token, base64url-encoded
+        let hash = Sha256::digest(access_token.as_bytes());
+        let at_hash = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&hash[..16]);
+
+        let claims = IdTokenClaims {
+            sub: user_id.to_string(),
+            email: email.to_string(),
+            name: name.map(String::from),
+            nonce: nonce.map(String::from),
+            at_hash: Some(at_hash),
+            iss: self.config.issuer.clone(),
+            aud: client_id.to_string(),
+            sid: session_id.map(|id| id.to_string()),
+            token_type: "id_token".to_string(),
+            iat: now.timestamp(),
+            exp: exp.timestamp(),
+        };
+        let mut header = Header::new(self.algorithm);
+        header.kid = Some("auth9-current".to_string());
+        encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
+    }
+
+    /// Create an OIDC refresh token (session-bound, for OIDC authorization code flow)
+    pub fn create_oidc_refresh_token(
+        &self,
+        user_id: Uuid,
+        client_id: &str,
+        session_id: Uuid,
+    ) -> Result<String> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(self.config.refresh_token_ttl_secs);
+
+        let claims = OidcRefreshClaims {
+            sub: user_id.to_string(),
+            sid: session_id.to_string(),
+            iss: self.config.issuer.clone(),
+            aud: client_id.to_string(),
+            token_type: "oidc_refresh".to_string(),
+            iat: now.timestamp(),
+            exp: exp.timestamp(),
+        };
+        let mut header = Header::new(self.algorithm);
+        header.kid = Some("auth9-current".to_string());
+        encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
+    }
+
+    /// Verify and decode an OIDC refresh token
+    pub fn verify_oidc_refresh_token(
+        &self,
+        token: &str,
+        expected_audience: &str,
+    ) -> Result<OidcRefreshClaims> {
+        let mut validation = self.strict_validation();
+        validation.set_audience(&[expected_audience]);
+        validation.set_issuer(&[&self.config.issuer]);
+
+        let token_data = decode::<OidcRefreshClaims>(token, &self.decoding_key, &validation)?;
+
+        if token_data.claims.token_type != "oidc_refresh" {
+            return Err(AppError::Unauthorized(
+                "Not an OIDC refresh token".to_string(),
+            ));
+        }
+
+        Ok(token_data.claims)
+    }
+
     /// Verify and decode a service client token
     pub fn verify_service_client_token(&self, token: &str) -> Result<ServiceClientClaims> {
         let mut validation = self.strict_validation();
@@ -408,6 +544,23 @@ impl JwtManager {
 
         let aud_refs: Vec<&str> = expected_audiences.iter().map(|s| s.as_str()).collect();
         validation.set_audience(&aud_refs);
+
+        let token_data = decode::<TenantAccessClaims>(token, &self.decoding_key, &validation)?;
+        Ok(token_data.claims)
+    }
+
+    /// Verify tenant access token without audience validation.
+    ///
+    /// Validates signature, issuer, and expiry but skips `aud` check.
+    /// The caller is responsible for verifying the audience separately
+    /// (e.g., via cache-backed `is_valid_audience` lookup).
+    pub fn verify_tenant_access_token_any_audience(
+        &self,
+        token: &str,
+    ) -> Result<TenantAccessClaims> {
+        let mut validation = self.strict_validation();
+        validation.set_issuer(&[&self.config.issuer]);
+        validation.validate_aud = false;
 
         let token_data = decode::<TenantAccessClaims>(token, &self.decoding_key, &validation)?;
         Ok(token_data.claims)
@@ -833,5 +986,201 @@ mod tests {
 
         let manager = JwtManager::new(config);
         assert_eq!(manager.access_token_ttl(), 1800);
+    }
+
+    // ==================== ID Token Tests ====================
+
+    #[test]
+    fn test_create_id_token_with_nonce() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
+        let access_token = "fake-access-token-for-hash";
+
+        let token = manager
+            .create_id_token(
+                user_id,
+                "test@example.com",
+                Some("Test User"),
+                Some("nonce-123"),
+                "my-client",
+                Some(session_id),
+                access_token,
+            )
+            .unwrap();
+
+        // Decode without verification to check claims
+        let mut validation = jsonwebtoken::Validation::new(Algorithm::HS256);
+        validation.set_audience(&["my-client"]);
+        validation.set_issuer(&["https://auth9.test"]);
+        let token_data = decode::<IdTokenClaims>(
+            &token,
+            &DecodingKey::from_secret(b"test-secret-key-for-testing-purposes-only"),
+            &validation,
+        )
+        .unwrap();
+
+        assert_eq!(token_data.claims.sub, user_id.to_string());
+        assert_eq!(token_data.claims.email, "test@example.com");
+        assert_eq!(token_data.claims.name, Some("Test User".to_string()));
+        assert_eq!(token_data.claims.nonce, Some("nonce-123".to_string()));
+        assert_eq!(token_data.claims.aud, "my-client");
+        assert_eq!(token_data.claims.token_type, "id_token");
+        assert!(token_data.claims.at_hash.is_some());
+        assert_eq!(token_data.claims.sid, Some(session_id.to_string()));
+    }
+
+    #[test]
+    fn test_create_id_token_without_nonce() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+
+        let token = manager
+            .create_id_token(
+                user_id,
+                "test@example.com",
+                None,
+                None,
+                "client-id",
+                None,
+                "access-token",
+            )
+            .unwrap();
+
+        let mut validation = jsonwebtoken::Validation::new(Algorithm::HS256);
+        validation.set_audience(&["client-id"]);
+        validation.set_issuer(&["https://auth9.test"]);
+        let token_data = decode::<IdTokenClaims>(
+            &token,
+            &DecodingKey::from_secret(b"test-secret-key-for-testing-purposes-only"),
+            &validation,
+        )
+        .unwrap();
+
+        assert!(token_data.claims.nonce.is_none());
+        assert!(token_data.claims.name.is_none());
+        assert!(token_data.claims.sid.is_none());
+    }
+
+    #[test]
+    fn test_id_token_at_hash_correctness() {
+        use sha2::{Digest, Sha256};
+        let manager = JwtManager::new(test_config());
+        let access_token = "test-access-token-value";
+
+        let token = manager
+            .create_id_token(
+                Uuid::new_v4(),
+                "test@example.com",
+                None,
+                None,
+                "client",
+                None,
+                access_token,
+            )
+            .unwrap();
+
+        let mut validation = jsonwebtoken::Validation::new(Algorithm::HS256);
+        validation.set_audience(&["client"]);
+        validation.set_issuer(&["https://auth9.test"]);
+        let token_data = decode::<IdTokenClaims>(
+            &token,
+            &DecodingKey::from_secret(b"test-secret-key-for-testing-purposes-only"),
+            &validation,
+        )
+        .unwrap();
+
+        // Verify at_hash manually
+        let hash = Sha256::digest(access_token.as_bytes());
+        let expected = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&hash[..16]);
+        assert_eq!(token_data.claims.at_hash, Some(expected));
+    }
+
+    // ==================== OIDC Refresh Token Tests ====================
+
+    #[test]
+    fn test_create_and_verify_oidc_refresh_token() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
+
+        let token = manager
+            .create_oidc_refresh_token(user_id, "my-client", session_id)
+            .unwrap();
+
+        let claims = manager
+            .verify_oidc_refresh_token(&token, "my-client")
+            .unwrap();
+
+        assert_eq!(claims.sub, user_id.to_string());
+        assert_eq!(claims.sid, session_id.to_string());
+        assert_eq!(claims.aud, "my-client");
+        assert_eq!(claims.token_type, "oidc_refresh");
+    }
+
+    #[test]
+    fn test_oidc_refresh_token_wrong_audience() {
+        let manager = JwtManager::new(test_config());
+        let token = manager
+            .create_oidc_refresh_token(Uuid::new_v4(), "my-client", Uuid::new_v4())
+            .unwrap();
+
+        let result = manager.verify_oidc_refresh_token(&token, "wrong-client");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_oidc_refresh_token_type_discrimination() {
+        // An identity token should NOT pass oidc_refresh verification
+        let manager = JwtManager::new(test_config());
+        let identity_token = manager
+            .create_identity_token(Uuid::new_v4(), "test@example.com", None)
+            .unwrap();
+
+        // This should fail because token_type != "oidc_refresh" and aud != "my-client"
+        let result = manager.verify_oidc_refresh_token(&identity_token, "auth9");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_id_token_claims_serialization() {
+        let claims = IdTokenClaims {
+            sub: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            name: Some("Test".to_string()),
+            nonce: Some("nonce-456".to_string()),
+            at_hash: Some("hash-value".to_string()),
+            iss: "https://auth9.test".to_string(),
+            aud: "my-client".to_string(),
+            sid: Some("session-789".to_string()),
+            token_type: "id_token".to_string(),
+            iat: 1000000,
+            exp: 1003600,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(json.contains("\"nonce\":\"nonce-456\""));
+        assert!(json.contains("\"at_hash\":\"hash-value\""));
+        assert!(json.contains("\"token_type\":\"id_token\""));
+
+        let decoded: IdTokenClaims = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.nonce, Some("nonce-456".to_string()));
+    }
+
+    #[test]
+    fn test_oidc_refresh_claims_serialization() {
+        let claims = OidcRefreshClaims {
+            sub: "user-123".to_string(),
+            sid: "session-456".to_string(),
+            iss: "https://auth9.test".to_string(),
+            aud: "my-client".to_string(),
+            token_type: "oidc_refresh".to_string(),
+            iat: 1000000,
+            exp: 1604800,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(json.contains("\"sid\":\"session-456\""));
+        assert!(json.contains("\"token_type\":\"oidc_refresh\""));
     }
 }

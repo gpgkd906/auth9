@@ -3,7 +3,6 @@
 //! Verifies that permissions cannot be assigned to roles across different services.
 
 use crate::support::http::{build_test_router, post_json_with_auth, TestAppState};
-use crate::support::mock_keycloak::MockKeycloakServer;
 use crate::support::{create_test_permission, create_test_role, create_test_tenant_access_token};
 use auth9_core::http_support::MessageResponse;
 use axum::http::StatusCode;
@@ -12,8 +11,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_assign_permission_different_service_fails() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin
 
     let service1_id = Uuid::new_v4();

@@ -15,7 +15,8 @@
 
 端点：
 - `POST /api/v1/enterprise-sso/discovery`
-- `GET /api/v1/auth/authorize`（新增 `connector_alias` 参数，映射 `kc_idp_hint`）
+- `GET /api/v1/auth/authorize`（新增 `connector_alias` 参数）
+- `GET /api/v1/enterprise-sso/authorize/{alias}`（OIDC 连接器原生 broker 流程）
 
 ---
 
@@ -29,7 +30,7 @@
 | alias | VARCHAR(100) | 连接器别名 |
 | provider_type | VARCHAR(20) | `saml` / `oidc` |
 | enabled | BOOLEAN | 是否启用 |
-| keycloak_alias | VARCHAR(140) | Keycloak IdP alias |
+| provider_alias | VARCHAR(140) | provider alias |
 | config | JSON | 协议配置 |
 
 ### `enterprise_sso_domains` 表
@@ -72,11 +73,12 @@ curl -X POST 'http://localhost:8080/api/v1/enterprise-sso/discovery?response_typ
 ### 预期结果
 - HTTP 状态码为 `200`
 - 返回 `data.tenant_id`、`data.tenant_slug`、`data.connector_alias`
-- `authorize_url` 包含 `kc_idp_hint=` 且值为租户连接器对应的 `keycloak_alias`
+- 对于 OIDC 连接器：`authorize_url` 指向 Auth9 原生 broker（`/api/v1/enterprise-sso/authorize/{alias}?login_challenge=...&login_hint=...`）
+- 对于 SAML 连接器：`authorize_url` 包含 `kc_idp_hint=` 且值为 `provider_alias`
 
 ### 预期数据状态
 ```sql
-SELECT c.id, c.alias, c.keycloak_alias, c.enabled, d.domain
+SELECT c.id, c.alias, c.provider_alias, c.enabled, d.domain
 FROM enterprise_sso_connectors c
 JOIN enterprise_sso_domains d ON d.connector_id = c.id
 WHERE d.domain = '{corp_domain}';
@@ -186,30 +188,30 @@ SELECT COUNT(*) AS cnt FROM enterprise_sso_connectors;
 
 ---
 
-## 场景 5：`/api/v1/auth/authorize` 透传 `connector_alias` 到 Keycloak
+## 场景 5：`/api/v1/auth/authorize` 透传 `connector_alias` 到正确的 broker
 
 ### 初始状态
 - 已存在可用 OIDC client：`auth9-portal`
 
 ### 目的
-验证授权端点支持 `connector_alias` 并向底层授权请求透传 `kc_idp_hint`
+验证授权端点支持 `connector_alias`，OIDC 连接器重定向到 Auth9 企业 broker，SAML 连接器透传 `kc_idp_hint`
 
 ### 测试操作流程
-1. 访问：
+1. 访问（OIDC 连接器）：
 ```bash
-curl -I 'http://localhost:8080/api/v1/auth/authorize?response_type=code&client_id=auth9-portal&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=openid%20email%20profile&state={state}&connector_alias={keycloak_alias}'
+curl -I 'http://localhost:8080/api/v1/auth/authorize?response_type=code&client_id=auth9-portal&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=openid%20email%20profile&state={state}&connector_alias={oidc_connector_alias}'
 ```
 2. 查看 `Location` 响应头
 
 ### 预期结果
 - HTTP 状态码为 `307` 或 `302`
-- `Location` 指向底层授权端点
-- `Location` 查询参数中存在 `kc_idp_hint={keycloak_alias}`
+- OIDC 连接器：`Location` 指向 `/api/v1/enterprise-sso/authorize/{alias}?login_challenge=...`（Auth9 原生 broker）
+- SAML 连接器：`Location` 指向 Auth9 broker 端点（`/api/v1/enterprise-sso/authorize/{alias}?login_challenge=...`）
 
 ### 预期数据状态
 ```sql
-SELECT COUNT(*) AS cnt FROM enterprise_sso_connectors WHERE keycloak_alias = '{keycloak_alias}';
--- 预期: cnt >= 1（仅路由透传，无新增写入）
+SELECT alias, provider_type FROM enterprise_sso_connectors WHERE alias = '{connector_alias}' AND enabled = TRUE;
+-- 预期: 返回 1 行，provider_type 决定路由目标
 ```
 
 ---

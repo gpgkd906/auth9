@@ -1,6 +1,5 @@
 //! Email provider domain types
 
-use crate::keycloak::SmtpServerConfig;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -9,6 +8,50 @@ use validator::Validate;
 
 /// Version byte for SES SMTP password calculation
 const SES_SMTP_PASSWORD_VERSION: u8 = 0x04;
+
+/// SMTP server configuration (wire-compatible with identity backend Admin API).
+/// Note: All fields are string types for wire compatibility.
+#[derive(Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SmtpServerConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(rename = "fromDisplayName", skip_serializing_if = "Option::is_none")]
+    pub from_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssl: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub starttls: Option<String>,
+}
+
+impl std::fmt::Debug for SmtpServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SmtpServerConfig")
+            .field("host", &self.host.as_ref().map(|_| "<REDACTED>"))
+            .field("port", &self.port.as_ref().map(|_| "<REDACTED>"))
+            .field("from", &self.from.as_ref().map(|_| "<REDACTED>"))
+            .field(
+                "from_display_name",
+                &self.from_display_name.as_ref().map(|_| "<REDACTED>"),
+            )
+            .field("auth", &self.auth.as_ref().map(|_| "<REDACTED>"))
+            .field("user", &self.user.as_ref().map(|_| "<REDACTED>"))
+            .field("password", &self.password.as_ref().map(|_| "<REDACTED>"))
+            .field("ssl", &self.ssl.as_ref().map(|_| "<REDACTED>"))
+            .field("starttls", &self.starttls.as_ref().map(|_| "<REDACTED>"))
+            .finish()
+    }
+}
 
 /// Email provider configuration - supports multiple provider types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, ToSchema)]
@@ -44,13 +87,13 @@ impl EmailProviderConfig {
         }
     }
 
-    /// Convert to Keycloak SmtpServerConfig
+    /// Convert to backend SmtpServerConfig
     ///
     /// Returns None if conversion is not possible (e.g., SES without credentials)
-    pub fn to_keycloak_smtp(&self) -> Option<SmtpServerConfig> {
+    pub fn to_backend_smtp_config(&self) -> Option<SmtpServerConfig> {
         match self {
             Self::None => {
-                // Return empty config to clear SMTP settings in Keycloak
+                // Return empty config to clear SMTP settings in identity backend
                 Some(SmtpServerConfig::default())
             }
             Self::Smtp(cfg) => Some(SmtpServerConfig {
@@ -505,9 +548,9 @@ mod tests {
     }
 
     #[test]
-    fn test_to_keycloak_smtp_none() {
+    fn test_to_backend_smtp_config_none() {
         let config = EmailProviderConfig::None;
-        let smtp = config.to_keycloak_smtp().unwrap();
+        let smtp = config.to_backend_smtp_config().unwrap();
 
         // Should return empty config to clear SMTP settings
         assert!(smtp.host.is_none());
@@ -516,7 +559,7 @@ mod tests {
     }
 
     #[test]
-    fn test_to_keycloak_smtp_smtp_provider() {
+    fn test_to_backend_smtp_config_smtp_provider() {
         let config = EmailProviderConfig::Smtp(SmtpConfig {
             host: "smtp.example.com".to_string(),
             port: 587,
@@ -527,7 +570,7 @@ mod tests {
             from_name: Some("Auth9".to_string()),
         });
 
-        let smtp = config.to_keycloak_smtp().unwrap();
+        let smtp = config.to_backend_smtp_config().unwrap();
 
         assert_eq!(smtp.host, Some("smtp.example.com".to_string()));
         assert_eq!(smtp.port, Some("587".to_string()));
@@ -540,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn test_to_keycloak_smtp_smtp_no_auth() {
+    fn test_to_backend_smtp_config_smtp_no_auth() {
         let config = EmailProviderConfig::Smtp(SmtpConfig {
             host: "smtp.example.com".to_string(),
             port: 25,
@@ -551,7 +594,7 @@ mod tests {
             from_name: None,
         });
 
-        let smtp = config.to_keycloak_smtp().unwrap();
+        let smtp = config.to_backend_smtp_config().unwrap();
 
         assert_eq!(smtp.auth, Some("false".to_string()));
         assert!(smtp.user.is_none());
@@ -560,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    fn test_to_keycloak_smtp_ses_provider() {
+    fn test_to_backend_smtp_config_ses_provider() {
         let config = EmailProviderConfig::Ses(SesConfig {
             region: "us-east-1".to_string(),
             access_key_id: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
@@ -570,7 +613,7 @@ mod tests {
             configuration_set: None,
         });
 
-        let smtp = config.to_keycloak_smtp().unwrap();
+        let smtp = config.to_backend_smtp_config().unwrap();
 
         assert_eq!(
             smtp.host,
@@ -590,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn test_to_keycloak_smtp_ses_no_credentials() {
+    fn test_to_backend_smtp_config_ses_no_credentials() {
         let config = EmailProviderConfig::Ses(SesConfig {
             region: "us-east-1".to_string(),
             access_key_id: None,
@@ -601,12 +644,12 @@ mod tests {
         });
 
         // Should return None when credentials are missing
-        let smtp = config.to_keycloak_smtp();
+        let smtp = config.to_backend_smtp_config();
         assert!(smtp.is_none());
     }
 
     #[test]
-    fn test_to_keycloak_smtp_oracle_provider() {
+    fn test_to_backend_smtp_config_oracle_provider() {
         let config = EmailProviderConfig::Oracle(OracleEmailConfig {
             smtp_endpoint: "smtp.us-ashburn-1.oraclecloud.com".to_string(),
             port: 587,
@@ -616,7 +659,7 @@ mod tests {
             from_name: Some("Auth9".to_string()),
         });
 
-        let smtp = config.to_keycloak_smtp().unwrap();
+        let smtp = config.to_backend_smtp_config().unwrap();
 
         assert_eq!(
             smtp.host,

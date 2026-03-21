@@ -21,7 +21,7 @@ Auth9 登出场景：
 
 涉及的清理：
 - Browser Cookie
-- Keycloak Session
+- Auth9 OIDC Session
 - Redis 缓存
 - Token 黑名单
 
@@ -85,7 +85,7 @@ redis-cli KEYS "*session*$SESSION*"
 - 清除所有相关 Cookie
 - Token 加入黑名单
 - 删除 Redis Session
-- 通知 Keycloak 登出
+- 通知 Auth9 OIDC Engine 登出
 
 ---
 
@@ -123,17 +123,17 @@ curl -b appA.txt -X POST http://localhost:3000/logout
 curl -b appB.txt http://localhost:4000/dashboard
 # 如果启用 SLO，应该要求重新登录
 
-# 检查 Keycloak Session
-# Admin API 查询用户 Session
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:8081/admin/realms/auth9/users/{user_id}/sessions
+# 检查 Auth9 Session
+# 通过数据库查询用户 Session
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
+  "SELECT id, revoked_at FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL;"
 # 预期: 无活跃 Session
 ```
 
 ### 修复建议
 - 实现 back-channel logout
 - 配置 logout_uri
-- 监听 Keycloak 登出事件
+- 处理 OIDC 登出事件
 - 清理所有关联 Session
 
 ---
@@ -263,7 +263,7 @@ curl -I -H "Authorization: Bearer $TOKEN" \
 | Session Cookie | 浏览器 | Set-Cookie: session=; Max-Age=0 |
 | Access Token | 浏览器/内存 | Token 黑名单 + 清除 |
 | Refresh Token | 安全存储 | 数据库标记撤销 |
-| Keycloak Session | Keycloak | Admin API 撤销 |
+| Auth9 OIDC Session | Auth9 数据库 | Session 标记撤销 |
 | Redis 缓存 | Redis | DEL session:xxx |
 | 本地存储 | localStorage | 前端 clear() |
 

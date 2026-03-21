@@ -1,7 +1,7 @@
-# 集成测试 - 安全加固第二轮（事务性级联删除 & Keycloak 事件源安全校验）
+# 集成测试 - 安全加固第二轮（事务性级联删除 & 事件源安全校验）
 
 **模块**: 集成测试
-**测试范围**: P0-2 用户/租户删除事务原子性 + P0-3 Keycloak Webhook 配置安全校验
+**测试范围**: P0-2 用户/租户删除事务原子性 + P0-3 事件 Webhook 配置安全校验
 **场景数**: 4
 **优先级**: 高
 
@@ -16,14 +16,14 @@
 - 用户删除：`UserService::delete()` — 清理 `user_tenant_roles`、`sessions`、`password_reset_tokens`、`linked_identities`、`passkeys`、`login_events`、`security_alerts`、`tenant_users`，最后删除 `users` 记录
 - 租户删除：`TenantService::delete()` — 清理 `clients`、`role_permissions`、`user_tenant_roles`、`roles`、`permissions`、`webhooks`、`invitations`、`tenant_users`、`login_events`、`security_alerts`、`actions`、`services`，最后删除 `tenants` 记录
 
-外部系统操作（Keycloak 用户删除、Webhook 通知）在事务 commit 之后执行，确保数据库一致性优先。
+外部系统操作（身份主体删除、Webhook 通知）在事务 commit 之后执行，确保数据库一致性优先。
 
-### Keycloak Webhook 安全校验（P0-3）
+### 事件 Webhook 安全校验（P0-3）
 
-Auth9 事件接入使用 Webhook 模式：ext-event-http SPI 插件将事件推送到 `POST /api/v1/keycloak/events`。
+Auth9 事件接入使用 Webhook 模式：事件兼容入口将事件推送到 `POST /api/v1/keycloak/events`。
 
 安全规则：
-- **生产环境**：必须配置 `KEYCLOAK_WEBHOOK_SECRET`，否则拒绝启动
+- **生产环境**：必须配置 Webhook Secret（`KEYCLOAK_WEBHOOK_SECRET`，历史遗留环境变量名），否则拒绝启动
 - **非生产环境**：允许启动但输出 warn
 
 ---
@@ -180,16 +180,16 @@ SELECT COUNT(*) FROM invitations WHERE tenant_id = '{tenant_id}';
    ```
 3. 检查底层认证主体中用户是否已删除：
    ```bash
-   # 底层 Admin API
-   curl -s -w "\n%{http_code}" \
-     -H "Authorization: Bearer {keycloak_admin_token}" \
-     http://localhost:8081/admin/realms/auth9/users/{keycloak_user_id}
+   # 通过 Auth9 管理 API 或数据库验证
+   mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
+     "SELECT COUNT(*) FROM users WHERE identity_subject = '{identity_subject}';"
+   # 预期: 0
    ```
 4. 检查 Webhook 投递记录（如配置了 Webhook）
 
 ### 预期结果
 - 用户从数据库和底层认证主体中均已删除
-- 底层 Admin API 查询返回 `404 Not Found`
+- 数据库中该用户记录已删除
 - Webhook 端点收到 `user.deleted` 事件
 
 ---
@@ -198,7 +198,7 @@ SELECT COUNT(*) FROM invitations WHERE tenant_id = '{tenant_id}';
 
 ### 初始状态
 - 环境变量 `AUTH9_ENV=production`（或等效生产标识）
-- 未设置 `KEYCLOAK_WEBHOOK_SECRET`
+- 未设置 `KEYCLOAK_WEBHOOK_SECRET`（历史遗留环境变量名）
 
 ### 目的
 验证生产环境下未配置 webhook secret 时，auth9-core 拒绝启动

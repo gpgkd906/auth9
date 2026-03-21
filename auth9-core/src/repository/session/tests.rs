@@ -71,7 +71,7 @@ async fn test_mock_create() {
 
     let input = CreateSessionInput {
         user_id,
-        keycloak_session_id: Some("kc-session-123".to_string()),
+        provider_session_id: Some("kc-session-123".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: Some("Chrome".to_string()),
         ip_address: Some("192.168.1.1".to_string()),

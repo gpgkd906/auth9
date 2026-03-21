@@ -192,14 +192,27 @@ curl -X GET http://localhost:8080/api/v1/services/{service_b_id}/actions/{action
 
 ### 3. 删除他人的 Action
 
+> **步骤 0: 验证 Token 权限**
+> `$USER_TOKEN` 必须是 **member 角色且不包含 `action:write` 权限** 的 Tenant Access Token。
+> 若 Token 包含 `action:write` 或 `action:*` 权限，删除成功 (200) 是预期行为，不是漏洞。
+
 **测试方法**:
 ```bash
-# 普通用户尝试删除管理员的 Action
+# 1. 生成无 action:write 权限的 member Token
+USER_TOKEN="$(gen_tenant_access_token "$MEMBER_USER_ID" "member@test.local" "$DEMO_TENANT_ID" '["member"]' '[]')"
+
+# 2. 使用该 Token 尝试删除管理员的 Action
 curl -X DELETE http://localhost:8080/api/v1/services/{service_id}/actions/{admin_action_id} \
   -H "Authorization: Bearer $USER_TOKEN"
 ```
 
 **预期**: HTTP 403 Forbidden
+
+### 常见误报排查
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| member 用户得到 `200 OK` | Token 中包含了 `action:write` 或 `action:*` 权限 | 确认 Token 的 `permissions` 字段为空数组 `[]` |
+| 使用 `gen-tenant-token.js` 得到 `200 OK` | 该脚本默认生成 admin 角色 + `action:*` 权限 | 改用 `gen_tenant_access_token()` 函数并显式指定 `'["member"]' '[]'` |
 
 ---
 

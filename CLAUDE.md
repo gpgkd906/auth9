@@ -35,7 +35,7 @@ npm run test:e2e:full:reset    # Reset env + full-stack E2E tests
 
 ### Local Development with Docker
 ```bash
-# Start dependencies (TiDB, Redis, Keycloak)
+# Start dependencies (TiDB, Redis)
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # (Optional) Add observability stack (Prometheus, Grafana, Loki, Tempo)
@@ -52,7 +52,7 @@ cd auth9-portal && npm run dev
 
 Auth9 is a self-hosted identity and access management service (Auth0 alternative).
 
-**Core Concept**: Headless Keycloak architecture - Keycloak handles OIDC/MFA only; all business logic lives in auth9-core. Token Exchange flow: Identity Token → Tenant Access Token with roles/permissions.
+**Core Concept**: Auth9 is a self-contained identity platform with built-in OIDC engine (auth9-oidc). Token Exchange flow: Identity Token → Tenant Access Token with roles/permissions.
 
 | Component | Stack | Purpose |
 |-----------|-------|---------|
@@ -60,7 +60,7 @@ Auth9 is a self-hosted identity and access management service (Auth0 alternative
 | auth9-portal | React Router 7 + TypeScript + Vite | Admin dashboard |
 | Database | TiDB (MySQL compatible) | Tenant, user, RBAC data |
 | Cache | Redis | Session, token caching |
-| Auth Engine | Keycloak | OIDC provider |
+| Auth Engine | auth9-oidc (built-in) | OIDC provider |
 
 ### Data Modeling Rules
 
@@ -88,7 +88,6 @@ auth9-core/src/
 ├── models/       # Shared models / value objects with validation
 ├── service/      # Business logic (depends on repository traits)
 ├── repository/   # Data access layer (implements traits, mockall support)
-├── keycloak/     # Keycloak Admin API client
 ├── jwt/          # JWT signing & validation
 ├── cache/        # Redis caching (CacheManager, NoOpCacheManager)
 ├── config/       # Configuration types
@@ -101,8 +100,6 @@ Project documentation is in `docs/`. Read the relevant doc before related tasks:
 - `design-system.md` - Auth9 Portal UI design system (Liquid Glass style, colors, components)
 - `architecture.md` - System architecture overview
 - `api-access-control.md` - API access control design
-- `keycloak-theme.md` - Keycloak theme customization
-- `keycloak-service-refactor.md` - Keycloak service layer refactoring plan (KeycloakSyncService, KeycloakOidcService)
 - `testing/test-domain-policy.md` - **Test domain allowlist** (MUST follow when generating test data)
 
 ## Skills
@@ -121,7 +118,6 @@ All tests run fast (~1-2 seconds) with **no Docker or external services**:
 - Repository layer: Mock traits with `mockall`
 - Service layer: Unit tests with mock repositories
 - gRPC services: `NoOpCacheManager` + mock repositories
-- Keycloak: `wiremock` HTTP mocking
 
 ### Prohibited
 - No testcontainers - tests must not start Docker containers
@@ -134,8 +130,6 @@ All tests run fast (~1-2 seconds) with **no Docker or external services**:
 - **Repository trait mocks**: `#[cfg_attr(test, mockall::automock)]` on trait definitions
 - **HTTP handler tests**: `tests/api/http/*_http_test.rs` (uses `HasServices` DI pattern)
 - **gRPC integration tests**: `tests/grpc_*.rs`
-- **Keycloak tests**: `tests/keycloak_unit_test.rs` (uses wiremock)
-
 ### HTTP Handler DI Pattern
 All API handlers use `<S: HasServices>` generic instead of concrete `AppState`. This enables testing production handler code with `TestAppState` + mock repositories. See `test-coverage.md` skill for details.
 
@@ -242,9 +236,8 @@ tests/
 │   └── login.spec.ts       # UI rendering, navigation
 └── e2e-integration/        # Full-stack integration tests (需要 Docker)
     ├── setup/
-    │   ├── test-config.ts      # Test configuration (URLs, credentials)
-    │   └── keycloak-admin.ts   # Keycloak Admin API client
-    ├── global-setup.ts         # Wait for services, create test users
+    │   └── test-config.ts      # Test configuration (URLs, credentials)
+    ├── global-setup.ts         # Wait for services
     └── auth-flow.spec.ts       # Scenario-based tests
 ```
 
@@ -260,19 +253,7 @@ npm run test:e2e:full         # Full-stack tests (requires Docker)
 npm run test:e2e:full:reset   # Reset environment + full-stack tests
 ```
 
-**Test Data Preparation**: Use Keycloak Admin API in `global-setup.ts`:
-```typescript
-// tests/e2e-integration/setup/keycloak-admin.ts
-const keycloak = new KeycloakAdminClient();
-await keycloak.authenticate();  // Master realm admin
-await keycloak.createUser({
-  username: "e2e-test-user",
-  email: "e2e-test@example.com",
-  password: "Test123!", // pragma: allowlist secret
-  firstName: "E2E",
-  lastName: "TestUser",
-});
-```
+**Test Data Preparation**: Test users are pre-seeded via `./scripts/reset-docker.sh`. The `global-setup.ts` waits for Portal and Auth9 Core to be ready.
 
 **Scenario-based Test Pattern**:
 ```typescript
@@ -280,7 +261,7 @@ test.describe("Scenario: User Authentication Flow", () => {
   const testUser = TEST_CONFIG.testUsers.standard;
 
   test("1. Login page should be accessible", async ({ page }) => { ... });
-  test("2. Clicking sign in should redirect to Keycloak", async ({ page }) => { ... });
+  test("2. Clicking sign in should show Auth9 login form", async ({ page }) => { ... });
   test("3. User can login with valid credentials", async ({ page }) => { ... });
 });
 
@@ -294,5 +275,4 @@ test.describe("Scenario: Auth9 Core API Integration", () => {
 
 **Test Configuration** (`tests/e2e-integration/setup/test-config.ts`):
 - Fixed test user credentials (environment is reset before each test run)
-- Service URLs: Portal (3000), Auth9 Core (8080), Keycloak (8081)
-- Keycloak Admin credentials for test data setup
+- Service URLs: Portal (3000), Auth9 Core (8080)

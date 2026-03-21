@@ -2,7 +2,7 @@
 //!
 //! Tests for security alert listing, retrieval, and resolution endpoints.
 
-use crate::support::http::{get_json_with_auth, MockKeycloakServer, TestAppState};
+use crate::support::http::{get_json_with_auth, TestAppState};
 use crate::support::{create_test_jwt_manager, create_test_user};
 use auth9_core::domains::security_observability::api::security_alert::UnresolvedCountResponse;
 use auth9_core::http_support::{PaginatedResponse, SuccessResponse};
@@ -19,8 +19,7 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_list_alerts_default() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -47,8 +46,7 @@ async fn test_list_alerts_default() {
 
 #[tokio::test]
 async fn test_list_alerts_with_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -76,8 +74,7 @@ async fn test_list_alerts_with_pagination() {
 
 #[tokio::test]
 async fn test_list_alerts_unresolved_only() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -105,8 +102,7 @@ async fn test_list_alerts_unresolved_only() {
 
 #[tokio::test]
 async fn test_list_alerts_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -134,8 +130,7 @@ async fn test_list_alerts_empty() {
 
 #[tokio::test]
 async fn test_get_alert_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -178,8 +173,7 @@ async fn test_get_alert_success() {
 
 #[tokio::test]
 async fn test_get_alert_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -208,8 +202,7 @@ async fn test_get_alert_not_found() {
 
 #[tokio::test]
 async fn test_resolve_alert_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Create a user for authorization
     let user = create_test_user(None);
@@ -256,8 +249,7 @@ async fn test_resolve_alert_success() {
 
 #[tokio::test]
 async fn test_resolve_alert_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let alert_id = StringUuid::new_v4();
     let alert = SecurityAlert {
@@ -292,8 +284,7 @@ async fn test_resolve_alert_unauthorized() {
 
 #[tokio::test]
 async fn test_get_unresolved_count() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(
@@ -320,8 +311,7 @@ async fn test_get_unresolved_count() {
 
 #[tokio::test]
 async fn test_get_unresolved_count_zero() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = state
         .jwt_manager
         .create_identity_token(

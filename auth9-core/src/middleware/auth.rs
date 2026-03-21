@@ -211,22 +211,9 @@ where
             return AuthUser::from_identity_claims(claims);
         }
 
-        // Try to validate as tenant access token
-        let allowed_audiences = &state.config().jwt_tenant_access_allowed_audiences;
-        if !allowed_audiences.is_empty() {
-            if let Ok(claims) =
-                jwt_manager.verify_tenant_access_token_strict(token, allowed_audiences)
-            {
-                return AuthUser::from_tenant_access_claims(claims);
-            }
-        } else if !state.config().is_production() {
-            // Legacy behavior for non-production: if allowlist isn't configured, do not validate aud.
-            #[allow(deprecated)]
-            if let Ok(claims) = jwt_manager.verify_tenant_access_token(token, None) {
-                metrics::counter!("auth9_jwt_legacy_fallback_total", "caller" => "auth_extractor")
-                    .increment(1);
-                return AuthUser::from_tenant_access_claims(claims);
-            }
+        // Try to validate as tenant access token (audience checked dynamically via Redis)
+        if let Ok(claims) = jwt_manager.verify_tenant_access_token_any_audience(token) {
+            return AuthUser::from_tenant_access_claims(claims);
         }
 
         Err(AuthError::InvalidToken(

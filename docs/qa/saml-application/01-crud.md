@@ -9,7 +9,11 @@
 
 ## 背景说明
 
-Auth9 作为 SAML Identity Provider，可向外部 Service Provider 签发 SAML Assertion。管理员通过 API 注册外部 SP 信息（Entity ID、ACS URL、属性映射等），Auth9 在 Keycloak 中创建对应 `protocol: "saml"` 的 Client，并提供 IdP Metadata XML 供 SP 配置。
+Auth9 作为 SAML Identity Provider，可向外部 Service Provider 签发 SAML Assertion。管理员通过 API 注册外部 SP 信息（Entity ID、ACS URL、属性映射等），Auth9 在内置 OIDC 引擎中创建对应 SAML Client，并提供 IdP Metadata XML 供 SP 配置。
+
+## 入口可见性说明
+
+本文件聚焦 API CRUD，不单独覆盖 Portal UI 入口可见性。Portal 侧入口可见性与导航进入路径统一在 [03-portal-ui.md](./03-portal-ui.md) 验证。
 
 端点：
 - `GET    /api/v1/tenants/{tenant_id}/saml-apps` — 列出所有 SAML Application
@@ -69,7 +73,7 @@ echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
 ```
 
 ### 目的
-验证 SAML Application 创建成功，数据正确写入 DB，Keycloak 中同步创建 SAML Client
+验证 SAML Application 创建成功，数据正确写入 DB，Auth9 内置 OIDC 引擎中同步创建 SAML Client
 
 ### 测试操作流程
 
@@ -113,7 +117,7 @@ curl -s -X POST "http://localhost:8080/api/v1/tenants/{tenant_id}/saml-apps" \
   - `sign_assertions`：`true`
   - `enabled`：`true`
   - `attribute_mappings`：2 条映射
-  - `sso_url`：形如 `http://localhost:8081/realms/auth9/protocol/saml`
+  - `sso_url`：Auth9 SAML SSO 端点 URL
 
 ### 预期数据状态
 ```sql
@@ -186,7 +190,9 @@ curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/saml-apps/{app_id}" \
 ### 预期结果
 - **列表**：HTTP 200，返回数组，包含已创建的 SAML Application
 - **单个**：HTTP 200，返回完整数据（含 `sso_url`、`attribute_mappings`）
-- 每条记录包含 `sso_url` 字段，格式为 `{keycloak_public_url}/realms/auth9/protocol/saml`
+- 每条记录包含 `sso_url` 字段，指向 Auth9 SAML SSO 端点
+
+> **注意**: `sso_url` 的值依赖 `AUTH9_CORE_PUBLIC_URL` 环境变量。在默认 Docker 开发环境中，该变量可能未设置，导致 `sso_url` 为空字符串或使用 localhost 地址。这是预期行为，不是 bug。生产环境中应配置 `AUTH9_CORE_PUBLIC_URL` 为实际的公开访问 URL。
 
 ---
 
@@ -196,7 +202,7 @@ curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/saml-apps/{app_id}" \
 - 已创建 SAML Application `{app_id}`
 
 ### 目的
-验证部分字段更新成功（name、acs_url、enabled），Keycloak Client 同步更新
+验证部分字段更新成功（name、acs_url、enabled），SAML Client 同步更新
 
 ### 测试操作流程
 
@@ -235,7 +241,7 @@ FROM saml_applications WHERE id = '{app_id}';
 - 已创建 SAML Application `{app_id}`，关联 Keycloak Client `{keycloak_client_id}`
 
 ### 目的
-验证删除操作同时清理 DB 记录和 Keycloak SAML Client
+验证删除操作同时清理 DB 记录和 SAML Client
 
 ### 测试操作流程
 
@@ -253,9 +259,9 @@ curl -s -X DELETE "http://localhost:8080/api/v1/tenants/{tenant_id}/saml-apps/{a
 SELECT COUNT(*) AS cnt FROM saml_applications WHERE id = '{app_id}';
 -- 预期: cnt = 0
 
--- 验证 Keycloak Client 也已删除（通过 Keycloak Admin API）:
--- GET http://localhost:8081/admin/realms/auth9/clients/{keycloak_client_id}
--- 预期: 404 Not Found
+-- 验证 SAML Client 也已删除（通过数据库验证）:
+SELECT COUNT(*) FROM saml_applications WHERE keycloak_client_id = '{keycloak_client_id}';
+-- 预期: 0
 ```
 
 ---

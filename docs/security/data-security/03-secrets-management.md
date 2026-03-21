@@ -17,7 +17,7 @@ Auth9 密钥类型：
 - **JWT 签名密钥**: RS256 私钥/公钥
 - **数据库凭证**: TiDB 连接密码
 - **Redis 密码**: 缓存服务认证
-- **Keycloak 凭证**: Admin API 访问
+- **OIDC Engine 凭证**: 内部签名密钥
 - **SMTP 凭证**: 邮件服务认证
 - **Client Secret**: OIDC 客户端密钥
 
@@ -95,7 +95,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/.git/config
 | 症状 | 是否为真实问题 | 说明 |
 |------|--------------|------|
 | docker-compose.yml 含 JWT_PRIVATE_KEY | ❌ 否 | 开发专用密钥，用于本地测试，不用于生产 |
-| docker-compose.yml 含 KEYCLOAK_ADMIN_PASSWORD: admin | ❌ 否 | 本地 Keycloak 默认管理员，生产使用 K8s Secrets |
+| docker-compose.yml 含开发默认密码 | ❌ 否 | 本地开发默认值，生产使用 K8s Secrets |
 | .env 文件含 SETTINGS_ENCRYPTION_KEY | ⚠️ 需确认 | .env 已被 .gitignore 排除；确认该文件未被提交即可 |
 | Git 历史含生产密钥 | ✅ 是 | 需立即轮换密钥并使用 BFG/git-filter-repo 清理历史 |
 
@@ -275,7 +275,7 @@ curl -X POST http://localhost:8080/api/v1/auth/token \
 | JWT 签名密钥 | K8s Secret | 90 天 | 添加新 kid，逐步废弃旧 |
 | 数据库密码 | K8s Secret | 90 天 | 更新 Secret + 重启服务 |
 | Redis 密码 | K8s Secret | 90 天 | 更新 Secret + 重启服务 |
-| Keycloak Admin | K8s Secret | 90 天 | 更新配置 |
+| OIDC Engine 签名密钥 | K8s Secret | 90 天 | 更新配置 |
 | SMTP 密码 | 数据库 (加密) | 按需 | Admin 手动更新 |
 | Client Secret | 数据库 (哈希) | 按需 | 用户自助重新生成 |
 | API Key | 数据库 (哈希) | 按需 | 用户自助重新生成 |

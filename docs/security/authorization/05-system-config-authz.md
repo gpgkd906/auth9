@@ -98,7 +98,7 @@ curl -sS -i -X POST "http://localhost:8080/api/v1/system/email/send-test" \
 ## 场景 3：普通租户成员越权更新 system 品牌配置
 
 ### 攻击目标
-验证非平台管理员是否能篡改品牌配置（影响 Portal/Keycloak 主题展示与用户信任链）。
+验证非平台管理员是否能篡改品牌配置（影响 Portal 认证页展示与用户信任链）。
 
 ### 攻击步骤
 使用 `TENANT_MEMBER_ACCESS_TOKEN` 调用:

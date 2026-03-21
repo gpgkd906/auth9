@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Form, Link, redirect, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState } from "react";
-import { ArrowLeftIcon, Cross2Icon, DownloadIcon, PlusIcon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon, ChevronDownIcon, Cross2Icon, DownloadIcon, PlusIcon } from "@radix-ui/react-icons";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -154,6 +154,19 @@ function CertExpiryBadge({ certInfo }: { certInfo: { expires_soon: boolean; days
   );
 }
 
+function SetupSection({ title, steps }: { title: string; steps: string[] }) {
+  return (
+    <div>
+      <div className="font-medium text-[var(--text-primary)] mb-1">{title}</div>
+      <ol className="list-decimal list-inside space-y-0.5 pl-1">
+        {steps.map((step, i) => (
+          <li key={i}>{step}</li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function SamlAppRow({
   app,
   tenantId,
@@ -228,6 +241,40 @@ function SamlAppRow({
       <div className="text-xs text-[var(--text-tertiary)]">
         NameID: {app.name_id_format} | Assertions: {app.sign_assertions ? "Signed" : "Unsigned"} | Responses: {app.sign_responses ? "Signed" : "Unsigned"} | Mappings: {app.attribute_mappings.length}
       </div>
+
+      <details className="group">
+        <summary className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[var(--text-link)] hover:underline select-none">
+          <ChevronDownIcon className="h-3 w-3 transition-transform group-open:rotate-180" />
+          {t("tenants.samlApps.setupInstructions")}
+        </summary>
+        <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
+          <SetupSection title={t("tenants.samlApps.setupGenericTitle")} steps={[
+            t("tenants.samlApps.setupGenericStep1"),
+            t("tenants.samlApps.setupGenericStep2"),
+            t("tenants.samlApps.setupGenericStep3"),
+            t("tenants.samlApps.setupGenericStep4"),
+          ]} />
+          <SetupSection title={t("tenants.samlApps.setupSalesforceTitle")} steps={[
+            t("tenants.samlApps.setupSalesforceStep1"),
+            t("tenants.samlApps.setupSalesforceStep2"),
+            t("tenants.samlApps.setupSalesforceStep3"),
+            t("tenants.samlApps.setupSalesforceStep4"),
+            t("tenants.samlApps.setupSalesforceStep5"),
+          ]} />
+          <SetupSection title={t("tenants.samlApps.setupAwsTitle")} steps={[
+            t("tenants.samlApps.setupAwsStep1"),
+            t("tenants.samlApps.setupAwsStep2"),
+            t("tenants.samlApps.setupAwsStep3"),
+            t("tenants.samlApps.setupAwsStep4"),
+          ]} />
+          <SetupSection title={t("tenants.samlApps.setupGoogleTitle")} steps={[
+            t("tenants.samlApps.setupGoogleStep1"),
+            t("tenants.samlApps.setupGoogleStep2"),
+            t("tenants.samlApps.setupGoogleStep3"),
+            t("tenants.samlApps.setupGoogleStep4"),
+          ]} />
+        </div>
+      </details>
 
       <div className="flex items-center gap-2">
         <Form method="post">
@@ -393,6 +440,9 @@ export default function TenantSamlAppsPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {(mappingSources[rowId] === "tenant_roles" || mappingSources[rowId] === "tenant_permissions") && (
+                      <p className="text-[11px] text-[var(--accent-amber)] mt-1">{t("tenants.samlApps.advancedSourceHint")}</p>
+                    )}
                   </div>
                   <div className="flex-[2]">
                     <Input

@@ -17,7 +17,7 @@ Auth9 存在多个接受 URL 输入的功能，构成 SSRF 攻击面：
 - **Webhook 配置** (`POST /api/v1/webhooks`) - 用户可配置回调 URL
 - **Branding Logo URL** (`PUT /api/v1/branding`) - 自定义品牌 Logo 地址
 - **Identity Provider 配置** - 社交登录 IdP 端点 URL
-- **Keycloak 通信** - 后端主动请求 Keycloak API
+- **OIDC Engine 通信** - 内部认证引擎通信
 
 SSRF 可导致：内网服务探测、云元数据泄露 (AWS/GCP/Azure)、内部 API 未授权访问。
 

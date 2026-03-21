@@ -230,7 +230,7 @@ export default function AccountPasskeysPage() {
     <div className="space-y-6">
       {/* Header */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-5">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>{t("accountPasskeys.title")}</CardTitle>

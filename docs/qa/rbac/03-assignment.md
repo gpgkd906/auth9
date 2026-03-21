@@ -148,9 +148,48 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}' AND utr.role_id 
 
 ## 场景 5：查询用户的有效权限（含继承）
 
+### 步骤 0：创建角色继承关系（前置数据准备）
+
+> **重要**: 默认种子数据不包含 Editor/Viewer 角色和 content:read/write 权限。必须先手动创建。
+
+```bash
+# 获取 Demo Service ID
+SERVICE_ID=$(curl -s http://localhost:8080/api/v1/services \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.data[] | select(.name=="Auth9 Demo Service") | .id')
+
+# 1. 创建 content:read 权限
+curl -s -X POST "http://localhost:8080/api/v1/services/$SERVICE_ID/permissions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "content:read", "description": "Read content"}'
+
+# 2. 创建 content:write 权限
+curl -s -X POST "http://localhost:8080/api/v1/services/$SERVICE_ID/permissions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "content:write", "description": "Write content"}'
+
+# 3. 创建 Viewer 角色
+VIEWER_ID=$(curl -s -X POST "http://localhost:8080/api/v1/services/$SERVICE_ID/roles" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Viewer"}' | jq -r '.data.id')
+
+# 4. 创建 Editor 角色（继承 Viewer）
+EDITOR_ID=$(curl -s -X POST "http://localhost:8080/api/v1/services/$SERVICE_ID/roles" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"Editor\", \"parent_role_id\": \"$VIEWER_ID\"}" | jq -r '.data.id')
+
+# 5. 分配权限: content:read → Viewer, content:write → Editor
+# （通过 Portal UI 或 API 分配）
+
+# 6. 为用户分配 Editor 角色（使用场景 3 的流程）
+```
+
 ### 初始状态
 - 用户在租户中有角色 `Editor`
-- `Editor` 继承自 `Viewer`
+- `Editor` 继承自 `Viewer`（`parent_role_id` = Viewer.id）
 - `Viewer` 有权限：`content:read`
 - `Editor` 有权限：`content:write`
 
@@ -231,3 +270,4 @@ JOIN permissions p ON p.id = rp.permission_id;
 |---------|-------|-----|
 | Checkbox appears to not respond when unchecking a role | The `handleRoleCheckedChange` function calls `submit()` (React Router form submission) which triggers loader revalidation. The checkbox state updates immediately via `setAssignedRoleIds`, but the subsequent re-fetch (`get_user_assigned_roles`) may briefly flash the old state if the API response is slow. | Wait for the form submission to complete (check `navigation.state === "idle"`) before asserting checkbox state. The final state is determined by the re-fetched data from the API. |
 | Role dialog shows only 1 checkbox | The available roles depend on which service is selected. "Auth9 Admin Portal" only has 1 role (`admin`). | Select a service with multiple roles (e.g., "Invitation Test Service" which has Editor, Viewer roles) to test multi-role scenarios. |
+| Permission/role assignment appears to silently fail (scenarios 2, 3) | The code flow has been verified correct end-to-end. Silent failures are typically caused by expired session or invalid accessToken in the Portal BFF layer. | 1. Check browser DevTools Network tab for 401 responses. 2. Re-login to the Portal to refresh the session and accessToken. 3. Verify the Portal BFF is passing `accessToken` to auth9-core API calls (see `app/services/api.ts`). |

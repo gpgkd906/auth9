@@ -9,17 +9,19 @@
 
 ## 背景说明
 
-`auth9-core init` 命令在 Keycloak 初始化完成后，自动向数据库注入初始种子数据，使系统在首次部署后即可正常使用 Portal 管理后台。
+`auth9-core init` 命令在 Auth9 内置 OIDC 引擎初始化完成后，自动向数据库注入初始种子数据，使系统在首次部署后即可正常使用 Portal 管理后台。
 
 种子数据包括：
 - **2 个租户**: "Auth9 Platform"（slug: `auth9-platform`）和 "Demo Organization"（slug: `demo`）
-- **1 个管理员用户**: 从 Keycloak 获取 `keycloak_id` 和 `email`，display_name 为 "Admin User"
+- **1 个管理员用户**: 从 Auth9 内置 OIDC 引擎获取 `identity_subject` 和 `email`，display_name 为 "Admin User"
 - **2 条 tenant_users**: 管理员关联到两个租户，角色为 `admin`
 - **4 条 tenant_services**: 两个租户均启用 "Auth9 Admin Portal" 服务（公共服务），demo 租户额外启用 "Auth9 Demo Service"（私有服务）和 "Auth9 M2M Test Service"（私有服务）
 
 > **服务类型说明**：私有服务的 `tenant_id` 有值（专属某租户），公共服务的 `tenant_id` 为 NULL（不专属任何租户，所有租户可通过 tenant_services 关联使用）
 
-管理员邮箱可通过 `AUTH9_ADMIN_EMAIL` 环境变量配置，默认为 `admin@auth9.local`。
+管理员邮箱可通过 `PLATFORM_ADMIN_EMAILS` 环境变量配置（逗号分隔，取第一个），默认为 `admin@auth9.local`。
+
+> **注意**：`AUTH9_ADMIN_EMAIL` 环境变量不存在。正确的变量名为 `PLATFORM_ADMIN_EMAILS`。
 
 ---
 
@@ -38,7 +40,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
-| keycloak_id | VARCHAR(255) | Keycloak 用户 ID（UNIQUE） |
+| identity_subject | VARCHAR(255) | 身份主体 ID（UNIQUE，旧字段名 `keycloak_id`） |
 | email | VARCHAR(255) | 用户邮箱（UNIQUE） |
 | display_name | VARCHAR(255) | 显示名称 |
 
@@ -63,7 +65,7 @@
 ## 场景 1：首次 Init 创建全部种子数据
 
 ### 初始状态
-- Docker Compose 环境已启动（TiDB、Redis、Keycloak）
+- Docker Compose 环境已启动（TiDB、Redis、auth9-oidc）
 - 数据库已重置（执行过 `auth9-core reset` 或为全新环境）
 - tenants、users、tenant_users、tenant_services 表均为空
 
@@ -80,7 +82,7 @@
    docker-compose exec auth9-core auth9-core init
    ```
 3. 观察日志输出，确认以下关键行：
-   - `Found admin user in Keycloak: keycloak_id=..., email=...`
+   - `Found admin user: identity_subject=..., email=...`
    - `Initial data seeded: tenants=[auth9-platform, demo], admin_user=..., email=...`
    - `Seeded tenant_services for both tenants → Auth9 Admin Portal`
 4. 连接数据库验证数据
@@ -99,9 +101,9 @@ FROM tenants WHERE slug IN ('auth9-platform', 'demo') ORDER BY slug;
 -- | Demo Organization | demo           | active | false |
 
 -- 验证管理员用户（1 行）
-SELECT keycloak_id, email, display_name, mfa_enabled
+SELECT identity_subject, email, display_name, mfa_enabled
 FROM users WHERE display_name = 'Admin User';
--- 预期: keycloak_id 非空, email = admin@auth9.local（或 AUTH9_ADMIN_EMAIL 值）, mfa_enabled = 0
+-- 预期: identity_subject 非空, email = admin@auth9.local（或 PLATFORM_ADMIN_EMAILS 值）, mfa_enabled = 0
 
 -- 验证租户用户关联（2 行）
 SELECT t.slug, tu.role_in_tenant
@@ -183,14 +185,16 @@ WHERE t.slug IN ('auth9-platform', 'demo');
 
 ---
 
-## 场景 3：自定义管理员邮箱（AUTH9_ADMIN_EMAIL）
+## 场景 3：自定义管理员邮箱（PLATFORM_ADMIN_EMAILS）
 
 ### 初始状态
 - Docker Compose 环境已启动
 - 数据库已重置
 
 ### 目的
-验证通过 `AUTH9_ADMIN_EMAIL` 环境变量可以自定义管理员邮箱，且种子数据使用底层认证主体中的实际邮箱
+验证通过 `PLATFORM_ADMIN_EMAILS` 环境变量可以自定义管理员邮箱，且种子数据使用指定邮箱
+
+> **注意**：正确的环境变量名为 `PLATFORM_ADMIN_EMAILS`（逗号分隔，取第一个），~~`AUTH9_ADMIN_EMAIL`~~ 不存在。
 
 ### 测试操作流程
 1. 重置环境：
@@ -199,50 +203,49 @@ WHERE t.slug IN ('auth9-platform', 'demo');
    ```
 2. 设置自定义邮箱并执行初始化：
    ```bash
-   docker-compose exec -e AUTH9_ADMIN_EMAIL=ops@example.com auth9-core auth9-core init
+   docker-compose exec -e PLATFORM_ADMIN_EMAILS=ops@example.com auth9-core auth9-core init
    ```
 3. 观察日志中管理员邮箱信息
 4. 连接数据库验证
 
 ### 预期结果
 - Init 成功完成
-- 底层认证主体中的管理员用户使用指定邮箱创建
-- 数据库中用户邮箱与底层认证主体一致
+- 管理员用户使用指定邮箱创建
+- 数据库中用户邮箱与 `PLATFORM_ADMIN_EMAILS` 设置一致
 
 ### 预期数据状态
 ```sql
--- 验证用户邮箱来自底层认证主体（与 AUTH9_ADMIN_EMAIL 设置一致）
+-- 验证用户邮箱来自 PLATFORM_ADMIN_EMAILS 设置
 SELECT email, display_name FROM users WHERE display_name = 'Admin User';
 -- 预期: email = ops@example.com, display_name = Admin User
 
--- 如需做后台同步校验（可选），通过容器内 Admin API 验证底层认证主体邮箱一致
--- docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9/users?email=ops@example.com" ...
+-- 如需做后台同步校验（可选），通过 Auth9 管理 API 验证身份主体邮箱一致
+-- curl -s "http://localhost:8080/api/v1/users?email=ops@example.com" -H "Authorization: Bearer $TOKEN"
 -- 预期: 返回匹配用户，邮箱为 ops@example.com
 ```
 
 ---
 
-## 场景 4：Keycloak 重置后重新 Init（keycloak_id 更新）
+## 场景 4：身份引擎重置后重新 Init（identity_subject 更新）
 
 ### 初始状态
 - 场景 1 已成功执行，数据库中存在种子数据
-- 记录当前管理员的 keycloak_id
+- 记录当前管理员的 identity_subject
 
 ### 目的
-验证 Keycloak PVC 被删除重建后（新 keycloak_id），重新运行 init 能正确更新数据库中的 keycloak_id 关联
+验证身份引擎数据被重置后（新 identity_subject），重新运行 init 能正确更新数据库中的 identity_subject 关联
 
 ### 测试操作流程
-1. 记录当前 keycloak_id：
+1. 记录当前 identity_subject：
    ```sql
-   SELECT keycloak_id, email FROM users WHERE display_name = 'Admin User';
+   SELECT identity_subject, email FROM users WHERE display_name = 'Admin User';
    ```
-2. 停止 Keycloak 并删除数据（模拟 PVC 重置）：
+2. 停止 auth9-oidc 并删除数据（模拟数据重置）：
    ```bash
-   docker-compose stop keycloak
-   docker volume rm auth9_keycloak-postgres-data
-   docker-compose up -d keycloak
+   docker-compose stop auth9-oidc
+   docker-compose up -d auth9-oidc
    ```
-3. 等待 Keycloak 就绪后，重新执行初始化：
+3. 等待 auth9-oidc 就绪后，重新执行初始化：
    ```bash
    docker-compose exec auth9-core auth9-core init
    ```
@@ -250,15 +253,15 @@ SELECT email, display_name FROM users WHERE display_name = 'Admin User';
 
 ### 预期结果
 - Init 成功完成
-- 管理员用户的 keycloak_id 被更新为 Keycloak 中的新 UUID
+- 管理员用户的 identity_subject 被更新为新 UUID
 - email、display_name 等其他字段保持不变
-- tenant_users 关联不受影响（通过 user_id 关联，非 keycloak_id）
+- tenant_users 关联不受影响（通过 user_id 关联，非 identity_subject）
 
 ### 预期数据状态
 ```sql
--- 验证 keycloak_id 已更新
-SELECT keycloak_id, email, display_name FROM users WHERE display_name = 'Admin User';
--- 预期: keycloak_id 与步骤 1 记录的不同（新 UUID），email 保持不变
+-- 验证 identity_subject 已更新
+SELECT identity_subject, email, display_name FROM users WHERE display_name = 'Admin User';
+-- 预期: identity_subject 与步骤 1 记录的不同（新 UUID），email 保持不变
 
 -- 验证用户仍然只有 1 行（不会创建重复用户）
 SELECT COUNT(*) FROM users WHERE display_name = 'Admin User';
@@ -332,6 +335,6 @@ ORDER BY s.created_at DESC LIMIT 1;
 |---|------|------|----------|----------|------|
 | 1 | 首次 Init 创建全部种子数据 | ✅ PASS | 2026-03-06 | opencode | |
 | 2 | 重复执行 Init 保证幂等性 | ✅ PASS | 2026-03-06 | opencode | |
-| 3 | 自定义管理员邮箱（AUTH9_ADMIN_EMAIL） | ✅ PASS | 2026-03-06 | opencode | |
-| 4 | Keycloak 重置后重新 Init（keycloak_id 更新） | ✅ PASS | 2026-03-06 | opencode | |
+| 3 | 自定义管理员邮箱（PLATFORM_ADMIN_EMAILS） | ✅ PASS | 2026-03-06 | opencode | |
+| 4 | 身份引擎重置后重新 Init（identity_subject 更新） | ✅ PASS | 2026-03-06 | opencode | |
 | 5 | Portal 登录验证种子数据可用性 | ✅ PASS | 2026-03-06 | opencode | |

@@ -3,8 +3,7 @@
 //! Tests for password reset and password change endpoints.
 
 use crate::support::http::{
-    get_json_with_auth, post_json, post_json_with_auth, put_json_with_auth, MockKeycloakServer,
-    TestAppState,
+    get_json_with_auth, post_json, post_json_with_auth, put_json_with_auth, TestAppState,
 };
 use crate::support::{create_test_identity_token, create_test_user};
 use auth9_core::http_support::{MessageResponse, SuccessResponse};
@@ -18,8 +17,7 @@ use axum::http::StatusCode;
 
 #[tokio::test]
 async fn test_forgot_password_existing_user_no_email_configured() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let mut user = create_test_user(None);
@@ -43,8 +41,7 @@ async fn test_forgot_password_existing_user_no_email_configured() {
 
 #[tokio::test]
 async fn test_forgot_password_nonexistent_user() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
 
@@ -63,8 +60,7 @@ async fn test_forgot_password_nonexistent_user() {
 
 #[tokio::test]
 async fn test_forgot_password_invalid_email_format() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
 
@@ -84,8 +80,7 @@ async fn test_forgot_password_invalid_email_format() {
 
 #[tokio::test]
 async fn test_reset_password_invalid_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
 
@@ -102,8 +97,7 @@ async fn test_reset_password_invalid_token() {
 
 #[tokio::test]
 async fn test_reset_password_short_password() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
 
@@ -124,8 +118,7 @@ async fn test_reset_password_short_password() {
 
 #[tokio::test]
 async fn test_get_password_policy_default() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Create a tenant first so it can be found
     let tenant = crate::support::create_test_tenant(None);
@@ -150,8 +143,7 @@ async fn test_get_password_policy_default() {
 
 #[tokio::test]
 async fn test_update_password_policy() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Create a tenant first so it can be found
     let tenant = crate::support::create_test_tenant(None);
@@ -190,8 +182,7 @@ async fn test_update_password_policy() {
 
 #[tokio::test]
 async fn test_update_password_policy_invalid_min_length() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
     let token = create_test_identity_token();
@@ -219,8 +210,7 @@ async fn test_update_password_policy_invalid_min_length() {
 
 #[tokio::test]
 async fn test_update_password_policy_member_forbidden() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = crate::support::create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -263,8 +253,7 @@ async fn test_update_password_policy_member_forbidden() {
 
 #[tokio::test]
 async fn test_update_password_policy_owner_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = crate::support::create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -310,8 +299,7 @@ async fn test_update_password_policy_owner_success() {
 
 #[tokio::test]
 async fn test_update_password_policy_admin_success() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = crate::support::create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -357,8 +345,7 @@ async fn test_update_password_policy_admin_success() {
 
 #[tokio::test]
 async fn test_update_password_policy_service_client_forbidden() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = crate::support::create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -394,8 +381,7 @@ async fn test_update_password_policy_service_client_forbidden() {
 
 #[tokio::test]
 async fn test_get_password_policy_member_allowed() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant = crate::support::create_test_tenant(None);
     let tenant_id = *tenant.id;
@@ -433,8 +419,7 @@ async fn test_get_password_policy_member_allowed() {
 
 #[tokio::test]
 async fn test_change_password_unauthorized() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
 
@@ -451,8 +436,7 @@ async fn test_change_password_unauthorized() {
 
 #[tokio::test]
 async fn test_change_password_invalid_token() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let app = build_password_test_router(state);
 
@@ -468,8 +452,7 @@ async fn test_change_password_invalid_token() {
 
 #[tokio::test]
 async fn test_change_password_user_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Create a token for a user that doesn't exist in the repository
     let user_id = StringUuid::new_v4();
@@ -492,8 +475,7 @@ async fn test_change_password_user_not_found() {
 
 #[tokio::test]
 async fn test_change_password_validation_error_short_password() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let user = create_test_user(None);
@@ -521,8 +503,7 @@ async fn test_change_password_validation_error_short_password() {
 
 #[tokio::test]
 async fn test_change_password_validation_error_empty_current() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     // Add a test user
     let user = create_test_user(None);

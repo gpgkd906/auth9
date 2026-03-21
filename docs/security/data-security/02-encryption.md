@@ -19,7 +19,7 @@ Auth9 加密场景：
 - **Token 签名**: JWT (RS256/ES256)
 
 使用的加密算法：
-- 密码: Argon2id (Keycloak)
+- 密码: Argon2id (Auth9 OIDC Engine)
 - JWT: RS256 (RSA-SHA256)
 - 配置加密: AES-256-GCM
 
@@ -71,7 +71,7 @@ openssl s_client -connect auth9.example.com:443 </dev/null 2>/dev/null | \
 | 症状 | 原因 | 解决方法 |
 |------|------|---------|
 | `openssl s_client -tls1_1` 输出 `CONNECTED` 或显示 `Protocol : TLSv1.1`，就判定“TLS 1.1 可用” | `s_client` 在真正握手失败前也会打印底层连接信息；如果后续出现 `alert protocol version`、`handshake failure`、`unexpected eof while reading`，说明服务端已拒绝 TLS 1.1 | 以握手是否成功为准，不要只看 `CONNECTED`。建议同时检查退出码和最终错误，并在本地 gRPC TLS 场景使用实际端口（如 `localhost:50051`） |
-| 用 HTTP 端口或错误服务端口测试 TLS | 本地开发环境同时暴露 HTTP、gRPC、Keycloak，多端口混用容易误判 | 先确认目标服务与端口，再执行 TLS 探测 |
+| 用 HTTP 端口或错误服务端口测试 TLS | 本地开发环境同时暴露 HTTP、gRPC 等多端口，混用容易误判 | 先确认目标服务与端口，再执行 TLS 探测 |
 
 ### 修复建议
 - 禁用 TLS 1.0/1.1
@@ -102,29 +102,27 @@ openssl s_client -connect auth9.example.com:443 </dev/null 2>/dev/null | \
 
 ### 验证方法
 ```sql
--- 在 Keycloak 数据库中检查
--- (Keycloak 使用自己的密码存储)
-SELECT credential_data FROM credential WHERE user_id = 'xxx';
+-- 在 Auth9 数据库中检查密码哈希
+SELECT password_hash FROM users WHERE id = 'xxx';
 
--- 分析返回的 JSON
--- 期望格式 (PBKDF2):
--- {"hashIterations":210000,"algorithm":"pbkdf2-sha512"}
--- 或 (Argon2):
--- {"algorithm":"argon2","memory":65536,"iterations":3,"parallelism":4}
+-- 分析返回的哈希格式
+-- 期望格式 (Argon2id):
+-- $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
 ```
 
 ```bash
 # 使用 hashcat 评估强度
 # 如果能在合理时间内破解，说明参数太弱
 
-# 检查 Keycloak 配置
-# Realm Settings -> Security Defenses -> Password Policy
+# 检查 Auth9 密码策略配置
+curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
 ### 常见误报
 | 症状 | 原因 | 解决方法 |
 |------|------|---------|
-| 直接查询 `auth9.clients.client_secret_hash` 后，按密码哈希场景报错 | `clients.client_secret_hash` 是服务端生成的随机客户端密钥哈希，不是用户密码存储；该表不属于本场景的验证对象 | 场景 2 只校验用户密码存储，优先检查 Keycloak `credential` 表或 Realm Password Policy |
+| 直接查询 `auth9.clients.client_secret_hash` 后，按密码哈希场景报错 | `clients.client_secret_hash` 是服务端生成的随机客户端密钥哈希，不是用户密码存储；该表不属于本场景的验证对象 | 场景 2 只校验用户密码存储，检查 `users.password_hash` 字段或密码策略 API |
 | 以 “Argon2id 推荐参数” 直接要求所有哈希字段完全一致 | 不同秘密材料的威胁模型不同；随机生成的 client secret 与用户自选密码不是同一类资产 | 对用户密码使用密码策略标准；对客户端 secret 另开专项评估，不要混入本场景 |
 
 ### 修复建议

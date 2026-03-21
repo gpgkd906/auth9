@@ -1,13 +1,11 @@
 //! Test infrastructure shared across all domain test modules
 //!
 //! This module provides test utilities for API handler testing without
-//! external dependencies (no database, no Redis, no Keycloak).
+//! external dependencies (no database, no Redis, no identity backend).
 
 pub mod http;
-pub mod mock_keycloak;
-
-// Re-export MockKeycloakServer for convenience
-pub use mock_keycloak::MockKeycloakServer;
+pub mod noop_identity_engine;
+pub use noop_identity_engine::NoOpIdentityEngine;
 
 use async_trait::async_trait;
 pub use auth9_core::cache::NoOpCacheManager;
@@ -376,13 +374,13 @@ impl Default for TestUserRepository {
 
 #[async_trait]
 impl UserRepository for TestUserRepository {
-    async fn create(&self, keycloak_id: &str, input: &CreateUserInput) -> Result<User> {
+    async fn create(&self, identity_subject: &str, input: &CreateUserInput) -> Result<User> {
         let user = User {
             id: StringUuid::new_v4(),
             email: input.email.clone(),
             display_name: input.display_name.clone(),
             avatar_url: input.avatar_url.clone(),
-            keycloak_id: keycloak_id.to_string(),
+            identity_subject: identity_subject.to_string(),
             scim_external_id: None,
             scim_provisioned_by: None,
             mfa_enabled: false,
@@ -405,9 +403,12 @@ impl UserRepository for TestUserRepository {
         Ok(users.iter().find(|u| u.email == email).cloned())
     }
 
-    async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>> {
+    async fn find_by_identity_subject(&self, identity_subject: &str) -> Result<Option<User>> {
         let users = self.users.read().await;
-        Ok(users.iter().find(|u| u.keycloak_id == keycloak_id).cloned())
+        Ok(users
+            .iter()
+            .find(|u| u.identity_subject == identity_subject)
+            .cloned())
     }
 
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
@@ -794,6 +795,7 @@ impl ServiceRepository for TestServiceRepository {
         client_id: &str,
         secret_hash: &str,
         name: Option<String>,
+        public_client: bool,
     ) -> Result<Client> {
         let client = Client {
             id: StringUuid::new_v4(),
@@ -801,6 +803,7 @@ impl ServiceRepository for TestServiceRepository {
             client_id: client_id.to_string(),
             name,
             client_secret_hash: secret_hash.to_string(),
+            public_client,
             created_at: Utc::now(),
         };
         self.clients.write().await.push(client.clone());
@@ -1762,6 +1765,14 @@ impl PasswordResetRepository for TestPasswordResetRepository {
         tokens.push(token.clone());
         Ok(token)
     }
+
+    async fn store_password_hash(&self, _user_id: StringUuid, _password_hash: &str) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_password_history(&self, _user_id: StringUuid, _limit: u32) -> Result<Vec<String>> {
+        Ok(vec![])
+    }
 }
 
 // ============================================================================
@@ -1798,7 +1809,7 @@ impl SessionRepository for TestSessionRepository {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id: input.user_id,
-            keycloak_session_id: input.keycloak_session_id.clone(),
+            provider_session_id: input.provider_session_id.clone(),
             device_type: input.device_type.clone(),
             device_name: input.device_name.clone(),
             ip_address: input.ip_address.clone(),
@@ -1817,11 +1828,14 @@ impl SessionRepository for TestSessionRepository {
         Ok(sessions.iter().find(|s| s.id == id).cloned())
     }
 
-    async fn find_by_keycloak_session(&self, keycloak_session_id: &str) -> Result<Option<Session>> {
+    async fn find_by_provider_session_id(
+        &self,
+        provider_session_id: &str,
+    ) -> Result<Option<Session>> {
         let sessions = self.sessions.read().await;
         Ok(sessions
             .iter()
-            .find(|s| s.keycloak_session_id.as_deref() == Some(keycloak_session_id))
+            .find(|s| s.provider_session_id.as_deref() == Some(provider_session_id))
             .cloned())
     }
 
@@ -2616,6 +2630,8 @@ impl LoginEventRepository for TestLoginEventRepository {
             location: input.location.clone(),
             session_id: input.session_id,
             failure_reason: input.failure_reason.clone(),
+            provider_alias: input.provider_alias.clone(),
+            provider_type: input.provider_type.clone(),
             created_at: Utc::now(),
         };
         self.events.write().await.push(event);
@@ -2849,6 +2865,23 @@ impl LoginEventRepository for TestLoginEventRepository {
         let before = events.len();
         events.retain(|e| e.tenant_id != Some(tenant_id));
         Ok((before - events.len()) as u64)
+    }
+
+    async fn count_federation_failed_by_provider(
+        &self,
+        provider_alias: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| {
+                e.provider_alias.as_deref() == Some(provider_alias)
+                    && e.event_type
+                        == auth9_core::models::analytics::LoginEventType::FederationFailed
+                    && e.created_at >= since
+            })
+            .count() as i64)
     }
 
     async fn get_daily_trend(
@@ -3226,7 +3259,7 @@ pub fn create_test_user(id: Option<Uuid>) -> User {
         email: "test@example.com".to_string(),
         display_name: Some("Test User".to_string()),
         avatar_url: None,
-        keycloak_id: "kc-user-test".to_string(),
+        identity_subject: "kc-user-test".to_string(),
         scim_external_id: None,
         scim_provisioned_by: None,
         mfa_enabled: false,
@@ -3388,7 +3421,7 @@ impl TestServicesBuilder {
             self.audit_repo.clone(),
             self.rbac_repo.clone(),
         );
-        UserService::new(repos, None, None)
+        UserService::new(repos, None)
     }
 
     pub fn build_client_service(&self) -> ClientService<TestServiceRepository, TestRbacRepository> {
@@ -3720,7 +3753,7 @@ mod tests {
 
         // Create client
         let client = repo
-            .create_client(*service.id, "client-1", "hash", Some("Client".to_string()))
+            .create_client(*service.id, "client-1", "hash", Some("Client".to_string()), false)
             .await
             .unwrap();
         assert_eq!(client.client_id, "client-1");

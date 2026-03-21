@@ -1,6 +1,6 @@
 //! Branding configuration service
 
-use crate::domains::platform::service::KeycloakSyncService;
+use crate::domains::platform::service::IdentitySyncService;
 use crate::error::{AppError, Result};
 use crate::models::branding::{BrandingConfig, ServiceBranding};
 use crate::models::system_settings::{SettingCategory, SystemSettingRow, UpsertSystemSettingInput};
@@ -15,7 +15,7 @@ const BRANDING_CONFIG_KEY: &str = "config";
 pub struct BrandingService<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> {
     repo: Arc<R>,
     service_branding_repo: Arc<SBR>,
-    sync_service: Option<Arc<KeycloakSyncService>>,
+    sync_service: Option<Arc<IdentitySyncService>>,
     /// Allowed domains for branding resource URLs (logo, favicon).
     /// When non-empty, only URLs from these domains are accepted.
     allowed_domains: Vec<String>,
@@ -35,11 +35,11 @@ impl<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> BrandingServic
         }
     }
 
-    /// Create a new branding service with Keycloak sync
+    /// Create a new branding service with identity sync
     pub fn with_sync_service(
         repo: Arc<R>,
         service_branding_repo: Arc<SBR>,
-        sync_service: Arc<KeycloakSyncService>,
+        sync_service: Arc<IdentitySyncService>,
     ) -> Self {
         Self {
             repo,

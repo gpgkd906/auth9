@@ -13,14 +13,27 @@
 ### 目的
 验证日志详情查看功能
 
+> **注意**: 日志详情功能在 **Action 详情页** 中查看，而非 Service 详情页的独立 "Logs" 标签页。
+> 路径：Services → [服务] → Actions 标签页 → [具体 Action] → Logs 标签页
+
 ### 测试操作流程（Portal UI）
-1. 在 Logs 标签页中点击某条失败的日志
-2. 展开查看详细信息
+1. 进入 Services → 选择服务 → Actions 标签页
+2. 点击具体 Action 进入 Action 详情页
+3. 切换到 "Logs" 标签页
+4. 点击某条失败的日志展开查看详细信息
 
 ### 预期结果（Portal UI）
 - 显示完整错误堆栈（如果有）
 - 显示执行时长
 - 显示用户信息（如果有）
+
+### 常见误报
+
+| 现象 | 原因 | 解决方案 |
+|------|------|----------|
+| Service 详情页无 "Logs" 标签 | 日志入口在 Action 详情页，非 Service 级别 | 进入具体 Action 的详情页查看 Logs |
+| Logs 标签页无数据 | Action 从未被执行（需要通过登录流程触发） | 先通过 `/test` API 或浏览器登录触发 Action 执行 |
+| Portal 登录超时 (Request Timeout 30s+) | 登录时 auth9-core 同步执行所有 post-login Actions，多个 Action 叠加导致超时 | 减少已启用的 post-login Actions 数量，或删除测试用的临时 Actions 后重新登录 |
 
 > **注意**: 执行上下文快照（context_snapshot）当前未实现，`action_executions` 表不包含此字段。
 

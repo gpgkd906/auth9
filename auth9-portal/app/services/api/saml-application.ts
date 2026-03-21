@@ -27,7 +27,7 @@ export interface SamlApplication {
   encrypt_assertions: boolean;
   sp_certificate?: string;
   attribute_mappings: AttributeMapping[];
-  keycloak_client_id: string;
+  backend_client_id: string;
   enabled: boolean;
   created_at: string;
   updated_at: string;

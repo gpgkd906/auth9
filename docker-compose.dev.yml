@@ -19,6 +19,10 @@ services:
     profiles:
       - full
 
+  auth9-oidc:
+    profiles:
+      - full
+
   # Enable adminer by default in dev
   adminer:
     profiles: []

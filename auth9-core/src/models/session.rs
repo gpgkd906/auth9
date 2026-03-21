@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 pub struct Session {
     pub id: StringUuid,
     pub user_id: StringUuid,
-    pub keycloak_session_id: Option<String>,
+    pub provider_session_id: Option<String>,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
     pub ip_address: Option<String>,
@@ -28,7 +28,7 @@ impl Default for Session {
         Self {
             id: StringUuid::new_v4(),
             user_id: StringUuid::new_v4(),
-            keycloak_session_id: None,
+            provider_session_id: None,
             device_type: None,
             device_name: None,
             ip_address: None,
@@ -45,7 +45,7 @@ impl Default for Session {
 #[derive(Debug, Clone)]
 pub struct CreateSessionInput {
     pub user_id: StringUuid,
-    pub keycloak_session_id: Option<String>,
+    pub provider_session_id: Option<String>,
     pub device_type: Option<String>,
     pub device_name: Option<String>,
     pub ip_address: Option<String>,
@@ -53,10 +53,10 @@ pub struct CreateSessionInput {
     pub user_agent: Option<String>,
 }
 
-/// Keycloak session representation
+/// Identity provider session representation
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct KeycloakSession {
+pub struct IdentityProviderSession {
     pub id: String,
     pub username: Option<String>,
     pub user_id: Option<String>,
@@ -168,7 +168,7 @@ mod tests {
         let session = Session::default();
         assert!(!session.id.is_nil());
         assert!(!session.user_id.is_nil());
-        assert!(session.keycloak_session_id.is_none());
+        assert!(session.provider_session_id.is_none());
         assert!(session.revoked_at.is_none());
     }
 
@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_session_deserialization() {
+    fn test_identity_provider_session_deserialization() {
         let json = r#"{
             "id": "session-123",
             "username": "john",
@@ -262,17 +262,17 @@ mod tests {
             "clients": {"client-1": "app1"}
         }"#;
 
-        let session: KeycloakSession = serde_json::from_str(json).unwrap();
+        let session: IdentityProviderSession = serde_json::from_str(json).unwrap();
         assert_eq!(session.id, "session-123");
         assert_eq!(session.username, Some("john".to_string()));
         assert_eq!(session.ip_address, Some("192.168.1.1".to_string()));
     }
 
     #[test]
-    fn test_keycloak_session_deserialization_minimal() {
+    fn test_identity_provider_session_deserialization_minimal() {
         let json = r#"{"id": "session-123"}"#;
 
-        let session: KeycloakSession = serde_json::from_str(json).unwrap();
+        let session: IdentityProviderSession = serde_json::from_str(json).unwrap();
         assert_eq!(session.id, "session-123");
         assert!(session.username.is_none());
         assert!(session.clients.is_empty());

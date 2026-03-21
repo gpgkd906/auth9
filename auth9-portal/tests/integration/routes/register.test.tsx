@@ -4,6 +4,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Register, { loader, action } from "~/routes/register";
 import { userApi, publicBrandingApi } from "~/services/api";
 
+const defaultBranding = {
+    company_name: "Auth9",
+    logo_url: "",
+    favicon_url: "",
+    allow_registration: true,
+};
+
 // Helper to create a proper form request that works with request.formData()
 function createFormRequest(url: string, data: Record<string, string>): Request {
   const formData = new FormData();
@@ -46,10 +53,10 @@ describe("Register Page", () => {
                 },
             });
 
-            const response = await loader();
+            const response = await loader({ request: new Request("http://localhost/register"), params: {}, context: {} });
 
             expect(publicBrandingApi.get).toHaveBeenCalled();
-            expect(response).toBeNull();
+            expect(response).toEqual({ branding: expect.objectContaining({ allow_registration: true }) });
         });
 
         it("redirects to /login when registration is not allowed", async () => {
@@ -62,7 +69,7 @@ describe("Register Page", () => {
                 },
             });
 
-            const response = await loader();
+            const response = await loader({ request: new Request("http://localhost/register"), params: {}, context: {} });
 
             expect(publicBrandingApi.get).toHaveBeenCalled();
             expect(response.status).toBe(302);
@@ -72,7 +79,7 @@ describe("Register Page", () => {
         it("redirects to /login when branding API call fails", async () => {
             vi.mocked(publicBrandingApi.get).mockRejectedValue(new Error("Network error"));
 
-            const response = await loader();
+            const response = await loader({ request: new Request("http://localhost/register"), params: {}, context: {} });
 
             expect(response.status).toBe(302);
             expect(response.headers.get("Location")).toBe("/login");
@@ -88,13 +95,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByText("Create your account")).toBeInTheDocument();
+        expect(await screen.findByText("Create your account")).toBeInTheDocument();
         expect(screen.getByText("Start managing identity with Auth9")).toBeInTheDocument();
     });
 
@@ -103,13 +111,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByLabelText(/Email/i)).toBeInTheDocument();
+        expect(await screen.findByLabelText(/Email/i)).toBeInTheDocument();
         expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
     });
 
@@ -118,13 +127,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByLabelText(/Display Name/i)).toBeInTheDocument();
+        expect(await screen.findByLabelText(/Display Name/i)).toBeInTheDocument();
         expect(screen.getByPlaceholderText("Jane Doe")).toBeInTheDocument();
     });
 
@@ -133,13 +143,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByLabelText(/Password/i)).toBeInTheDocument();
+        expect(await screen.findByLabelText(/Password/i)).toBeInTheDocument();
     });
 
     it("renders submit button", async () => {
@@ -147,13 +158,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByRole("button", { name: /Create account/i })).toBeInTheDocument();
+        expect(await screen.findByRole("button", { name: /Create account/i })).toBeInTheDocument();
     });
 
     it("renders sign in link", async () => {
@@ -161,13 +173,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByText("Already have an account?")).toBeInTheDocument();
+        expect(await screen.findByText("Already have an account?")).toBeInTheDocument();
         expect(screen.getByText("Sign in")).toBeInTheDocument();
     });
 
@@ -176,18 +189,19 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByText("A9")).toBeInTheDocument();
+        expect((await screen.findAllByText("A9")).length).toBeGreaterThan(0);
     });
 
     it("action returns error when email is missing", async () => {
         const request = createFormRequest("http://localhost:3000/register", {
-            password: "test123",
+            password: "test123", // pragma: allowlist secret
         });
 
         const response = await action({ request, params: {}, context: {} });
@@ -223,7 +237,7 @@ describe("Register Page", () => {
 
         const request = createFormRequest("http://localhost:3000/register", {
             email: "test@example.com",
-            password: "securePassword123",
+            password: "securePassword123", // pragma: allowlist secret
             display_name: "Test User",
         });
 
@@ -232,7 +246,7 @@ describe("Register Page", () => {
         expect(userApi.create).toHaveBeenCalledWith({
             email: "test@example.com",
             display_name: "Test User",
-            password: "securePassword123",
+            password: "securePassword123", // pragma: allowlist secret
         });
         expect(response.status).toBe(302);
         expect(response.headers.get("Location")).toBe("/login");
@@ -243,7 +257,7 @@ describe("Register Page", () => {
 
         const request = createFormRequest("http://localhost:3000/register", {
             email: "existing@example.com",
-            password: "password123",
+            password: "password123", // pragma: allowlist secret
         });
 
         const response = await action({ request, params: {}, context: {} });
@@ -258,7 +272,7 @@ describe("Register Page", () => {
 
         const request = createFormRequest("http://localhost:3000/register", {
             email: "test@example.com",
-            password: "password123",
+            password: "password123", // pragma: allowlist secret
         });
 
         const response = await action({ request, params: {}, context: {} });
@@ -282,7 +296,7 @@ describe("Register Page", () => {
 
         const request = createFormRequest("http://localhost:3000/register", {
             email: "nodisplay@example.com",
-            password: "securePassword123",
+            password: "securePassword123", // pragma: allowlist secret
         });
 
         const response = await action({ request, params: {}, context: {} });
@@ -290,7 +304,7 @@ describe("Register Page", () => {
         expect(userApi.create).toHaveBeenCalledWith({
             email: "nodisplay@example.com",
             display_name: undefined,
-            password: "securePassword123",
+            password: "securePassword123", // pragma: allowlist secret
         });
         expect(response.status).toBe(302);
         expect(response.headers.get("Location")).toBe("/login");
@@ -311,13 +325,14 @@ describe("Register Page", () => {
             {
                 path: "/register",
                 Component: Register,
+                loader: () => ({ branding: defaultBranding }),
                 action,
             },
         ]);
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        const signInLink = screen.getByRole("link", { name: /sign in/i });
+        const signInLink = await screen.findByRole("link", { name: /sign in/i });
         expect(signInLink).toHaveAttribute("href", "/login");
     });
 });

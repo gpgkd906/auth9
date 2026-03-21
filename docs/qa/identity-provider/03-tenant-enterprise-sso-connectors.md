@@ -57,7 +57,7 @@
 
 ### 预期数据状态
 ```sql
-SELECT id, tenant_id, alias, provider_type, enabled, keycloak_alias
+SELECT id, tenant_id, alias, provider_type, enabled, provider_alias
 FROM enterprise_sso_connectors
 WHERE tenant_id = '{tenant_id}' AND alias = '{connector_alias}';
 -- 预期: 返回 1 行，provider_type='saml'
@@ -194,12 +194,12 @@ SELECT domain FROM enterprise_sso_domains WHERE connector_id = '{connector_id}';
 
 | 现象 | 原因 | 解决方法 |
 |------|------|----------|
-| UI 显示 "Identity provider updated" 但 `enterprise_sso_connectors.enabled` 未变 | **操作了错误的页面**：Identity Providers 页面（`/dashboard/settings/identity-providers`）只更新 Keycloak，不更新 `enterprise_sso_connectors` 表 | 在 **Tenant SSO Connectors** 页面（`/dashboard/tenants/{tenantId}/sso`）操作，成功消息应为 "Connector updated" |
+| UI 显示 "Identity provider updated" 但 `enterprise_sso_connectors.enabled` 未变 | **操作了错误的页面**：Identity Providers 页面（`/dashboard/settings/identity-providers`）只更新全局 IdP 配置，不更新 `enterprise_sso_connectors` 表 | 在 **Tenant SSO Connectors** 页面（`/dashboard/tenants/{tenantId}/sso`）操作，成功消息应为 "Connector updated" |
 | enabled 字段未更新但显示 "Connector updated" | 前端未正确发送 `enabled` 字段 | 检查浏览器 Network 面板中 PUT 请求 body 是否包含 `"enabled": false` |
 
 > **注意**：系统有两个类似但不同的 SSO 管理页面：
-> - **Identity Providers**（`Settings → Identity Providers`）：管理 Keycloak realm 级别的 IdP，不涉及 `enterprise_sso_connectors` 表
-> - **Tenant SSO Connectors**（`Tenants → {tenant} → Enterprise SSO`）：管理租户级别的 SSO 连接器，同时更新 Keycloak 和 `enterprise_sso_connectors` 表
+> - **Identity Providers**（`Settings → Identity Providers`）：管理全局 IdP 配置，不涉及 `enterprise_sso_connectors` 表
+> - **Tenant SSO Connectors**（`Tenants → {tenant} → Enterprise SSO`）：管理租户级别的 SSO 连接器，更新 `enterprise_sso_connectors` 表和 Auth9 内置 OIDC 引擎
 
 ---
 

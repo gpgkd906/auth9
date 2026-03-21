@@ -1,12 +1,11 @@
-//! Database migration and Keycloak seeding module
+//! Database migration and data seeding module
 //!
 //! Provides functionality for:
 //! - Running database migrations
-//! - Seeding Keycloak with realm and default admin user
+//! - Seeding default admin user and tenant data
 //! - Seeding default services in database
 
 use crate::config::Config;
-use crate::keycloak::KeycloakSeeder;
 use anyhow::{Context, Result};
 use sqlx::migrate::{MigrateError, Migrator};
 use sqlx::mysql::MySqlPoolOptions;
@@ -180,7 +179,10 @@ pub async fn run_migrations(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn apply_scim_mapping_migration_compat(pool: &Pool<MySql>, migrator: &Migrator) -> Result<()> {
+async fn apply_scim_mapping_migration_compat(
+    pool: &Pool<MySql>,
+    migrator: &Migrator,
+) -> Result<()> {
     let migration = migrator
         .iter()
         .find(|migration| migration.version == SCIM_MAPPING_MIGRATION_VERSION)
@@ -189,10 +191,12 @@ async fn apply_scim_mapping_migration_compat(pool: &Pool<MySql>, migrator: &Migr
     let start = std::time::Instant::now();
 
     if !column_exists(pool, "users", "scim_external_id").await? {
-        sqlx::query("ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER keycloak_id")
-            .execute(pool)
-            .await
-            .context("Failed to add users.scim_external_id")?;
+        sqlx::query(
+            "ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER identity_subject",
+        )
+        .execute(pool)
+        .await
+        .context("Failed to add users.scim_external_id")?;
     }
 
     if !column_exists(pool, "users", "scim_provisioned_by").await? {
@@ -317,73 +321,13 @@ async fn index_exists(pool: &Pool<MySql>, table: &str, index: &str) -> Result<bo
     Ok(exists.is_some())
 }
 
-/// Seed Keycloak with default realm, admin user, and portal client
-pub async fn seed_keycloak(config: &Config) -> Result<()> {
-    use tracing::warn;
-
-    info!("Initializing Keycloak seeder...");
-
-    let seeder = KeycloakSeeder::new(&config.keycloak);
-
-    // 🆕 Priority: Create admin client in master realm first
-    info!("Seeding admin client in master realm...");
-    seeder
-        .seed_master_admin_client()
-        .await
-        .context("Failed to seed admin client in master realm")?;
-
-    // Create realm if not exists (no settings applied yet)
-    info!("Ensuring realm '{}' exists...", config.keycloak.realm);
-    seeder
-        .ensure_realm_exists()
-        .await
-        .context("Failed to create realm")?;
-
-    // Seed default admin user BEFORE applying any realm settings.
-    // Keycloak 23 rejects user creation with credentials (POST /users returns 400
-    // "Password policy not met") when a password policy is active.
-    info!("Seeding default admin user...");
-    if let Err(e) = seeder.seed_admin_user().await {
-        warn!("Failed to seed admin user (non-fatal): {}", e);
-    }
-
-    // Apply ALL realm settings (events, SSL, login theme, password policy, brute force)
-    // This must happen AFTER admin user seeding due to Keycloak 23 password policy bug.
-    info!("Applying realm settings...");
-    seeder
-        .apply_realm_settings()
-        .await
-        .context("Failed to apply realm settings")?;
-
-    // Seed portal client (OIDC client for auth9-portal)
-    info!("Seeding portal client in Keycloak...");
-    seeder
-        .seed_portal_client()
-        .await
-        .context("Failed to seed portal client in Keycloak")?;
-
-    // Seed admin client in configured realm (Confidential client for realm-level operations)
-    info!(
-        "Seeding admin client in realm '{}'...",
-        config.keycloak.realm
-    );
-    seeder
-        .seed_admin_client()
-        .await
-        .context("Failed to seed admin client in Keycloak")?;
-
+/// Seed default services and initial data
+pub async fn seed_services(config: &Config) -> Result<()> {
     // Seed portal service in database
     info!("Seeding portal service in database...");
     seed_portal_service(config)
         .await
         .context("Failed to seed portal service in database")?;
-
-    // Seed demo client in Keycloak
-    info!("Seeding demo client in Keycloak...");
-    seeder
-        .seed_demo_client()
-        .await
-        .context("Failed to seed demo client in Keycloak")?;
 
     // Seed demo service in database
     info!("Seeding demo service in database...");
@@ -406,7 +350,7 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed initial data")?;
 
-    info!("Keycloak seeding completed");
+    info!("Seeding completed");
     Ok(())
 }
 
@@ -530,14 +474,13 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
 
     // Build URIs for portal service
     let redirect_uris = build_db_redirect_uris(
-        config.keycloak.core_public_url.as_deref(),
-        config.keycloak.portal_url.as_deref(),
+        config.core_public_url.as_deref(),
+        config.portal_url.as_deref(),
     );
 
-    let logout_uris = build_db_logout_uris(config.keycloak.portal_url.as_deref());
+    let logout_uris = build_db_logout_uris(config.portal_url.as_deref());
 
     let base_url = config
-        .keycloak
         .portal_url
         .as_deref()
         .unwrap_or("http://localhost:3000");
@@ -715,25 +658,24 @@ async fn seed_m2m_test_service(config: &Config) -> Result<()> {
 ///
 /// This function is safe to call multiple times (idempotent):
 /// - Tenants: INSERT IGNORE (slug UNIQUE constraint)
-/// - Users: INSERT ... ON DUPLICATE KEY UPDATE keycloak_id (handles Keycloak reset)
+/// - Users: INSERT ... ON DUPLICATE KEY UPDATE identity_subject (handles reset)
 /// - Tenant users: INSERT IGNORE (tenant_id, user_id UNIQUE constraint)
 /// - Tenant services: INSERT ... ON DUPLICATE KEY UPDATE enabled = TRUE
 async fn seed_initial_data(config: &Config) -> Result<()> {
     use tracing::warn;
 
-    // 1. Query Keycloak for admin user's keycloak_id and email
-    let seeder = KeycloakSeeder::new(&config.keycloak);
-    let (keycloak_id, admin_email) = match seeder.get_admin_user_keycloak_id().await? {
-        Some((id, email)) => (id, email),
-        None => {
-            warn!("Admin user not found in Keycloak, skipping initial data seed");
-            return Ok(());
-        }
-    };
+    // 1. Use configured admin email for seed user
+    let admin_email = config
+        .platform_admin_emails
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "admin@auth9.local".to_string());
+    // Use a deterministic identity subject derived from the email
+    let identity_subject = format!("seed-admin-{}", admin_email);
 
     info!(
-        "Found admin user in Keycloak: keycloak_id={}, email={}",
-        keycloak_id, admin_email
+        "Seeding admin user: identity_subject={}, email={}",
+        identity_subject, admin_email
     );
 
     let pool: Pool<MySql> = MySqlPoolOptions::new()
@@ -773,7 +715,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     .await
     .context("Failed to seed demo tenant")?;
 
-    // 3. Upsert admin user (handles Keycloak reset where keycloak_id changes)
+    // 3. Upsert admin user (handles reset where identity_subject changes)
     // First try to find existing admin by display_name (stable across resets)
     let existing_admin: Option<(String,)> =
         sqlx::query_as("SELECT id FROM users WHERE display_name = ? LIMIT 1")
@@ -783,36 +725,42 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
             .context("Failed to check existing admin user")?;
 
     if let Some((existing_id,)) = existing_admin {
-        // Update existing admin user's keycloak_id and email
+        // Update existing admin user's identity_subject and email
         sqlx::query(
-            r#"UPDATE users SET keycloak_id = ?, email = ?, updated_at = NOW()
+            r#"UPDATE users SET identity_subject = ?, email = ?, updated_at = NOW()
             WHERE id = ?"#,
         )
-        .bind(&keycloak_id)
+        .bind(&identity_subject)
         .bind(&admin_email)
         .bind(&existing_id)
         .execute(&pool)
         .await
-        .context("Failed to update admin user keycloak_id")?;
+        .context("Failed to update admin user")?;
 
-        info!("Updated existing admin user keycloak_id to {}", keycloak_id);
+        info!(
+            "Updated existing admin user identity_subject to {}",
+            identity_subject
+        );
     } else {
         // Insert new admin user
         let admin_user_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
+            r#"INSERT INTO users (id, identity_subject, email, display_name, mfa_enabled, created_at, updated_at)
             VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
-            ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), email = VALUES(email), mfa_enabled = FALSE"#,
+            ON DUPLICATE KEY UPDATE identity_subject = VALUES(identity_subject), email = VALUES(email), mfa_enabled = FALSE"#,
         )
         .bind(&admin_user_id)
-        .bind(&keycloak_id)
+        .bind(&identity_subject)
         .bind(&admin_email)
         .bind(SEED_ADMIN_DISPLAY_NAME)
         .execute(&pool)
         .await
         .context("Failed to seed admin user")?;
 
-        info!("Created new admin user with keycloak_id {}", keycloak_id);
+        info!(
+            "Created new admin user with identity_subject {}",
+            identity_subject
+        );
     }
 
     // 4. SELECT actual IDs (handles case where records already existed)
@@ -828,11 +776,55 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to get demo tenant ID")?;
 
-    let (actual_user_id,): (String,) = sqlx::query_as("SELECT id FROM users WHERE keycloak_id = ?")
-        .bind(&keycloak_id)
+    let (actual_user_id,): (String,) = sqlx::query_as("SELECT id FROM users WHERE identity_subject = ?")
+        .bind(&identity_subject)
         .fetch_one(&pool)
         .await
         .context("Failed to get admin user ID")?;
+
+    // 4b. Set admin password credential if AUTH9_ADMIN_PASSWORD is provided
+    if let Some(ref pw) = config.admin_password {
+        use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+        use rand::rngs::OsRng;
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(pw.as_bytes(), &salt)
+            .map_err(|e| anyhow::anyhow!("Failed to hash admin password: {}", e))?
+            .to_string();
+
+        let cred_data = serde_json::json!({
+            "hash": hash,
+            "algorithm": "argon2id",
+            "temporary": false,
+        })
+        .to_string();
+
+        // Replace existing password credential (table created by auth9-oidc migrations)
+        // credentials.user_id stores identity_subject, not the users.id UUID
+        match sqlx::query(
+            "DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'",
+        )
+        .bind(&identity_subject)
+        .execute(&pool)
+        .await
+        {
+            Ok(_) => {
+                sqlx::query(
+                    "INSERT INTO credentials (id, user_id, credential_type, credential_data) VALUES (?, ?, 'password', ?)",
+                )
+                .bind(uuid::Uuid::new_v4().to_string())
+                .bind(&identity_subject)
+                .bind(&cred_data)
+                .execute(&pool)
+                .await
+                .context("Failed to seed admin password credential")?;
+                info!("Admin password credential set from AUTH9_ADMIN_PASSWORD");
+            }
+            Err(e) => {
+                warn!("Skipping admin password credential (credentials table not ready, will be set when auth9-oidc initializes): {}", e);
+            }
+        }
+    }
 
     // 5. INSERT IGNORE tenant_users (admin → both tenants)
     sqlx::query(
@@ -968,7 +960,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
 
     info!(
         "Initial data seeded: tenants=[{}, {}], admin_user={}, email={}",
-        DEFAULT_PLATFORM_TENANT_SLUG, DEFAULT_DEMO_TENANT_SLUG, keycloak_id, admin_email
+        DEFAULT_PLATFORM_TENANT_SLUG, DEFAULT_DEMO_TENANT_SLUG, identity_subject, admin_email
     );
 
     Ok(())
@@ -1059,10 +1051,10 @@ async fn seed_rbac_for_service(
     Ok(())
 }
 
-/// Seed dev email config in database and sync to Keycloak when DEV_SMTP_HOST is set
+/// Seed dev email config in database when DEV_SMTP_HOST is set
 ///
 /// This configures the system to use Mailpit for email testing in dev environment.
-/// Also syncs SMTP settings directly to Keycloak realm so password reset emails work.
+/// Ensures SMTP settings are available for password reset emails.
 async fn seed_dev_email_config(config: &Config) -> Result<()> {
     let smtp_host = match std::env::var("DEV_SMTP_HOST") {
         Ok(host) => host,
@@ -1136,107 +1128,6 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
     }
 
     pool.close().await;
-
-    // Sync SMTP settings directly to Keycloak realm so password reset emails work
-    sync_smtp_to_keycloak(config, &smtp_host).await?;
-
-    Ok(())
-}
-
-/// Sync SMTP configuration directly to Keycloak realm via Admin API
-///
-/// This ensures Keycloak can send password reset and verification emails
-/// using the dev SMTP server (Mailpit).
-async fn sync_smtp_to_keycloak(config: &Config, smtp_host: &str) -> Result<()> {
-    use tracing::warn;
-
-    info!("Syncing SMTP config to Keycloak realm...");
-
-    let http_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .context("Failed to create HTTP client")?;
-
-    // Get admin token
-    let admin_username = std::env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
-    let admin_password =
-        std::env::var("KEYCLOAK_ADMIN_PASSWORD").unwrap_or_else(|_| "admin".to_string());
-
-    let token_url = format!(
-        "{}/realms/master/protocol/openid-connect/token",
-        config.keycloak.url
-    );
-
-    let token_response = http_client
-        .post(&token_url)
-        .form(&[
-            ("grant_type", "password"),
-            ("client_id", "admin-cli"),
-            ("username", &admin_username),
-            ("password", &admin_password),
-        ])
-        .send()
-        .await
-        .context("Failed to get Keycloak admin token for SMTP sync")?;
-
-    if !token_response.status().is_success() {
-        warn!("Failed to get admin token for SMTP sync, skipping Keycloak email config");
-        return Ok(());
-    }
-
-    let token_json: serde_json::Value = token_response.json().await?;
-    let token = token_json["access_token"]
-        .as_str()
-        .context("Missing access_token in Keycloak response")?;
-
-    // Update realm with SMTP settings using GET-merge-PUT pattern
-    // to avoid resetting other realm settings (brute force, events, etc.)
-    let realm_url = format!(
-        "{}/admin/realms/{}",
-        config.keycloak.url, config.keycloak.realm
-    );
-
-    let current: serde_json::Value = http_client
-        .get(&realm_url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .context("Failed to get realm for SMTP update")?
-        .json()
-        .await
-        .context("Failed to parse realm JSON for SMTP update")?;
-
-    let mut updated = current;
-    if let Some(obj) = updated.as_object_mut() {
-        obj.insert(
-            "smtpServer".to_string(),
-            serde_json::json!({
-                "host": smtp_host,
-                "port": "1025",
-                "from": "noreply@auth9.local",
-                "fromDisplayName": "Auth9",
-                "auth": "false",
-                "ssl": "false",
-                "starttls": "false"
-            }),
-        );
-    }
-
-    let response = http_client
-        .put(&realm_url)
-        .bearer_auth(token)
-        .json(&updated)
-        .send()
-        .await
-        .context("Failed to update Keycloak realm SMTP settings")?;
-
-    if response.status().is_success() {
-        info!("Synced SMTP config to Keycloak realm ({}:1025)", smtp_host);
-    } else {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        warn!("Failed to sync SMTP to Keycloak: {} - {}", status, body);
-    }
 
     Ok(())
 }

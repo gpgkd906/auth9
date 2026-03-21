@@ -5,7 +5,7 @@ use crate::http_support::{
     deserialize_page, deserialize_per_page, write_audit_log_generic, MessageResponse,
     PaginatedResponse, SuccessResponse,
 };
-use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
+use crate::identity_engine::{IdentityCredentialInput, IdentityUserCreateInput};
 use crate::middleware::auth::AuthUser;
 use crate::models::common::StringUuid;
 use crate::models::invitation::{CreateInvitationInput, InvitationResponse, InvitationStatus};
@@ -418,15 +418,16 @@ pub async fn accept<S: HasInvitations>(
                 AppError::BadRequest("User not found. Please register.".to_string())
             })?;
 
-            let credentials = vec![KeycloakCredential {
+            let credentials = vec![IdentityCredentialInput {
                 credential_type: "password".to_string(),
                 value: password,
                 temporary: false,
             }];
 
-            let keycloak_id = state
-                .keycloak_client()
-                .create_user(&CreateKeycloakUserInput {
+            let identity_subject = state
+                .identity_engine()
+                .user_store()
+                .create_user(&IdentityUserCreateInput {
                     username: invitation.email.clone(),
                     email: invitation.email.clone(),
                     first_name: request.display_name.clone(),
@@ -440,7 +441,7 @@ pub async fn accept<S: HasInvitations>(
             state
                 .user_service()
                 .create(
-                    &keycloak_id,
+                    &identity_subject,
                     CreateUserInput {
                         email: invitation.email.clone(),
                         display_name: request.display_name.clone(),

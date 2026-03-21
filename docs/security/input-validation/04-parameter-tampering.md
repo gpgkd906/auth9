@@ -36,7 +36,7 @@
    - `created_at` - 创建时间
    - `created_by` - 创建者
    - `tenant_id` - 租户 ID
-   - `keycloak_id` - 外部 ID
+   - `identity_subject` - 外部身份主体 ID
 3. 检查字段是否被修改
 
 ### 预期安全行为
@@ -55,16 +55,16 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
     "id": "different-uuid",
     "created_at": "2020-01-01T00:00:00Z",
     "tenant_id": "other-tenant-id",
-    "keycloak_id": "fake-keycloak-id"
+    "identity_subject": "fake-identity-subject"
   }'
 
 # 验证修改结果
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/users/me
-# 预期: id, created_at, tenant_id, keycloak_id 未变
+# 预期: id, created_at, tenant_id, identity_subject 未变
 
 # 数据库验证
-SELECT id, created_at, keycloak_id FROM users WHERE id = '...';
+SELECT id, created_at, identity_subject FROM users WHERE id = '...';
 ```
 
 ### 修复建议
@@ -280,10 +280,10 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
-| 1 | 隐藏/只读字段篡改 | ☐ | | | |
-| 2 | 类型混淆攻击 | ☐ | | | |
-| 3 | 边界值测试 | ☐ | | | |
-| 4 | HTTP 方法/头篡改 | ☐ | | | |
+| 1 | 隐藏/只读字段篡改 | ✅ PASS | 2026-03-19 | QA Testing | 无 |
+| 2 | 类型混淆攻击 | ✅ PASS | 2026-03-19 | QA Testing | 无 |
+| 3 | 边界值测试 | ✅ PASS | 2026-03-19 | QA Testing | 无 |
+| 4 | HTTP 方法/头篡改 | ✅ PASS | 2026-03-19 | QA Testing | 无 |
 
 ---
 
@@ -307,14 +307,16 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 **场景总数**: 4
 
 ### 执行清单
-- [ ] M-INPUT-04-C01 | 控制: V2.1 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据
-- [ ] M-INPUT-04-C02 | 控制: V4.2 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据
-- [ ] M-INPUT-04-C03 | 控制: V8.2 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [x] M-INPUT-04-C01 | 控制: V2.1 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据 ✅
+- [x] M-INPUT-04-C02 | 控制: V4.2 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据 ✅
+- [x] M-INPUT-04-C03 | 控制: V8.2 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据 ✅
 
 ### 回归记录表
 | 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
 |---|---|---|---|---|
-|  |  |  |  |  |
+| M-INPUT-04-C01 | PASS | 中 | artifacts/qa/2026-03-19/parameter-tampering-2026-03-19/qa-results.json | 只读字段保护正常 |
+| M-INPUT-04-C02 | PASS | 中 | artifacts/qa/2026-03-19/parameter-tampering-2026-03-19/qa-results.json | 类型验证严格 |
+| M-INPUT-04-C03 | PASS | 中 | artifacts/qa/2026-03-19/parameter-tampering-2026-03-19/qa-results.json | 边界值处理正确 |
 
 ### 退出准则
 1. 所有检查项执行完成，且高风险项无 `fail`。

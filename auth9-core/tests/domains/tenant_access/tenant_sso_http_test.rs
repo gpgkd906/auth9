@@ -12,7 +12,7 @@ use crate::support::http::{
 };
 use crate::support::{
     create_test_identity_token_for_user, create_test_jwt_manager, create_test_tenant,
-    create_test_tenant_access_token, MockKeycloakServer,
+    create_test_tenant_access_token,
 };
 use axum::http::StatusCode;
 use serde_json::{json, Value};
@@ -69,8 +69,7 @@ fn valid_saml_create_input() -> Value {
 
 #[tokio::test]
 async fn test_list_connectors_unauthenticated_returns_401() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let tenant_id = Uuid::new_v4();
 
@@ -81,8 +80,7 @@ async fn test_list_connectors_unauthenticated_returns_401() {
 
 #[tokio::test]
 async fn test_create_connector_unauthenticated_returns_401() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
     let tenant_id = Uuid::new_v4();
 
@@ -102,8 +100,7 @@ async fn test_create_connector_unauthenticated_returns_401() {
 
 #[tokio::test]
 async fn test_list_connectors_wrong_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let token_tenant_id = Uuid::new_v4();
@@ -117,8 +114,7 @@ async fn test_list_connectors_wrong_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_create_connector_wrong_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let token_tenant_id = Uuid::new_v4();
@@ -137,8 +133,7 @@ async fn test_create_connector_wrong_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_update_connector_wrong_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let token_tenant_id = Uuid::new_v4();
@@ -158,8 +153,7 @@ async fn test_update_connector_wrong_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_delete_connector_wrong_tenant_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     let token_tenant_id = Uuid::new_v4();
@@ -178,8 +172,7 @@ async fn test_delete_connector_wrong_tenant_returns_403() {
 
 #[tokio::test]
 async fn test_identity_token_non_admin_returns_403() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
     // Identity token for a non-admin user
@@ -197,8 +190,7 @@ async fn test_identity_token_non_admin_returns_403() {
 
 #[tokio::test]
 async fn test_create_connector_invalid_provider_type() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 
@@ -223,8 +215,7 @@ async fn test_create_connector_invalid_provider_type() {
 
 #[tokio::test]
 async fn test_create_connector_empty_alias() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 
@@ -252,8 +243,7 @@ async fn test_create_connector_empty_alias() {
 
 #[tokio::test]
 async fn test_create_connector_empty_domains() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 
@@ -281,8 +271,7 @@ async fn test_create_connector_empty_domains() {
 
 #[tokio::test]
 async fn test_create_connector_invalid_domain_format() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 
@@ -310,8 +299,7 @@ async fn test_create_connector_invalid_domain_format() {
 
 #[tokio::test]
 async fn test_create_connector_missing_saml_config_fields() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 
@@ -338,8 +326,7 @@ async fn test_create_connector_missing_saml_config_fields() {
 
 #[tokio::test]
 async fn test_create_connector_missing_oidc_config_fields() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 
@@ -370,8 +357,7 @@ async fn test_create_connector_missing_oidc_config_fields() {
 
 #[tokio::test]
 async fn test_platform_admin_can_access_any_tenant_sso() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
 
     // Platform admin tenant access token (uses admin@auth9.local)
@@ -393,8 +379,7 @@ async fn test_platform_admin_can_access_any_tenant_sso() {
 
 #[tokio::test]
 async fn test_create_connector_normalizes_saml_sso_url_alias() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_tenant_access_token(tenant_id);
 

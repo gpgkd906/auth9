@@ -50,7 +50,7 @@ export interface TenantSsoConnector {
   provider_type: "saml" | "oidc";
   enabled: boolean;
   priority: number;
-  keycloak_alias: string;
+  provider_alias: string;
   config: Record<string, string>;
   domains: string[];
   created_at: string;

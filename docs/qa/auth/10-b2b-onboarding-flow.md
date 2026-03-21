@@ -36,7 +36,7 @@ Portal 路由：
 ## 场景 1：B2B Onboard 入口可见性与首次登录重定向
 
 ### 初始状态
-- 用户通过 Keycloak OAuth 首次登录
+- 用户通过 Auth9 OIDC 首次登录
 - 用户不属于任何租户
 - 不存在 demo 租户自动加入（已移除）
 
@@ -214,7 +214,7 @@ SELECT name, slug, domain, status FROM tenants WHERE slug = 'my-startup';
 
 ### 测试操作流程
 1. 确保系统中存在 slug 为 `demo` 的租户
-2. 创建一个全新的 Keycloak 用户
+2. 创建一个全新用户
 3. 使用该用户 OAuth 登录
 4. 检查该用户的租户关联
 

@@ -13,17 +13,15 @@
 
 ## 背景知识
 
-Auth9 密码管理由 Keycloak 处理：
-- 密码哈希: Argon2 或 PBKDF2
-- 密码重置: 通过邮件链接
-- 密码策略: 可配置强度要求
+Auth9 自行管理密码全生命周期：
+- 密码哈希: Argon2id（auth9-oidc 本地存储）
+- 密码重置: Auth9 自签发 reset token，通过邮件链接消费
+- 密码策略: Auth9 自管（`GET/PUT /api/v1/tenants/{id}/password-policy`），支持 min_length、大小写/数字/符号要求、max_age_days、history_count、lockout 阈值
 
-### 架构对齐说明（Headless Keycloak）
+### 架构对齐说明
 
-- Auth9 采用 Headless Keycloak 架构，Keycloak 作为 OIDC/认证引擎使用
-- 本文档不要求必须通过 Keycloak 托管登录页进行测试
-- 密码安全测试以接口、事件、数据库和管理 API 验证为主
-- 如需做页面回归，仅作为补充验证（例如主题/交互），不作为安全结论前置条件
+- 密码验证、重置、策略全部由 Auth9 OIDC Engine 本地处理
+- 密码安全测试以 Auth9 API 端点验证为主（`/api/v1/hosted-login/password`、`/api/v1/auth/forgot-password`、`/api/v1/auth/reset-password`、`/api/v1/users/me/password`）
 
 ---
 
@@ -31,8 +29,8 @@ Auth9 密码管理由 Keycloak 处理：
 
 ### 前置条件
 - 已知用户名
-- **Docker 环境已完全启动且 auth9-core 完成初始化（seeder 已执行）**
-- **验证方法**: 检查 auth9-core 日志包含 `"Configured realm 'auth9' security: bruteForceProtected=true"` 或通过 Keycloak Admin API 确认: `curl -s http://localhost:8081/admin/realms/auth9 -H "Authorization: Bearer $TOKEN" | jq '.bruteForceProtected'` 返回 `true`
+- **Docker 环境已完全启动且 auth9-core 完成初始化**
+- **验证方法**: 通过 Auth9 密码策略 API 确认暴力破解保护已启用: `curl -s http://localhost:8080/api/v1/tenants/{id}/password-policy -H "Authorization: Bearer $TOKEN" | jq '.lockout_threshold'` 返回非零值（如 5）
 
 ### 攻击目标
 验证登录是否存在暴力破解风险
@@ -44,55 +42,40 @@ Auth9 密码管理由 Keycloak 处理：
 4. 检查账户锁定和解锁机制
 
 ### 预期安全行为
-- 连续 5 次失败后账户临时锁定（Keycloak `failureFactor=5`）
-- 锁定等待时间渐进增长（`waitIncrementSeconds=60`，最大 `maxFailureWaitSeconds=900`）
+- 连续 5 次失败后账户临时锁定
+- 锁定等待时间渐进增长
 - 不泄露用户是否存在
 
 ### 验证方法
 ```bash
-# 步骤 0（必需）：确认 brute force 已启用
-# auth9-core 的 seeder 通过 Keycloak Admin API 配置 bruteForceProtected=true。
-# 如果 Keycloak 刚启动但 auth9-core 尚未运行 seeder，配置为默认值 (null)。
-# 必须先启动 auth9-core 并等待 seeder 完成。
-#
-# ⚠️ 重要：nginx gateway 阻止从宿主机访问 Keycloak /admin 端点。
-# 必须从 Docker 网络内部验证：
-KC_TOKEN=$(docker exec auth9-core curl -s -X POST \
-  "http://keycloak:8080/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli" -d "username=admin" -d "password=admin" \
-  -d "grant_type=password" | jq -r '.access_token')
-docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
-  -H "Authorization: Bearer $KC_TOKEN" | jq '{bruteForceProtected, failureFactor}'
-# 预期: {"bruteForceProtected": true, "failureFactor": 5}
+# 步骤 0（必需）：确认暴力破解保护已启用
+# 通过 Auth9 密码策略 API 验证：
+curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H “Authorization: Bearer $TOKEN” | jq '{lockout_threshold, max_age_days}'
+# 预期: lockout_threshold 为 5（5 次失败后锁定）
 
-# 方法 A（推荐）：直接对 OIDC token endpoint 发起错误密码请求
-# 说明：仅当测试客户端开启 Direct Access Grants 时可用
-# 默认开发环境可使用已 seed 的管理员邮箱 `admin@auth9.local` 作为“已知存在用户”。
+# 方法 A（推荐）：通过 Auth9 托管认证页提交错误密码
+# 默认开发环境可使用已 seed 的管理员邮箱 `admin@auth9.local` 作为”已知存在用户”。
 for i in {1..50}; do
-  curl -X POST http://localhost:8081/realms/auth9/protocol/openid-connect/token \
-    -d "grant_type=password" \
-    -d "client_id=auth9-portal" \
-    -d "username=admin@auth9.local" \
-    -d "password=wrong_$i"
-  echo "Attempt: $i"
+  curl -X POST http://localhost:8080/api/v1/hosted-login/password \
+    -H “Content-Type: application/json” \
+    -d “{\”email\”:\”admin@auth9.local\”,\”password\”:\”wrong_$i\”}”
+  echo “Attempt: $i”
 done
 
-# 预期: 第 6 次后返回 user_disabled / account locked 或出现显著延迟
+# 预期: 第 6 次后返回账户锁定错误或出现显著延迟
 
-# 方法 B（无 Direct Access Grants 场景）：
-# 通过自动化脚本驱动标准 OIDC 授权流程提交错误口令，
-# 或通过 Keycloak 事件链路验证 LOGIN_ERROR 累积与锁定状态。
+# 方法 B：通过自动化脚本驱动标准 OIDC 授权流程提交错误口令。
 ```
 
 ### 常见失败排查
 
 | 症状 | 原因 | 修复方法 |
 |------|------|---------|
-| `bruteForceProtected` 为 null | auth9-core seeder 未执行 | 启动 auth9-core 并等待 seeder 完成 |
-| 从宿主机查询 Admin API 返回 401/403 | nginx gateway 阻止宿主机访问 `/admin` | 使用 `docker exec auth9-core curl ...` 从 Docker 内部查询 |
-| 50 次错误后仍无锁定 | 环境未初始化或使用了错误的 realm | 执行 `./scripts/reset-docker.sh` 重建环境 |
-| 只有 0-1 条 `LOGIN_ERROR`，且始终不锁定 | 测试使用了不存在的用户名，或客户端未开启 Direct Access Grants | 改用默认存在用户 `admin@auth9.local`；若返回 `unauthorized_client`，切换到方法 B，通过标准登录流程或事件链路验证 |
-| 锁定后无法恢复 | `permanentLockout` 意外设为 true | 检查 seeder 配置，默认 `permanentLockout=false` |
+| `lockout_threshold` 为 0 或 null | 密码策略未配置 | 通过 `PUT /api/v1/tenants/{id}/password-policy` 配置锁定阈值 |
+| 50 次错误后仍无锁定 | 环境未初始化 | 执行 `./scripts/reset-docker.sh` 重建环境 |
+| 只有 0-1 条 `LOGIN_ERROR`，且始终不锁定 | 测试使用了不存在的用户名 | 改用默认存在用户 `admin@auth9.local` |
+| 锁定后无法恢复 | 永久锁定被启用 | 检查密码策略配置 |
 
 ### 修复建议
 - 5 次失败后锁定 15 分钟
@@ -148,10 +131,9 @@ curl -X POST http://localhost:8080/api/v1/auth/reset-password \
   -d '{"token":"used_token","new_password":"NewPass123!"}' # pragma: allowlist secret
 # 预期: 400 "Token invalid or expired"
 
-# 如果系统未暴露上述 API，而是完全委托 Keycloak 托管流程：
-# 1) 触发 Keycloak reset credentials 流程
-# 2) 验证不存在邮箱时返回语义一致
-# 3) 验证重置链接一次性与过期策略
+# Auth9 自管密码重置流程，验证:
+# 1) 不存在邮箱时返回语义一致
+# 2) 重置链接一次性与过期策略
 ```
 
 ### 修复建议
@@ -184,33 +166,25 @@ curl -X POST http://localhost:8080/api/v1/auth/reset-password \
 
 ### 验证方法
 
-> **注意**: Keycloak 默认使用嵌入式 H2 数据库，无法直接查询。推荐使用以下方法验证。
+Auth9 使用 Argon2id 本地哈希存储密码，可通过数据库和 API 验证。
 
 ```bash
-# 方法 A（推荐）：通过 Keycloak Admin API 查询密码策略配置
-# ⚠️ 重要：必须从 Docker 网络内部访问 Keycloak Admin API（nginx gateway 阻止宿主机访问 /admin）
-KC_TOKEN=$(docker exec auth9-core curl -s -X POST \
-  "http://keycloak:8080/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli" -d "username=admin" -d "password=admin" \
-  -d "grant_type=password" | jq -r '.access_token')
+# 方法 A（推荐）：通过 Auth9 密码策略 API 查询配置
+curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H "Authorization: Bearer $TOKEN" | jq '.'
+# 预期: 包含 min_length、require_uppercase 等策略字段
 
-# 查询 realm 密码策略
-docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
-  -H "Authorization: Bearer $KC_TOKEN" | jq '{passwordPolicy, bruteForceProtected}'
-# 预期: passwordPolicy 包含 "hashAlgorithm(pbkdf2-sha512)" 和 "hashIterations(210000)"
-
-# 方法 B：直接查询 credential 表（仅当 Keycloak 使用外部数据库时可用）
-# SELECT credential_data FROM credential WHERE user_id = 'xxx';
-# 应返回: {"hashIterations":210000,"algorithm":"pbkdf2-sha512",...}
+# 方法 B：直接查询数据库验证密码哈希格式
+# SELECT password_hash FROM users WHERE email = 'xxx';
+# 应返回 Argon2id 格式哈希: $argon2id$v=19$m=...
 ```
 
 ### 常见失败排查
 
 | 症状 | 原因 | 修复方法 |
 |------|------|---------|
-| H2 数据库无法查询 | Keycloak 使用嵌入式 H2 | 改用 Keycloak Admin API 方法 A |
-| passwordPolicy 为空 | auth9-core seeder 未执行 | 启动 auth9-core 并等待 seeder 完成 |
-| 从宿主机查询返回 401/"HTTPS required" | nginx gateway 阻止宿主机访问 `/admin` | 使用 `docker exec auth9-core curl ...` 从 Docker 内部查询 |
+| 密码策略 API 返回空 | 租户未配置密码策略 | 通过 `PUT /api/v1/tenants/{id}/password-policy` 配置 |
+| password_hash 不是 Argon2id 格式 | 早期迁移用户可能使用旧格式 | 用户下次登录时自动升级哈希算法 |
 
 ### 修复建议
 - 使用 Argon2id (推荐) 或 bcrypt
@@ -224,8 +198,8 @@ docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
 
 ### 前置条件
 - 已登录用户
-- **Docker 环境已完全启动且 auth9-core 完成初始化（seeder 已执行）**
-- **验证方法**: 检查 auth9-core 日志包含密码策略同步信息，或通过 Keycloak Admin API 确认 `passwordPolicy` 不为空（参见场景 1 验证方法）
+- **Docker 环境已完全启动且 auth9-core 完成初始化**
+- **验证方法**: 通过 Auth9 密码策略 API 确认策略不为空（参见场景 1 验证方法）
 
 ### 攻击目标
 验证密码更改流程安全性
@@ -238,7 +212,7 @@ docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
 2. 检查是否强制注销其他会话
 3. 检查密码历史检查
 
-> **Note**: Revoking other sessions after password change depends on Keycloak realm configuration (`revokeRefreshToken`), not auth9-core code. This behavior is configured in Keycloak, not managed by Auth9.
+> **Note**: Auth9 在密码更改后会撤销用户的其他活跃会话，确保安全性。
 
 ### 预期安全行为
 - 更改密码需强身份校验（当前密码、有效会话或等效再认证机制）
@@ -264,10 +238,8 @@ curl -X PUT http://localhost:8080/api/v1/users/me/password \
 # 检查其他会话是否被注销
 # 用旧 session 访问应失败
 
-# 如果密码修改完全在 Keycloak 侧执行：
-# 通过 Keycloak Admin API 或用户动作策略验证
-# - requiredActions / re-authentication 约束
-# - session invalidation 是否生效
+# 验证密码修改后的会话撤销:
+# 用旧 session 访问应失败（Auth9 自动撤销同一用户的其他会话）
 ```
 
 ### 修复建议

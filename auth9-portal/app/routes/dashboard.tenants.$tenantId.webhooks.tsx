@@ -17,7 +17,7 @@ import {
 } from "~/components/ui/dialog";
 import { redirect } from "react-router";
 import { webhookApi, tenantApi, type Webhook, type CreateWebhookInput } from "~/services/api";
-import { getAccessToken } from "~/services/session.server";
+import { getAccessToken, getAccessTokenWithUpdate } from "~/services/session.server";
 import {
   ArrowLeftIcon,
   PlusIcon,
@@ -34,6 +34,14 @@ import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
 import { mapApiError } from "~/lib/error-messages";
 import { useFormatters } from "~/i18n/format";
+
+interface WebhookActionData {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  createdSecret?: string;
+  newSecret?: string;
+}
 
 const WEBHOOK_EVENTS = [
   { id: "login.success", label: "Login Success" },
@@ -56,14 +64,18 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const { tenantId } = params;
   const locale = await resolveLocale(request);
   if (!tenantId) {
-    return { webhooks: [], error: translate(locale, "tenants.errors.tenantIdRequired") };
+    return { webhooks: [] as Webhook[], error: translate(locale, "tenants.errors.tenantIdRequired"), tenantId: "" };
   }
 
   try {
-    const accessToken = await getAccessToken(request);
+    const { token: accessToken, headers } = await getAccessTokenWithUpdate(request);
     await tenantApi.get(tenantId, accessToken || undefined);
     const response = await webhookApi.list(tenantId, accessToken || undefined);
-    return { webhooks: response.data, tenantId };
+    const data = { webhooks: response.data, tenantId, error: null as string | null };
+    if (headers) {
+      return Response.json(data, { headers });
+    }
+    return data;
   } catch {
     throw redirect("/dashboard/tenants");
   }
@@ -75,10 +87,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (!tenantId) {
     return { error: translate(locale, "tenants.errors.tenantIdRequired") };
   }
-  const accessToken = await getAccessToken(request);
+  const { token: accessToken, headers: sessionHeaders } = await getAccessTokenWithUpdate(request);
 
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  const returnData = (data: WebhookActionData): WebhookActionData => {
+    if (sessionHeaders) {
+      return Response.json(data, { headers: sessionHeaders }) as unknown as WebhookActionData;
+    }
+    return data;
+  };
 
   try {
     if (intent === "create") {
@@ -90,11 +109,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
         enabled: formData.get("enabled") === "true",
       };
       const result = await webhookApi.create(tenantId, input, accessToken || undefined);
-      return {
+      return returnData({
         success: true,
         message: translate(locale, "tenants.webhooks.created"),
         createdSecret: result.data.secret,
-      };
+      });
     }
 
     if (intent === "update") {
@@ -107,52 +126,52 @@ export async function action({ request, params }: ActionFunctionArgs) {
         enabled: formData.get("enabled") === "true",
       };
       await webhookApi.update(tenantId, id, input, accessToken || undefined);
-      return { success: true, message: translate(locale, "tenants.webhooks.updated") };
+      return returnData({ success: true, message: translate(locale, "tenants.webhooks.updated") });
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await webhookApi.delete(tenantId, id, accessToken || undefined);
-      return { success: true, message: translate(locale, "tenants.webhooks.deleted") };
+      return returnData({ success: true, message: translate(locale, "tenants.webhooks.deleted") });
     }
 
     if (intent === "regenerate_secret") {
       const id = formData.get("id") as string;
       const result = await webhookApi.regenerateSecret(tenantId, id, accessToken || undefined);
-      return {
+      return returnData({
         success: true,
         message: translate(locale, "tenants.webhooks.secretRegenerated"),
         newSecret: result.data.secret,
-      };
+      });
     }
 
     if (intent === "test") {
       const id = formData.get("id") as string;
       const result = await webhookApi.test(tenantId, id, accessToken || undefined);
       if (result.data.success) {
-        return {
+        return returnData({
           success: true,
           message: translate(locale, "tenants.webhooks.testSuccess", {
             statusCode: result.data.status_code,
             responseTime: result.data.response_time_ms,
           }),
-        };
+        });
       }
-      return { error: translate(locale, "tenants.webhooks.testFailed", { error: result.data.error }) };
+      return returnData({ error: translate(locale, "tenants.webhooks.testFailed", { error: result.data.error }) });
     }
   } catch (error) {
     const message = mapApiError(error, locale);
-    return { error: message };
+    return returnData({ error: message });
   }
 
-  return { error: translate(locale, "tenants.webhooks.invalidAction") };
+  return returnData({ error: translate(locale, "tenants.webhooks.invalidAction") });
 }
 
 export default function WebhooksPage() {
   const { t } = useI18n();
   const formatters = useFormatters();
   const { webhooks, error: loadError, tenantId } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<WebhookActionData>();
   const navigation = useNavigation();
   const submit = useSubmit();
   const confirm = useConfirm();

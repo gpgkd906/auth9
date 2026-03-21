@@ -1,5 +1,6 @@
 # Auth9 Core - Rust Backend
 # Multi-stage build for minimal image size
+# Build context: repository root (needed for auth9-oidc path dependency)
 
 # ==================== Chef Stage ====================
 FROM lukemathwalker/cargo-chef:latest-rust-1.93-bookworm AS chef
@@ -12,26 +13,32 @@ WORKDIR /app
 # ==================== Planner Stage ====================
 FROM chef AS planner
 
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+COPY auth9-core/ ./auth9-core/
+COPY auth9-oidc/ ./auth9-oidc/
+WORKDIR /app/auth9-core
+RUN cargo chef prepare --recipe-path /app/recipe.json
 
 # ==================== Builder Stage ====================
 FROM chef AS builder
 
+# Copy auth9-oidc first (dependency)
+COPY auth9-oidc/ ./auth9-oidc/
+
 # Build dependencies using cargo-chef (mount cache survives --no-cache rebuilds)
+WORKDIR /app/auth9-core
 COPY --from=planner /app/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
+    --mount=type=cache,target=/app/auth9-core/target \
     cargo chef cook --release --recipe-path recipe.json
 
 # Copy source code and build application
-COPY . .
+COPY auth9-core/ ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
+    --mount=type=cache,target=/app/auth9-core/target \
     cargo build --release && \
-    cp /app/target/release/auth9-core /app/auth9-core-bin
+    cp /app/auth9-core/target/release/auth9-core /app/auth9-core-bin
 
 # ==================== Runtime Stage ====================
 FROM debian:bookworm-slim
@@ -54,7 +61,7 @@ WORKDIR /app
 COPY --from=builder /app/auth9-core-bin /usr/local/bin/auth9-core
 
 # Copy migrations
-COPY migrations ./migrations
+COPY auth9-core/migrations ./migrations
 
 # Set ownership
 RUN chown -R auth9:auth9 /app

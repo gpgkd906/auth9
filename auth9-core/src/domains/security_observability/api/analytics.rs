@@ -12,7 +12,7 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 
 /// Get login statistics
@@ -30,10 +30,10 @@ pub async fn get_stats<S: HasAnalytics>(
 ) -> Result<Json<SuccessResponse<LoginStats>>, AppError> {
     let tenant_id = params.tenant_id;
 
-    // First check for start/end date parameters (ISO 8601 format)
+    // First check for start/end date parameters (ISO 8601 or YYYY-MM-DD format)
     if let (Some(start), Some(end)) = (&params.start, &params.end) {
-        if let (Ok(start_dt), Ok(end_dt)) =
-            (start.parse::<DateTime<Utc>>(), end.parse::<DateTime<Utc>>())
+        if let (Some(start_dt), Some(end_dt)) =
+            (parse_date_param(start, false), parse_date_param(end, true))
         {
             let stats = state
                 .analytics_service()
@@ -68,6 +68,25 @@ pub async fn get_stats<S: HasAnalytics>(
     };
 
     Ok(Json(SuccessResponse::new(stats)))
+}
+
+/// Parse a date string that may be either ISO 8601 datetime or date-only (YYYY-MM-DD).
+/// For date-only start, returns midnight UTC. For date-only end, returns end of day UTC.
+fn parse_date_param(s: &str, is_end: bool) -> Option<DateTime<Utc>> {
+    // Try full ISO 8601 first
+    if let Ok(dt) = s.parse::<DateTime<Utc>>() {
+        return Some(dt);
+    }
+    // Try date-only format (YYYY-MM-DD)
+    if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        let time = if is_end {
+            date.and_hms_opt(23, 59, 59)?
+        } else {
+            date.and_hms_opt(0, 0, 0)?
+        };
+        return Some(time.and_utc());
+    }
+    None
 }
 
 /// Query parameters for stats endpoint
@@ -208,10 +227,10 @@ pub async fn get_daily_trend<S: HasAnalytics>(
 ) -> Result<Json<SuccessResponse<Vec<DailyTrendPoint>>>, AppError> {
     let tenant_id = params.tenant_id;
 
-    // First check for start/end date parameters
+    // First check for start/end date parameters (ISO 8601 or YYYY-MM-DD format)
     if let (Some(start), Some(end)) = (&params.start, &params.end) {
-        if let (Ok(start_dt), Ok(end_dt)) =
-            (start.parse::<DateTime<Utc>>(), end.parse::<DateTime<Utc>>())
+        if let (Some(start_dt), Some(end_dt)) =
+            (parse_date_param(start, false), parse_date_param(end, true))
         {
             let trend = state
                 .analytics_service()
@@ -255,5 +274,36 @@ mod tests {
         .unwrap();
         assert_eq!(query.start, Some("2024-01-01T00:00:00Z".to_string()));
         assert_eq!(query.end, Some("2024-01-31T23:59:59Z".to_string()));
+    }
+
+    #[test]
+    fn test_parse_date_param_iso8601() {
+        let dt = parse_date_param("2024-01-15T10:30:00Z", false);
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.format("%Y-%m-%d %H:%M:%S").to_string(), "2024-01-15 10:30:00");
+    }
+
+    #[test]
+    fn test_parse_date_param_date_only_start() {
+        let dt = parse_date_param("2027-01-01", false);
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.format("%Y-%m-%d %H:%M:%S").to_string(), "2027-01-01 00:00:00");
+    }
+
+    #[test]
+    fn test_parse_date_param_date_only_end() {
+        let dt = parse_date_param("2027-01-31", true);
+        assert!(dt.is_some());
+        let dt = dt.unwrap();
+        assert_eq!(dt.format("%Y-%m-%d %H:%M:%S").to_string(), "2027-01-31 23:59:59");
+    }
+
+    #[test]
+    fn test_parse_date_param_invalid() {
+        assert!(parse_date_param("invalid", false).is_none());
+        assert!(parse_date_param("", false).is_none());
+        assert!(parse_date_param("2024-13-01", false).is_none());
     }
 }

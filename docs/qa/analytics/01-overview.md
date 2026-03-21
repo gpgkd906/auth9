@@ -22,14 +22,18 @@
 | failure_reason | TEXT | 失败原因 |
 | created_at | TIMESTAMP | 事件时间 |
 
-### event_type 枚举
+### event_type 值（VARCHAR(50)）
 | 值 | 说明 |
 |----|------|
 | success | 登录成功 |
-| social | 社交登录成功 |
+| social | 社交登录成功（旧版） |
 | failed_password | 密码错误 |
 | failed_mfa | MFA 验证失败 |
 | locked | 账户锁定 |
+| federation_success | 联邦登录成功（OAuth2/SAML） |
+| federation_failed | 联邦登录失败 |
+| identity_linked | 用户绑定外部身份 |
+| identity_unlinked | 用户解绑外部身份 |
 
 ---
 
@@ -41,7 +45,7 @@
 
 > **前置门禁**: 本文档默认“登录流程已单独验收通过”。
 > 若从未认证状态进入本场景，需先按 `docs/qa/auth/01-oidc-login.md` 完成登录验证。
-> 如果 `/login` 页面本身出现跳转、按钮、CSP 或 Keycloak 联邦登录问题，应归类到认证文档，不应作为 Analytics 缺陷建票。
+> 如果 `/login` 页面本身出现跳转、按钮、CSP 或联邦登录问题，应归类到认证文档，不应作为 Analytics 缺陷建票。
 
 ### 目的
 验证分析概览页面正确显示统计数据
@@ -110,9 +114,14 @@ WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY);
 ### 目的
 验证每日统计数据的准确性
 
+> **API 说明**:
+> - `period=daily` 表示「最近 24 小时的统计汇总」，不是「每日明细」
+> - 每日明细（每天各事件类型的趋势）通过 **`/api/v1/analytics/daily-trend`** 端点获取
+> - 区别：`login-stats` 返回聚合数字，`daily-trend` 返回逐日明细数组
+
 ### 测试操作流程
 1. 进入「分析」→「概览」
-2. 选择「Daily」视图（如有）
+2. 查看每日趋势图表（对应 `/api/v1/analytics/daily-trend` 端点）
 3. 查看某一天的详细数据
 
 ### 预期结果
@@ -177,6 +186,12 @@ GROUP BY device_type;
 1. 进入「分析」→「概览」
 2. 选择一个没有数据的时间范围（如未来日期）
 
+> **API 日期格式**: `start`/`end` 参数支持两种格式：
+> - ISO 8601 完整格式: `2027-01-01T00:00:00Z`
+> - 日期格式: `2027-01-01`（start 自动补为 00:00:00，end 自动补为 23:59:59）
+>
+> 示例: `GET /api/v1/analytics/login-stats?start=2027-01-01&end=2027-01-31`
+
 ### 预期结果
 - 统计卡片显示 0 或 N/A
 - 图表显示空状态或提示无数据
@@ -196,6 +211,7 @@ WHERE created_at BETWEEN '{start_date}' AND '{end_date}';
 | 日期 | 问题 | 修复 |
 |------|------|------|
 | 2026-02-03 | Analytics 页面显示 "Failed to load analytics" | 修复 `login_event.rs` 中 SQL 查询的类型不匹配：MySQL/TiDB 的 `SUM()` 返回 `DECIMAL`，需用 `CAST(... AS SIGNED)` 转换为 `i64` |
+| 2026-03-21 | `start`/`end` 日期参数使用 `YYYY-MM-DD` 格式时被忽略，静默回退到默认 7 天 | `analytics.rs` 的 `parse_date_param()` 现同时支持 ISO 8601 和日期格式 |
 
 ---
 
@@ -225,7 +241,7 @@ WHERE created_at BETWEEN '{start_date}' AND '{end_date}';
 | 现象 | 原因 | 解决 |
 |------|------|------|
 | 在进入 Analytics 前卡在 `/login`，于是提交了 Analytics 缺陷票 | 实际失败点是认证前置步骤，不是 Analytics 页面 | 先执行 `docs/qa/auth/01-oidc-login.md`；仅当登录成功后进入 `/dashboard/analytics` 仍异常，才记录 Analytics 工单 |
-| 点击「Sign in with password」后看到浏览器安全/CSP 控制台信息，就认定 Analytics 页面不可用 | QA 在未进入目标页面前就中断，且把登录链路噪音归因到 Analytics | 以“是否成功跳转到 Keycloak 或完成登录并进入 `/dashboard/analytics`”作为判定标准；认证链路问题单独归档到 Auth |
+| 点击「Sign in with password」后看到浏览器安全/CSP 控制台信息，就认定 Analytics 页面不可用 | QA 在未进入目标页面前就中断，且把登录链路噪音归因到 Analytics | 以”是否成功完成登录并进入 `/dashboard/analytics`”作为判定标准；认证链路问题单独归档到 Auth |
 
 ---
 

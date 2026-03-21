@@ -77,6 +77,14 @@ pub(super) async fn op_fetch_impl(
         host.to_string()
     };
 
+    // Check private IP first (SSRF protection) — specific error before generic allowlist
+    if !config.allow_private_ips && is_private_ip(host) {
+        return Err(ActionOpError(format!(
+            "Requests to private/internal IPs are blocked: {}",
+            host
+        )));
+    }
+
     // Check allowlist (match on host alone or host:port)
     if !config
         .allowed_domains
@@ -86,14 +94,6 @@ pub(super) async fn op_fetch_impl(
         return Err(ActionOpError(format!(
             "Domain '{}' not in allowlist. Allowed: {:?}",
             host, config.allowed_domains
-        )));
-    }
-
-    // Check private IP (SSRF protection)
-    if !config.allow_private_ips && is_private_ip(host) {
-        return Err(ActionOpError(format!(
-            "Requests to private/internal IPs are blocked: {}",
-            host
         )));
     }
 

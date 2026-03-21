@@ -41,13 +41,13 @@
 - **必须通过 API 创建** Service 和 Client（非 DB seed 数据）
 - 已获取有效的 Admin Access Token
 
-> **⚠️ 重要**: DB 迁移种子数据（如 M2M 测试 client）仅写入数据库，不会同步到 Keycloak。
+> **⚠️ 重要**: DB 迁移种子数据（如 M2M 测试 client）仅写入数据库，不会同步到 Auth9 内置 OIDC 引擎。
 > 使用种子数据测试时，`client_secret` 将返回占位符 `"(set — use the secret configured at creation)"`，
 > 这是预期行为（DB 仅存储哈希，无法还原明文）。
 > 要测试真实 secret 返回，必须通过 `POST /api/v1/services` 或 `POST /api/v1/services/{id}/clients` 创建 client。
 
 ### 目的
-验证 Integration API 返回完整的集成信息，包含 Keycloak 中的真实 client_secret
+验证 Integration API 返回完整的集成信息，包含真实的 client_secret
 
 ### 测试操作流程
 1. 获取 Admin Access Token
@@ -70,7 +70,7 @@
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
 | `client_secret` 返回占位符 | 使用了 DB seed 数据 | 通过 API 创建 Service |
-| Keycloak 中无对应 client | Service 未通过 API 创建 | 通过 API 创建 Service |
+| OIDC 引擎中无对应 client | Service 未通过 API 创建 | 通过 API 创建 Service |
 | 401 未授权 | Token 过期或无效 | 重新获取 Token |
 
 ### 预期结果
@@ -79,7 +79,7 @@
 - `data.clients[0].client_id` 非空
 - `data.clients[0].public_client` 为 `false`
 - `data.clients[0].client_secret` 非空（真实 secret，非哈希）
-- `data.endpoints.authorize` 包含 `/api/v1/auth/authorize`（auth9-core OIDC 代理端点，非直接 Keycloak realm URL）
+- `data.endpoints.authorize` 包含 `/api/v1/auth/authorize`（auth9-core OIDC 端点）
 - `data.endpoints.token` 包含 `/api/v1/auth/token`（auth9-core OIDC 代理端点）
 - `data.endpoints.openid_configuration` 以 `/.well-known/openid-configuration` 结尾
 - `data.grpc.address` 格式为 `host:port`
@@ -170,7 +170,9 @@ SELECT client_id, name FROM clients WHERE service_id = '{service_id}';
 4. 点击「Integration」标签
 5. 检查以下区域：
    - **Clients & Credentials** 卡片：显示 client_id 和隐藏的 secret（`••••••••`）
-   - 点击「Reveal」按钮，检查是否显示真实 secret
+   - 点击「Reveal」按钮：
+     - **通过 API 创建的 Client**：显示真实 secret（仅在创建后首次查看时可用，因 secret 在 OIDC 引擎内存中缓存）
+     - **DB seed 数据的 Client**：显示占位符 `"(set — use the secret configured at creation)"`，这是**预期行为**——数据库仅存储 secret 的哈希值，无法还原明文
    - 点击 client_id 旁的复制按钮，检查是否复制到剪贴板
 6. 检查 **Environment Variables** 区域：
    - `.env` 格式代码块包含 `AUTH9_DOMAIN`、`AUTH9_CLIENT_ID`、`AUTH9_CLIENT_SECRET` 等
@@ -185,7 +187,7 @@ SELECT client_id, name FROM clients WHERE service_id = '{service_id}';
 
 ### 预期结果
 - 两个标签切换顺畅，无页面闪烁
-- Secret 默认隐藏，点击 Reveal 后显示真实值
+- Secret 默认隐藏，点击 Reveal 后显示值（API 创建的 client 显示真实 secret；DB seed 的 client 显示占位符，因 secret 以哈希存储无法还原）
 - 所有复制按钮正常工作（复制到系统剪贴板）
 - 环境变量块中的值与 API 返回一致
 - OAuth 端点 URL 完整且格式正确

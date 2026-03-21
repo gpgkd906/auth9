@@ -30,7 +30,7 @@
 - 不存在同名服务
 
 ### 目的
-验证用户可从可见导航入口进入服务模块，并完成服务创建与 Keycloak OIDC 客户端同步
+验证用户可从可见导航入口进入服务模块，并完成服务创建与 OIDC 客户端同步
 
 ### 测试操作流程
 1. 在管理后台左侧导航确认存在「服务管理」菜单入口
@@ -60,7 +60,7 @@ SELECT id, name, base_url, redirect_uris, status FROM services WHERE name = 'My 
 SELECT client_id FROM clients c JOIN services s ON s.id = c.service_id WHERE s.name = 'My Web App';
 -- 预期: UUID 格式字符串 (例如: eed5a23a-a3b4-4ee6-88f1-b6f3725b1584)
 
--- Keycloak 验证：存在对应 UUID client_id 的客户端
+-- Auth9 内置 OIDC 引擎验证：存在对应 UUID client_id 的客户端
 ```
 
 ---
@@ -105,7 +105,7 @@ SELECT COUNT(*) FROM services WHERE name = 'My Web App';
 
 ### 预期结果
 - 显示更新成功
-- Keycloak 客户端配置同步
+- OIDC 客户端配置同步
 
 ### 预期数据状态
 ```sql
@@ -131,7 +131,7 @@ SELECT base_url, redirect_uris, updated_at FROM services WHERE id = '{service_id
 
 ### 预期结果
 - 显示删除成功
-- Keycloak 中客户端被删除
+- Auth9 内置 OIDC 引擎中客户端被删除
 
 ### 预期数据状态
 ```sql

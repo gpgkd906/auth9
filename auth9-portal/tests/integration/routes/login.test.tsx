@@ -1,8 +1,20 @@
 import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import Login, { loader, action, meta } from "~/routes/login";
 import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
+
+const defaultBranding = {
+    logo_url: undefined,
+    primary_color: "#007AFF",
+    secondary_color: "#5856D6",
+    background_color: "#F5F5F7",
+    text_color: "#1D1D1F",
+    company_name: "Auth9",
+    allow_registration: false,
+    email_otp_enabled: false,
+};
 
 // Mock session.server
 vi.mock("~/services/session.server", () => ({
@@ -26,6 +38,9 @@ vi.mock("~/services/api", () => ({
             },
         }),
     },
+    identityProviderApi: {
+        listEnabledPublic: vi.fn().mockResolvedValue({ data: [] }),
+    },
 }));
 
 describe("Login Page", () => {
@@ -47,9 +62,10 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: null,
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
+            loginChallenge: undefined,
+            socialProviders: [],
         });
     });
 
@@ -60,9 +76,10 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: "access_denied",
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
+            loginChallenge: undefined,
+            socialProviders: [],
         });
     });
 
@@ -73,9 +90,10 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: "server_error",
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
+            loginChallenge: undefined,
+            socialProviders: [],
         });
     });
 
@@ -97,9 +115,10 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: null,
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: true,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: { ...defaultBranding, allow_registration: true },
+            loginChallenge: undefined,
+            socialProviders: [],
         });
     });
 
@@ -227,7 +246,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "access_denied", apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: "access_denied", apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
@@ -246,7 +265,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "server_error", apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: "server_error", apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
@@ -263,28 +282,33 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "test_error", apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: "test_error", apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
 
         render(<RoutesStub initialEntries={["/login?error=test_error"]} />);
 
-        expect(await screen.findByText("A9")).toBeInTheDocument();
+        expect((await screen.findAllByText("A9")).length).toBeGreaterThan(0);
     });
 
     it("renders forgot password link and hides registration link when signup is disabled", async () => {
+        const user = userEvent.setup();
         const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: null, apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: null, apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
 
         render(<RoutesStub initialEntries={["/login"]} />);
+
+        // Navigate to password view to see forgot password link
+        const passwordBtn = await screen.findByRole("button", { name: /sign in with password/i });
+        await user.click(passwordBtn);
 
         expect(await screen.findByRole("link", { name: /forgot password/i })).toBeInTheDocument();
         expect(screen.queryByRole("link", { name: /create account/i })).not.toBeInTheDocument();
@@ -296,15 +320,15 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: null, apiBaseUrl: "http://localhost:8080", allowRegistration: true };
+                    return { error: null, apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: { ...defaultBranding, allow_registration: true } };
                 },
             },
         ]);
 
         render(<RoutesStub initialEntries={["/login"]} />);
 
-        expect(await screen.findByRole("link", { name: /forgot password/i })).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /create account/i })).toBeInTheDocument();
+        // Create account link is visible in the methods view
+        expect(await screen.findByRole("link", { name: /create account/i })).toBeInTheDocument();
     });
 
     // ============================================================================
@@ -318,9 +342,10 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: null,
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
+            loginChallenge: undefined,
+            socialProviders: [],
         });
     });
 });

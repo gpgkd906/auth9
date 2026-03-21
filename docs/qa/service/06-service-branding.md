@@ -1,7 +1,7 @@
 # 服务管理 - Service 级别品牌设置测试
 
 **模块**: 服务管理
-**测试范围**: Service 级别 Branding 覆盖（API + Portal）、公开端点 client_id 查询、Keycloak 主题集成
+**测试范围**: Service 级别 Branding 覆盖（API + Portal）、公开端点 client_id 查询、Auth9 品牌认证页集成
 **场景数**: 5
 **优先级**: 高
 
@@ -13,7 +13,7 @@ Auth9 支持两级品牌配置：
 1. **系统级品牌** — 在「设置 → 登录页品牌」页面配置，作为全局默认
 2. **Service 级品牌** — 在 Service 详情页「Branding」标签页配置，覆盖系统默认
 
-当用户通过某个 Service 的 OIDC Client 访问登录页时，auth9-keycloak-theme 从公开端点获取品牌配置：
+当用户通过某个 Service 的 OIDC Client 访问登录页时，Auth9 品牌认证页从公开端点获取品牌配置：
 - `GET /api/v1/public/branding?client_id={client_id}` — 若该 client 所属 Service 有自定义品牌则返回 Service 品牌，否则返回系统默认品牌
 
 端点：
@@ -218,14 +218,14 @@ WHERE service_id = '{service_id}';
 
 ---
 
-## 场景 5：Keycloak 主题按 client_id 加载 Service 品牌
+## 场景 5：Auth9 品牌认证页按 client_id 加载 Service 品牌
 
 ### 初始状态
 - Service id=`{service_id}` 已配置自定义品牌（primary_color = `#E74C3C`）
 - 该 Service 的 Client 已配置 OIDC 回调
 
 ### 目的
-验证 Auth9 托管认证页根据 OIDC 请求中的 `client_id` 加载对应 Service 的品牌样式
+验证 Auth9 品牌认证页根据 OIDC 请求中的 `client_id` 加载对应 Service 的品牌样式
 
 ### 测试操作流程
 1. 通过该 Service 的 OIDC 入口触发登录流程（Portal 或直接 OIDC authorize URL）
@@ -238,7 +238,7 @@ WHERE service_id = '{service_id}';
 
 ### 验证方法
 ```bash
-# 检查 Keycloak 主题是否请求了带 client_id 的品牌端点
+# 检查 Auth9 品牌认证页是否请求了带 client_id 的品牌端点
 # 在浏览器 DevTools Network 面板中观察：
 # GET http://localhost:8080/api/v1/public/branding?client_id={client_id}
 # 预期: 返回 Service 级别品牌配置
@@ -254,7 +254,7 @@ WHERE service_id = '{service_id}';
 | 2 | 创建 Service 级品牌配置 | ☐ | | | |
 | 3 | 公开端点按 client_id 返回 Service 品牌 | ☐ | | | |
 | 4 | 删除 Service 品牌（恢复系统默认） | ☐ | | | |
-| 5 | Keycloak 主题按 client_id 加载 Service 品牌 | ☐ | | | |
+| 5 | Auth9 品牌认证页按 client_id 加载 Service 品牌 | ☐ | | | |
 
 ---
 

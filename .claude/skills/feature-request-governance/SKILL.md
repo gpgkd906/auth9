@@ -84,9 +84,29 @@ Build a closure report:
 | 2 | [requirement text] | ❌ Unfulfilled | [reason] |
 ```
 
-## Step 5: Generate QA Test Documentation
+## Step 5: Generate QA Test Documentation + Reset Environment (Parallel)
 
-After implementation passes self-check, generate QA test documentation for the new/changed behavior. This step follows the `qa-doc-gen` skill conventions.
+After implementation passes self-check, **launch two tasks in parallel**:
+
+1. **Generate QA test documentation** (this step) — produces QA docs for the new behavior
+2. **Reset local Docker environment** — run `./scripts/reset-docker.sh` in the background so the environment is ready with the latest binary by the time QA docs are done and Step 6 begins
+
+This parallelization ensures the freshly-built code is deployed to Docker before QA testing starts, eliminating the wait-for-restart bottleneck.
+
+```
+┌─────────────────────────┐     ┌──────────────────────────┐
+│  Generate QA docs       │     │  Reset Docker env         │
+│  (Steps 5.1–5.5)       │     │  (background)             │
+│  ~2-3 min               │     │  ~1-2 min                 │
+└─────────┬───────────────┘     └──────────┬───────────────┘
+          │                                 │
+          └─────────────┬───────────────────┘
+                        ▼
+              Step 6: Execute QA Testing
+              (environment is now ready)
+```
+
+The QA doc generation follows the `qa-doc-gen` skill conventions.
 
 ### 5.1 Determine QA scope
 
@@ -140,18 +160,18 @@ After QA docs are generated, execute the tests following the `qa-testing` skill 
 
 ### 6.1 Prerequisites check
 
-Verify the environment is running:
+If the environment reset was launched in parallel during Step 5, wait for it to complete first. Then verify:
 
 ```bash
 # Check Docker services
 docker ps --format "table {{.Names}}\t{{.Status}}" | grep auth9
 
-# Verify API is responsive
+# Verify API is responsive (with latest binary)
 curl -sf http://localhost:8080/health && echo "OK" || echo "FAIL"
 ```
 
-If services are not running, inform the user and ask whether to:
-- Start services (`docker-compose up -d`)
+If services are not running (and no parallel reset was started), inform the user and ask whether to:
+- Reset environment (`./scripts/reset-docker.sh`)
 - Skip QA testing (mark as deferred in closure report)
 
 ### 6.2 Generate API token

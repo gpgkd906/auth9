@@ -114,8 +114,13 @@ pub struct Config {
     pub redis: RedisConfig,
     /// JWT configuration
     pub jwt: JwtConfig,
-    /// Keycloak configuration
-    pub keycloak: KeycloakConfig,
+    /// Auth9 Core public URL (used for OIDC callback, SAML metadata, etc.)
+    pub core_public_url: Option<String>,
+    /// Auth9 Portal public URL (used for email links, login redirects, etc.)
+    pub portal_url: Option<String>,
+    /// Webhook secret for verifying event webhook signatures (HMAC-SHA256).
+    /// Required in production to prevent spoofed events.
+    pub webhook_secret: Option<String>,
     /// gRPC security configuration
     pub grpc_security: GrpcSecurityConfig,
     /// Rate limiting configuration
@@ -155,6 +160,11 @@ pub struct Config {
     /// When non-empty, only URLs from these domains are accepted.
     /// When empty, any external HTTPS domain is allowed (SSRF checks still apply).
     pub branding_allowed_domains: Vec<String>,
+
+    /// Initial admin password for the seed user (set via AUTH9_ADMIN_PASSWORD).
+    /// When provided, the seed process hashes and stores this password so the admin
+    /// can log in via the hosted password login flow.
+    pub admin_password: Option<String>,
 }
 
 impl fmt::Debug for Config {
@@ -168,7 +178,12 @@ impl fmt::Debug for Config {
             .field("database", &self.database)
             .field("redis", &self.redis)
             .field("jwt", &self.jwt)
-            .field("keycloak", &self.keycloak)
+            .field("core_public_url", &self.core_public_url)
+            .field("portal_url", &self.portal_url)
+            .field(
+                "webhook_secret",
+                &self.webhook_secret.as_ref().map(|_| "<REDACTED>"),
+            )
             .field("grpc_security", &self.grpc_security)
             .field("rate_limit", &self.rate_limit)
             .field("cors", &self.cors)
@@ -320,48 +335,6 @@ impl fmt::Debug for JwtConfig {
     }
 }
 
-#[derive(Clone)]
-pub struct KeycloakConfig {
-    /// Internal URL for server-to-server communication (e.g., http://keycloak:8080)
-    pub url: String,
-    /// Public URL for browser redirects (e.g., http://localhost:8081)
-    pub public_url: String,
-    pub realm: String,
-    pub admin_client_id: String,
-    pub admin_client_secret: String,
-    /// SSL requirement for the realm: "none", "external", or "all"
-    /// - "none": HTTP allowed (local dev only)
-    /// - "external": HTTPS required for external requests (recommended for production)
-    /// - "all": HTTPS required for all requests
-    pub ssl_required: String,
-    /// Public URL for Auth9 Core API (e.g., https://api.auth9.example.com)
-    pub core_public_url: Option<String>,
-    /// Public URL for Auth9 Portal (e.g., https://auth9.example.com)
-    pub portal_url: Option<String>,
-    /// Webhook secret for verifying Keycloak event webhook signatures (HMAC-SHA256)
-    /// Required in production to prevent spoofed events
-    pub webhook_secret: Option<String>,
-}
-
-impl fmt::Debug for KeycloakConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("KeycloakConfig")
-            .field("url", &self.url)
-            .field("public_url", &self.public_url)
-            .field("realm", &self.realm)
-            .field("admin_client_id", &self.admin_client_id)
-            .field("admin_client_secret", &"<REDACTED>")
-            .field("ssl_required", &self.ssl_required)
-            .field("core_public_url", &self.core_public_url)
-            .field("portal_url", &self.portal_url)
-            .field(
-                "webhook_secret",
-                &self.webhook_secret.as_ref().map(|_| "<REDACTED>"),
-            )
-            .finish()
-    }
-}
-
 /// gRPC security configuration
 #[derive(Clone)]
 pub struct GrpcSecurityConfig {
@@ -489,17 +462,15 @@ impl Config {
                     "gRPC reflection is enabled (GRPC_ENABLE_REFLECTION=true) in production; disable it to prevent information leakage"
                 );
             }
-            if self.jwt_tenant_access_allowed_audiences.is_empty() {
-                anyhow::bail!(
-                    "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"
-                );
+            // jwt_tenant_access_allowed_audiences is now optional — audiences are
+            // dynamically loaded from the clients table into Redis on startup.
+            // The env var serves as an additional seed for backward compatibility.
+            if self.webhook_secret.is_none() {
+                anyhow::bail!("IDENTITY_WEBHOOK_SECRET (or KEYCLOAK_WEBHOOK_SECRET) is required in production");
             }
-            if self.keycloak.webhook_secret.is_none() {
-                anyhow::bail!("KEYCLOAK_WEBHOOK_SECRET is required in production");
-            }
-        } else if self.keycloak.webhook_secret.is_none() {
+        } else if self.webhook_secret.is_none() {
             tracing::warn!(
-                "Keycloak webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET); \
+                "Webhook secret is not configured (IDENTITY_WEBHOOK_SECRET); \
                  webhook signature verification is disabled"
             );
         }
@@ -540,17 +511,9 @@ impl Config {
                 public_key_pem: None,
                 previous_public_key_pem: None,
             },
-            keycloak: KeycloakConfig {
-                url: "http://localhost:8081".to_string(),
-                public_url: "http://localhost:8081".to_string(),
-                realm: "test".to_string(),
-                admin_client_id: "admin-cli".to_string(),
-                admin_client_secret: "secret".to_string(),
-                ssl_required: "external".to_string(),
-                core_public_url: None,
-                portal_url: None,
-                webhook_secret: None,
-            },
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: None,
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
@@ -572,6 +535,7 @@ impl Config {
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
             branding_allowed_domains: vec![],
+            admin_password: None,
         }
     }
 
@@ -664,34 +628,11 @@ impl Config {
                     .ok()
                     .map(|value| value.replace("\\n", "\n")),
             },
-            keycloak: {
-                let url = env::var("KEYCLOAK_URL")
-                    .unwrap_or_else(|_| "http://localhost:8081".to_string());
-                let public_url = env::var("KEYCLOAK_PUBLIC_URL").unwrap_or_else(|_| url.clone());
-
-                // Read production URLs for portal client redirect URIs
-                let core_public_url = env::var("AUTH9_CORE_PUBLIC_URL").ok();
-                let portal_url = env::var("AUTH9_PORTAL_URL").ok();
-
-                // Webhook secret for Keycloak event verification
-                let webhook_secret = env::var("KEYCLOAK_WEBHOOK_SECRET").ok();
-
-                KeycloakConfig {
-                    url,
-                    public_url,
-                    realm: env::var("KEYCLOAK_REALM").unwrap_or_else(|_| "auth9".to_string()),
-                    admin_client_id: env::var("KEYCLOAK_ADMIN_CLIENT_ID")
-                        .unwrap_or_else(|_| "admin-cli".to_string()),
-                    admin_client_secret: env::var("KEYCLOAK_ADMIN_CLIENT_SECRET")
-                        .unwrap_or_else(|_| String::new()),
-                    // Default to "external" for production safety
-                    ssl_required: env::var("KEYCLOAK_SSL_REQUIRED")
-                        .unwrap_or_else(|_| "external".to_string()),
-                    core_public_url,
-                    portal_url,
-                    webhook_secret,
-                }
-            },
+            core_public_url: env::var("AUTH9_CORE_PUBLIC_URL").ok(),
+            portal_url: env::var("AUTH9_PORTAL_URL").ok(),
+            webhook_secret: env::var("IDENTITY_WEBHOOK_SECRET")
+                .or_else(|_| env::var("KEYCLOAK_WEBHOOK_SECRET"))
+                .ok(),
             grpc_security: GrpcSecurityConfig {
                 auth_mode: env::var("GRPC_AUTH_MODE").unwrap_or_else(|_| "none".to_string()),
                 api_keys: env::var("GRPC_API_KEYS")
@@ -821,6 +762,7 @@ impl Config {
                 max_heap_mb: parse_u64_env("ACTION_MAX_HEAP_MB", 64) as usize,
             },
             branding_allowed_domains: parse_csv_env("BRANDING_ALLOWED_DOMAINS", vec![]),
+            admin_password: env::var("AUTH9_ADMIN_PASSWORD").ok(),
         })
     }
 
@@ -1038,65 +980,6 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_config_clone() {
-        let kc = KeycloakConfig {
-            url: "http://keycloak:8080".to_string(),
-            public_url: "http://localhost:8081".to_string(),
-            realm: "auth9".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "secret".to_string(),
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        };
-        let kc2 = kc.clone();
-
-        assert_eq!(kc.url, kc2.url);
-        assert_eq!(kc.public_url, kc2.public_url);
-        assert_eq!(kc.realm, kc2.realm);
-    }
-
-    #[test]
-    fn test_keycloak_config_debug() {
-        let kc = KeycloakConfig {
-            url: "http://keycloak:8080".to_string(),
-            public_url: "http://localhost:8081".to_string(),
-            realm: "auth9".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "secret".to_string(),
-            ssl_required: "external".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        };
-        let debug_str = format!("{:?}", kc);
-
-        assert!(debug_str.contains("KeycloakConfig"));
-        assert!(debug_str.contains("realm"));
-    }
-
-    #[test]
-    fn test_keycloak_ssl_required_options() {
-        let ssl_options = ["none", "external", "all"];
-
-        for opt in &ssl_options {
-            let kc = KeycloakConfig {
-                url: "http://localhost:8081".to_string(),
-                public_url: "http://localhost:8081".to_string(),
-                realm: "test".to_string(),
-                admin_client_id: "admin".to_string(),
-                admin_client_secret: "secret".to_string(),
-                ssl_required: opt.to_string(),
-                core_public_url: None,
-                portal_url: None,
-                webhook_secret: None,
-            };
-            assert_eq!(kc.ssl_required, *opt);
-        }
-    }
-
-    #[test]
     fn test_config_different_hosts() {
         let config = Config {
             environment: ENV_DEVELOPMENT.to_string(),
@@ -1123,17 +1006,9 @@ mod tests {
                 public_key_pem: None,
                 previous_public_key_pem: None,
             },
-            keycloak: KeycloakConfig {
-                url: "http://keycloak.internal:8080".to_string(),
-                public_url: "https://auth.example.com".to_string(),
-                realm: "production".to_string(),
-                admin_client_id: "auth9-admin".to_string(),
-                admin_client_secret: "admin-secret".to_string(),
-                ssl_required: "all".to_string(),
-                core_public_url: None,
-                portal_url: None,
-                webhook_secret: Some("production-webhook-secret".to_string()),
-            },
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: Some("production-webhook-secret".to_string()),
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
@@ -1155,6 +1030,7 @@ mod tests {
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
             branding_allowed_domains: vec![],
+            admin_password: None,
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
@@ -1574,10 +1450,7 @@ mod tests {
             ],
             || {
                 let config = Config::from_env().unwrap();
-                assert_eq!(
-                    config.keycloak.webhook_secret.unwrap(),
-                    "my-webhook-hmac-secret"
-                );
+                assert_eq!(config.webhook_secret.unwrap(), "my-webhook-hmac-secret");
             },
         );
     }
@@ -1696,7 +1569,7 @@ mod tests {
         config.grpc_security.tls_key_path = Some("/path/to/key.pem".to_string());
         config.grpc_security.tls_ca_cert_path = Some("/path/to/ca.pem".to_string());
         config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
-        config.keycloak.webhook_secret = Some("test-secret".to_string());
+        config.webhook_secret = Some("test-secret".to_string());
 
         let result = config.validate_security();
         assert!(result.is_ok());
@@ -1723,14 +1596,14 @@ mod tests {
         config.grpc_security.auth_mode = "api_key".to_string();
         config.grpc_security.api_keys = vec!["key1".to_string()];
         config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
-        config.keycloak.webhook_secret = None; // Missing in production
+        config.webhook_secret = None; // Missing in production
 
         let result = config.validate_security();
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("KEYCLOAK_WEBHOOK_SECRET is required in production"));
+            .contains("IDENTITY_WEBHOOK_SECRET"));
     }
 
     #[test]
@@ -1740,7 +1613,7 @@ mod tests {
         config.grpc_security.auth_mode = "api_key".to_string();
         config.grpc_security.api_keys = vec!["key1".to_string()];
         config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
-        config.keycloak.webhook_secret = Some("my-secret".to_string());
+        config.webhook_secret = Some("my-secret".to_string());
 
         let result = config.validate_security();
         assert!(result.is_ok());
@@ -1750,7 +1623,7 @@ mod tests {
     fn test_validate_security_dev_allows_missing_webhook_secret() {
         let mut config = test_config();
         config.environment = ENV_DEVELOPMENT.to_string();
-        config.keycloak.webhook_secret = None;
+        config.webhook_secret = None;
 
         let result = config.validate_security();
         assert!(result.is_ok());
@@ -1788,17 +1661,9 @@ mod tests {
                 ),
                 previous_public_key_pem: None,
             },
-            keycloak: KeycloakConfig {
-                url: "http://keycloak:8080".to_string(),
-                public_url: "http://localhost:8081".to_string(),
-                realm: "auth9".to_string(),
-                admin_client_id: "admin-cli".to_string(),
-                admin_client_secret: "keycloak-admin-secret".to_string(),
-                ssl_required: "external".to_string(),
-                core_public_url: None,
-                portal_url: None,
-                webhook_secret: Some("webhook-secret-key".to_string()),
-            },
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: Some("webhook-secret-key".to_string()),
             grpc_security: GrpcSecurityConfig {
                 auth_mode: "api_key".to_string(),
                 api_keys: vec!["api-key-1".to_string(), "api-key-2".to_string()],
@@ -1829,6 +1694,7 @@ mod tests {
             portal_client_id: Some("auth9-portal".to_string()),
             async_action: AsyncActionConfig::default(),
             branding_allowed_domains: vec![],
+            admin_password: None,
         };
 
         let debug_str = format!("{:?}", config);
@@ -1849,10 +1715,6 @@ mod tests {
         assert!(
             !debug_str.contains("secretkey"),
             "Private key should be redacted"
-        );
-        assert!(
-            !debug_str.contains("keycloak-admin-secret"),
-            "Keycloak admin secret should be redacted"
         );
         assert!(
             !debug_str.contains("webhook-secret-key"),

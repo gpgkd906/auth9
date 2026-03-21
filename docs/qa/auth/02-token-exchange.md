@@ -40,7 +40,7 @@ Token Exchange 流程：
 ### 预期数据状态
 ```sql
 SELECT tu.id FROM tenant_users tu JOIN users u ON u.id = tu.user_id
-WHERE u.keycloak_id = '{keycloak_id}' AND tu.tenant_id = '{tenant_id}';
+WHERE u.identity_subject = '{identity_subject}' AND tu.tenant_id = '{tenant_id}';
 -- 预期: 存在记录
 
 -- Token 解码后应包含 roles 和 permissions

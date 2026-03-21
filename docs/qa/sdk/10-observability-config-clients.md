@@ -30,10 +30,14 @@
 
 ---
 
-## 步骤 0：Gate Check — 获取 Admin Token 并验证 Build
+## 步骤 0：Gate Check — 获取 Token 并验证 Build
+
+> **注意**: 场景 1（audit-logs、analytics）需要 **Tenant Access Token**（非 Identity Token）。
+> `gen-admin-token.sh` 生成的是 Identity Token，用于 audit-logs/analytics 端点会返回 403。
+> 请使用 `gen_tenant_access_token.js` 获取 Tenant Access Token。
 
 ```bash
-TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js)
 echo $TOKEN | head -c 20
 ```
 
@@ -149,10 +153,12 @@ fi
 
 ```bash
 curl -s http://localhost:8080/api/v1/system/email \
-  -H "Authorization: Bearer $TOKEN" | jq '.data.config.type'
+  -H "Authorization: Bearer $TOKEN" | jq '.data.value.type'
 ```
 
 **预期**: 返回邮件配置类型（`"smtp"`, `"ses"`, `"oracle"`, 或 `"none"`）
+
+> **注意**: 邮件配置在 `.data.value` 下，不是 `.data.config`。响应结构为 `{ data: { category, setting_key, value: { type, host, ... }, description, updated_at } }`。
 
 2. **测试邮件连接**
 
@@ -175,7 +181,7 @@ curl -s http://localhost:8080/api/v1/system/security/malicious-ip-blacklist \
 
 ### 验收检查清单
 
-- [ ] 邮件设置返回正确的 config 结构
+- [ ] 邮件设置返回正确的 value 结构（`.data.value.type`）
 - [ ] 邮件测试端点响应正常
 - [ ] IP 黑名单端点返回正确结构
 
@@ -282,3 +288,15 @@ cd sdk/packages/core && npm run test -- --reporter=verbose 2>&1 | grep -E "(audi
 ```
 
 **预期**: 6 个新测试文件全部通过
+
+---
+
+## 检查清单
+
+| # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
+|---|------|------|----------|----------|------|
+| 1 | AuditLogs + Analytics 子客户端 — 日志与统计查询 | ☐ | | | |
+| 2 | SecurityAlerts 子客户端 — 安全告警查询与解决 | ☐ | | | |
+| 3 | System 子客户端 — 邮件设置与 IP 黑名单 | ☐ | | | |
+| 4 | EmailTemplates 子客户端 — 模板管理与预览 | ☐ | | | |
+| 5 | Branding 子客户端 — 品牌配置管理 | ☐ | | | |

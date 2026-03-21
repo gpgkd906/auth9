@@ -10,7 +10,7 @@ export function useFormatters() {
         new Intl.DateTimeFormat(locale, options).format(new Date(value)),
       dateTime: (value: Date | string, options?: Intl.DateTimeFormatOptions) =>
         new Intl.DateTimeFormat(locale, {
-          dateStyle: "medium",
+          dateStyle: "long",
           timeStyle: "short",
           ...options,
         }).format(new Date(value)),

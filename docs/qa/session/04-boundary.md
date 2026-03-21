@@ -167,8 +167,8 @@ SET @sess_2 = UUID();
 SET @alert_1 = UUID();
 
 -- 准备测试用户
-INSERT INTO users (id, keycloak_id, email, display_name) VALUES
-(@user_sess, 'kc-sess-1', 'session-test@example.com', 'Session Test');
+INSERT INTO users (id, identity_subject, email, display_name) VALUES
+(@user_sess, 'oidc-sess-1', 'session-test@example.com', 'Session Test');
 
 -- 准备测试会话
 INSERT INTO sessions (id, user_id, device_type, ip_address, location, last_active_at) VALUES

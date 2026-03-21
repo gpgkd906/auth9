@@ -4,14 +4,56 @@ use crate::error::{AppError, Result};
 use crate::jwt::IdentityClaims;
 use crate::state::HasServices;
 use axum::http::HeaderMap;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
-use url::Url;
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(super) struct CallbackState {
+pub(crate) struct CallbackState {
     pub redirect_uri: String,
     pub client_id: String,
     pub original_state: Option<String>,
+}
+
+/// Login challenge data stored during authorize → consumed by authorize_complete
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct LoginChallengeData {
+    pub client_id: String,
+    pub redirect_uri: String,
+    pub scope: String,
+    pub original_state: Option<String>,
+    pub nonce: Option<String>,
+    pub code_challenge: Option<String>,
+    pub code_challenge_method: Option<String>,
+}
+
+/// Authorization code data stored during authorize_complete → consumed by token endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct AuthorizationCodeData {
+    pub user_id: String,
+    pub email: String,
+    pub display_name: Option<String>,
+    pub session_id: String,
+    pub client_id: String,
+    pub redirect_uri: String,
+    pub scope: String,
+    pub nonce: Option<String>,
+    pub code_challenge: Option<String>,
+    pub code_challenge_method: Option<String>,
+}
+
+/// Authorization code TTL (2 minutes, per OIDC spec recommendation)
+pub(crate) const AUTH_CODE_TTL_SECS: u64 = 120;
+
+/// Login challenge TTL (10 minutes, generous for password + MFA flow)
+pub(crate) const LOGIN_CHALLENGE_TTL_SECS: u64 = 600;
+
+/// Verify PKCE S256 code_verifier against stored code_challenge.
+/// Returns true if BASE64URL(SHA256(code_verifier)) == code_challenge.
+pub(crate) fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> bool {
+    let hash = Sha256::digest(code_verifier.as_bytes());
+    let computed = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
+    computed == code_challenge
 }
 
 /// Validate that a redirect URI is allowed for the service
@@ -28,95 +70,10 @@ pub fn build_callback_url(issuer: &str) -> String {
     format!("{}/api/v1/auth/callback", issuer.trim_end_matches('/'))
 }
 
-/// Parameters for building Keycloak authorization URL
-#[derive(Debug)]
-pub struct KeycloakAuthUrlParams<'a> {
-    pub keycloak_public_url: &'a str,
-    pub realm: &'a str,
-    pub response_type: &'a str,
-    pub client_id: &'a str,
-    pub callback_url: &'a str,
-    pub scope: &'a str,
-    pub encoded_state: &'a str,
-    pub nonce: Option<&'a str>,
-    pub connector_alias: Option<&'a str>,
-    pub kc_action: Option<&'a str>,
-    pub ui_locales: Option<&'a str>,
-    pub code_challenge: Option<&'a str>,
-    pub code_challenge_method: Option<&'a str>,
-}
-
-/// Build Keycloak authorization URL
-pub fn build_keycloak_auth_url(params: &KeycloakAuthUrlParams) -> Result<String> {
-    let mut auth_url = Url::parse(&format!(
-        "{}/realms/{}/protocol/openid-connect/auth",
-        params.keycloak_public_url, params.realm
-    ))
-    .map_err(|e| AppError::Internal(e.into()))?;
-
-    {
-        let mut pairs = auth_url.query_pairs_mut();
-        pairs.append_pair("response_type", params.response_type);
-        pairs.append_pair("client_id", params.client_id);
-        pairs.append_pair("redirect_uri", params.callback_url);
-        pairs.append_pair("scope", params.scope);
-        pairs.append_pair("state", params.encoded_state);
-        if let Some(n) = params.nonce {
-            pairs.append_pair("nonce", n);
-        }
-        if let Some(alias) = params.connector_alias {
-            pairs.append_pair("kc_idp_hint", alias);
-        }
-        if let Some(action) = params.kc_action {
-            pairs.append_pair("kc_action", action);
-        }
-        if let Some(locales) = params.ui_locales {
-            pairs.append_pair("ui_locales", locales);
-        }
-        if let Some(challenge) = params.code_challenge {
-            pairs.append_pair("code_challenge", challenge);
-        }
-        if let Some(method) = params.code_challenge_method {
-            pairs.append_pair("code_challenge_method", method);
-        }
-    }
-
-    Ok(auth_url.to_string())
-}
-
-/// Build Keycloak logout URL
-pub fn build_keycloak_logout_url(
-    keycloak_public_url: &str,
-    realm: &str,
-    id_token_hint: Option<&str>,
-    post_logout_redirect_uri: Option<&str>,
-    state: Option<&str>,
-) -> Result<String> {
-    let mut logout_url = Url::parse(&format!(
-        "{}/realms/{}/protocol/openid-connect/logout",
-        keycloak_public_url, realm
-    ))
-    .map_err(|e| AppError::Internal(e.into()))?;
-
-    {
-        let mut pairs = logout_url.query_pairs_mut();
-        if let Some(hint) = id_token_hint {
-            pairs.append_pair("id_token_hint", hint);
-        }
-        if let Some(uri) = post_logout_redirect_uri {
-            pairs.append_pair("post_logout_redirect_uri", uri);
-        }
-        if let Some(s) = state {
-            pairs.append_pair("state", s);
-        }
-    }
-
-    Ok(logout_url.to_string())
-}
-
 /// Extract client IP address from request headers
 /// Checks X-Forwarded-For, X-Real-IP, then falls back to None
-pub(super) fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
+#[allow(dead_code)]
+pub(crate) fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
     // Check X-Forwarded-For first (may contain multiple IPs)
     if let Some(xff) = headers.get("x-forwarded-for") {
         if let Ok(xff_str) = xff.to_str() {
@@ -137,7 +94,7 @@ pub(super) fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-pub(super) fn extract_identity_claims_from_headers<S: HasServices>(
+pub(crate) fn extract_identity_claims_from_headers<S: HasServices>(
     state: &S,
     headers: &HeaderMap,
 ) -> Result<IdentityClaims> {
@@ -159,14 +116,14 @@ pub(super) fn extract_identity_claims_from_headers<S: HasServices>(
 
 // Legacy helpers kept for unit tests and backward-compatibility checks.
 #[cfg(test)]
-pub(super) fn encode_state(state_payload: &CallbackState) -> Result<String> {
+pub(crate) fn encode_state(state_payload: &CallbackState) -> Result<String> {
     use base64::Engine;
     let bytes = serde_json::to_vec(state_payload).map_err(|e| AppError::Internal(e.into()))?;
     Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
 }
 
 #[cfg(test)]
-pub(super) fn decode_state(state: Option<&str>) -> Result<CallbackState> {
+pub(crate) fn decode_state(state: Option<&str>) -> Result<CallbackState> {
     use base64::Engine;
     let encoded = state.ok_or_else(|| AppError::BadRequest("Missing state".to_string()))?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -305,177 +262,6 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_auth_url() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "my-realm",
-            response_type: "code",
-            client_id: "my-client",
-            callback_url: "https://app.com/callback",
-            scope: "openid profile",
-            encoded_state: "encoded-state",
-            nonce: None,
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: None,
-            code_challenge: None,
-            code_challenge_method: None,
-        })
-        .unwrap();
-
-        assert!(url.contains("keycloak.example.com"));
-        assert!(url.contains("my-realm"));
-        assert!(url.contains("response_type=code"));
-        assert!(url.contains("client_id=my-client"));
-        assert!(url.contains("scope=openid"));
-    }
-
-    #[test]
-    fn test_build_keycloak_auth_url_with_nonce() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "client",
-            callback_url: "https://app.com/cb",
-            scope: "openid",
-            encoded_state: "state",
-            nonce: Some("my-nonce"),
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: None,
-            code_challenge: None,
-            code_challenge_method: None,
-        })
-        .unwrap();
-
-        assert!(url.contains("nonce=my-nonce"));
-    }
-
-    #[test]
-    fn test_build_keycloak_auth_url_with_kc_action() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "client",
-            callback_url: "https://app.com/cb",
-            scope: "openid",
-            encoded_state: "state",
-            nonce: None,
-            connector_alias: Some("github"),
-            kc_action: Some("idp_link:github"),
-            ui_locales: None,
-            code_challenge: None,
-            code_challenge_method: None,
-        })
-        .unwrap();
-
-        assert!(url.contains("kc_idp_hint=github"));
-        assert!(url.contains("kc_action=idp_link%3Agithub"));
-    }
-
-    #[test]
-    fn test_build_keycloak_auth_url_with_ui_locales() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "client",
-            callback_url: "https://app.com/cb",
-            scope: "openid",
-            encoded_state: "state",
-            nonce: None,
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: Some("zh-CN"),
-            code_challenge: None,
-            code_challenge_method: None,
-        })
-        .unwrap();
-
-        assert!(url.contains("ui_locales=zh-CN"));
-    }
-
-    #[test]
-    fn test_build_keycloak_auth_url_without_ui_locales() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "client",
-            callback_url: "https://app.com/cb",
-            scope: "openid",
-            encoded_state: "state",
-            nonce: None,
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: None,
-            code_challenge: None,
-            code_challenge_method: None,
-        })
-        .unwrap();
-
-        assert!(!url.contains("ui_locales"));
-    }
-
-    #[test]
-    fn test_build_keycloak_logout_url_minimal() {
-        let url =
-            build_keycloak_logout_url("https://keycloak.example.com", "my-realm", None, None, None)
-                .unwrap();
-
-        assert!(url.contains("keycloak.example.com"));
-        assert!(url.contains("my-realm"));
-        assert!(url.contains("logout"));
-        // No query params when all options are None
-        assert!(!url.contains("id_token_hint"));
-    }
-
-    #[test]
-    fn test_build_keycloak_logout_url_full() {
-        let url = build_keycloak_logout_url(
-            "https://keycloak.example.com",
-            "my-realm",
-            Some("token-hint"),
-            Some("https://app.com/logged-out"),
-            Some("logout-state"),
-        )
-        .unwrap();
-
-        assert!(url.contains("id_token_hint=token-hint"));
-        assert!(url.contains("post_logout_redirect_uri="));
-        assert!(url.contains("state=logout-state"));
-    }
-
-    #[test]
-    fn test_build_keycloak_logout_url_partial() {
-        // Only id_token_hint
-        let url = build_keycloak_logout_url(
-            "https://keycloak.example.com",
-            "test",
-            Some("hint"),
-            None,
-            None,
-        )
-        .unwrap();
-        assert!(url.contains("id_token_hint=hint"));
-        assert!(!url.contains("post_logout_redirect_uri"));
-
-        // Only redirect_uri
-        let url = build_keycloak_logout_url(
-            "https://keycloak.example.com",
-            "test",
-            None,
-            Some("https://app.com/logout"),
-            None,
-        )
-        .unwrap();
-        assert!(!url.contains("id_token_hint"));
-        assert!(url.contains("post_logout_redirect_uri="));
-    }
-
-    #[test]
     fn test_encode_state_with_empty_original_state() {
         let state = CallbackState {
             redirect_uri: "https://app.com/cb".to_string(),
@@ -517,32 +303,6 @@ mod tests {
     fn test_build_callback_url_with_path() {
         let url = build_callback_url("https://auth9.example.com/api");
         assert_eq!(url, "https://auth9.example.com/api/api/v1/auth/callback");
-    }
-
-    #[test]
-    fn test_build_keycloak_auth_url_encodes_special_chars() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "my-app",
-            callback_url: "https://app.com/cb?foo=bar",
-            scope: "openid profile email",
-            encoded_state: "state123",
-            nonce: Some("nonce with spaces"),
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: None,
-            code_challenge: None,
-            code_challenge_method: None,
-        })
-        .unwrap();
-
-        // Verify URL encoding
-        assert!(
-            url.contains("scope=openid+profile+email")
-                || url.contains("scope=openid%20profile%20email")
-        );
     }
 
     #[test]
@@ -648,49 +408,94 @@ mod tests {
         assert_eq!(extract_client_ip(&headers), Some("::1".to_string()));
     }
 
-    #[test]
-    fn test_build_keycloak_auth_url_with_pkce() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "client",
-            callback_url: "https://app.com/cb",
-            scope: "openid",
-            encoded_state: "state",
-            nonce: None,
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: None,
-            code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"),
-            code_challenge_method: Some("S256"),
-        })
-        .unwrap();
+    // ==================== PKCE Tests ====================
 
-        assert!(url.contains("code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")); // pragma: allowlist secret
-        assert!(url.contains("code_challenge_method=S256"));
+    #[test]
+    fn test_verify_pkce_s256_correct_verifier() {
+        // RFC 7636 Appendix B test vector
+        let code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"; // pragma: allowlist secret
+                                                                           // SHA256 of verifier, base64url-encoded
+        use sha2::{Digest, Sha256};
+        let hash = Sha256::digest(code_verifier.as_bytes());
+        let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
+
+        assert!(verify_pkce_s256(code_verifier, &code_challenge));
     }
 
     #[test]
-    fn test_build_keycloak_auth_url_without_pkce() {
-        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-            keycloak_public_url: "https://keycloak.example.com",
-            realm: "test",
-            response_type: "code",
-            client_id: "client",
-            callback_url: "https://app.com/cb",
-            scope: "openid",
-            encoded_state: "state",
+    fn test_verify_pkce_s256_wrong_verifier() {
+        let code_verifier = "correct-verifier"; // pragma: allowlist secret
+        use sha2::{Digest, Sha256};
+        let hash = Sha256::digest(code_verifier.as_bytes());
+        let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
+
+        assert!(!verify_pkce_s256("wrong-verifier", &code_challenge));
+    }
+
+    #[test]
+    fn test_verify_pkce_s256_empty_verifier() {
+        assert!(!verify_pkce_s256("", "some-challenge"));
+    }
+
+    // ==================== LoginChallengeData / AuthorizationCodeData Tests ====================
+
+    #[test]
+    fn test_login_challenge_data_roundtrip() {
+        let data = LoginChallengeData {
+            client_id: "my-app".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            scope: "openid profile".to_string(),
+            original_state: Some("csrf-state".to_string()),
+            nonce: Some("nonce-123".to_string()),
+            code_challenge: Some("challenge".to_string()),
+            code_challenge_method: Some("S256".to_string()),
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let decoded: LoginChallengeData = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.client_id, "my-app");
+        assert_eq!(decoded.nonce, Some("nonce-123".to_string()));
+        assert_eq!(decoded.code_challenge_method, Some("S256".to_string()));
+    }
+
+    #[test]
+    fn test_login_challenge_data_without_optionals() {
+        let data = LoginChallengeData {
+            client_id: "app".to_string(),
+            redirect_uri: "https://app.example.com/cb".to_string(),
+            scope: "openid".to_string(),
+            original_state: None,
             nonce: None,
-            connector_alias: None,
-            kc_action: None,
-            ui_locales: None,
             code_challenge: None,
             code_challenge_method: None,
-        })
-        .unwrap();
+        };
 
-        assert!(!url.contains("code_challenge"));
-        assert!(!url.contains("code_challenge_method"));
+        let json = serde_json::to_string(&data).unwrap();
+        let decoded: LoginChallengeData = serde_json::from_str(&json).unwrap();
+        assert!(decoded.nonce.is_none());
+        assert!(decoded.code_challenge.is_none());
+    }
+
+    #[test]
+    fn test_authorization_code_data_roundtrip() {
+        let data = AuthorizationCodeData {
+            user_id: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            display_name: Some("Test User".to_string()),
+            session_id: "session-456".to_string(),
+            client_id: "my-app".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            scope: "openid profile".to_string(),
+            nonce: Some("nonce-789".to_string()),
+            code_challenge: Some("challenge-abc".to_string()),
+            code_challenge_method: Some("S256".to_string()),
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let decoded: AuthorizationCodeData = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.user_id, "user-123");
+        assert_eq!(decoded.email, "test@example.com");
+        assert_eq!(decoded.session_id, "session-456");
+        assert_eq!(decoded.nonce, Some("nonce-789".to_string()));
     }
 }

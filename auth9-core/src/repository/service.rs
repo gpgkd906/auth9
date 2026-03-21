@@ -16,6 +16,7 @@ pub trait ServiceRepository: Send + Sync {
         client_id: &str,
         secret_hash: &str,
         name: Option<String>,
+        public_client: bool,
     ) -> Result<crate::models::service::Client>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Service>>;
     async fn find_by_client_id(&self, client_id: &str) -> Result<Option<Service>>;
@@ -85,12 +86,13 @@ impl ServiceRepository for ServiceRepositoryImpl {
         client_id: &str,
         secret_hash: &str,
         name: Option<String>,
+        public_client: bool,
     ) -> Result<crate::models::service::Client> {
         let id = Uuid::new_v4();
         sqlx::query(
             r#"
-            INSERT INTO clients (id, service_id, client_id, client_secret_hash, name, created_at)
-            VALUES (?, ?, ?, ?, ?, NOW())
+            INSERT INTO clients (id, service_id, client_id, client_secret_hash, name, public_client, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
             "#,
         )
         .bind(id.to_string())
@@ -98,6 +100,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
         .bind(client_id)
         .bind(secret_hash)
         .bind(name)
+        .bind(public_client)
         .execute(&self.pool)
         .await?;
 

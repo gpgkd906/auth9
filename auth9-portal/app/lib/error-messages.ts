@@ -11,7 +11,7 @@ const API_ERROR_CODE_MAP: Record<string, string> = {
   database_error: "apiErrors.serverError",
   cache_error: "apiErrors.serverError",
   jwt_error: "apiErrors.sessionExpired",
-  keycloak_error: "apiErrors.authServiceError",
+  identity_backend_error: "apiErrors.authServiceError",
   action_execution_failed: "apiErrors.serverError",
   internal_error: "apiErrors.serverError",
   method_not_allowed: "apiErrors.badRequest",
@@ -65,6 +65,20 @@ function mapSpecialApiError(
       message.includes("invalid or expired reset token"))
   ) {
     return translate(locale, "auth.resetPassword.expiredToken");
+  }
+
+  // Credential-specific unauthorized errors should show the actual error,
+  // not the generic "session expired" message.
+  if (error.code === "unauthorized") {
+    if (message.includes("invalid email or password")) {
+      return translate(locale, "apiErrors.invalidCredentials");
+    }
+    if (message.includes("invalid totp code")) {
+      return translate(locale, "apiErrors.invalidTotpCode");
+    }
+    if (message.includes("invalid or already used recovery code")) {
+      return translate(locale, "apiErrors.invalidRecoveryCode");
+    }
   }
 
   return null;

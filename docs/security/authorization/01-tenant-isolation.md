@@ -333,7 +333,7 @@ curl -s -o /dev/null -w "%{http_code}" \
 
 ### 验证方法
 ```bash
-SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
+SECRET="${WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"{tenant_a_user_id}","ipAddress":"203.0.113.10","error":"invalid_user_credentials","time":'$(date +%s000)',"details":{"username":"tenant-a@example.com","email":"tenant-a@example.com"}}'
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')

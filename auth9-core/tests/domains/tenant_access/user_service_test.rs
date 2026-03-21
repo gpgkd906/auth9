@@ -159,26 +159,26 @@ async fn test_get_user_by_email_not_found() {
 }
 
 #[tokio::test]
-async fn test_get_user_by_keycloak_id_success() {
+async fn test_get_user_by_identity_subject_success() {
     let builder = TestServicesBuilder::new();
 
     let mut user = create_test_user(None);
-    user.keycloak_id = "kc-specific-123".to_string();
+    user.identity_subject = "kc-specific-123".to_string();
     builder.user_repo.add_user(user).await;
 
     let service = builder.build_user_service();
-    let result = service.get_by_keycloak_id("kc-specific-123").await;
+    let result = service.get_by_identity_subject("kc-specific-123").await;
 
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().keycloak_id, "kc-specific-123");
+    assert_eq!(result.unwrap().identity_subject, "kc-specific-123");
 }
 
 #[tokio::test]
-async fn test_get_user_by_keycloak_id_not_found() {
+async fn test_get_user_by_identity_subject_not_found() {
     let builder = TestServicesBuilder::new();
     let service = builder.build_user_service();
 
-    let result = service.get_by_keycloak_id("nonexistent-kc-id").await;
+    let result = service.get_by_identity_subject("nonexistent-kc-id").await;
     assert!(matches!(result, Err(AppError::NotFound(_))));
 }
 
@@ -203,7 +203,7 @@ async fn test_create_user_success() {
     let user = result.unwrap();
     assert_eq!(user.email, "new-user@example.com");
     assert_eq!(user.display_name, Some("New User".to_string()));
-    assert_eq!(user.keycloak_id, "kc-new-user");
+    assert_eq!(user.identity_subject, "kc-new-user");
 }
 
 #[tokio::test]
@@ -226,12 +226,12 @@ async fn test_create_user_minimal() {
 }
 
 #[tokio::test]
-async fn test_create_user_duplicate_keycloak_id() {
+async fn test_create_user_duplicate_identity_subject() {
     let builder = TestServicesBuilder::new();
 
-    // Add existing user with keycloak_id "kc-existing"
+    // Add existing user with identity_subject "kc-existing"
     let mut existing = create_test_user(None);
-    existing.keycloak_id = "kc-existing".to_string();
+    existing.identity_subject = "kc-existing".to_string();
     existing.email = "existing@example.com".to_string();
     builder.user_repo.add_user(existing).await;
 

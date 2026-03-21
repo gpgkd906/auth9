@@ -12,8 +12,7 @@
 Auth9 的 OIDC 授权码流程已实现 PKCE（Proof Key for Code Exchange, RFC 7636）。PKCE 通过在授权请求中发送 `code_challenge`，在 token 请求中发送对应的 `code_verifier`，防止 Authorization Code 拦截攻击。
 
 **架构要点**：
-- Auth9 Core 是 PKCE 参数的**透明代理**——接收参数并原样转发给 Keycloak
-- Keycloak 负责实际的 PKCE 验证（校验 `SHA256(code_verifier) == code_challenge`）
+- Auth9 内置 OIDC 引擎负责 PKCE 验证（校验 `SHA256(code_verifier) == code_challenge`）
 - Portal 负责生成 `code_verifier`/`code_challenge`，将 `code_verifier` 存入 `oauth_state` cookie
 
 **涉及端点**：
@@ -23,8 +22,8 @@ Auth9 的 OIDC 授权码流程已实现 PKCE（Proof Key for Code Exchange, RFC 
 
 **涉及文件**：
 - `auth9-core/src/domains/identity/api/auth/types.rs` — `AuthorizeRequest.code_challenge/code_challenge_method`、`TokenRequest.code_verifier`
-- `auth9-core/src/domains/identity/api/auth/helpers.rs` — `build_keycloak_auth_url()` 附加 PKCE 查询参数
-- `auth9-core/src/domains/identity/api/auth/keycloak_client.rs` — `exchange_code_for_tokens()` 发送 `code_verifier`
+- `auth9-core/src/domains/identity/api/auth/helpers.rs` — 构建授权 URL 时附加 PKCE 查询参数
+- `auth9-core/src/domains/identity/api/auth/` — `exchange_code_for_tokens()` 发送 `code_verifier`
 - `auth9-portal/app/routes/login.tsx` — `generatePkce()` 生成 PKCE 参数
 - `auth9-portal/app/services/session.server.ts` — `OAuthStateData` 存储 `codeVerifier`
 - `auth9-portal/app/routes/auth.callback.tsx` — token 请求中发送 `code_verifier`
@@ -35,7 +34,7 @@ Auth9 的 OIDC 授权码流程已实现 PKCE（Proof Key for Code Exchange, RFC 
 
 ### 初始状态
 - 用户未登录
-- 所有服务健康（auth9-core、Keycloak、Redis）
+- 所有服务健康（auth9-core、Redis）
 
 ### 目的
 验证通过 Portal「Sign in with password」登录时，授权请求包含 PKCE 参数，token 交换包含 `code_verifier`
@@ -52,7 +51,7 @@ Auth9 的 OIDC 授权码流程已实现 PKCE（Proof Key for Code Exchange, RFC 
 - 步骤 4：授权 URL 包含以下参数：
   - `code_challenge=<base64url-encoded-value>`（43 字符的 Base64URL 字符串）
   - `code_challenge_method=S256`
-- 步骤 4：Keycloak 授权 URL 中同样包含 `code_challenge` 和 `code_challenge_method` 参数（透传成功）
+- 步骤 4：OIDC 授权 URL 中包含 `code_challenge` 和 `code_challenge_method` 参数
 - 步骤 6：Token 请求 JSON body 包含 `code_verifier` 字段（43 字符 Base64URL 字符串）
 - 登录成功，正常进入 `/tenant/select` 或 `/dashboard`
 
@@ -94,10 +93,10 @@ curl -v "http://localhost:3000/login" \
 
 ### 初始状态
 - 有效的 service client（如 `auth9-portal`）已注册
-- Keycloak 服务健康
+- Auth9 服务健康
 
 ### 目的
-验证 `/api/v1/auth/authorize` 端点正确将 PKCE 参数透传到 Keycloak 授权 URL
+验证 `/api/v1/auth/authorize` 端点正确处理 PKCE 参数
 
 ### 测试操作流程
 
@@ -105,10 +104,6 @@ curl -v "http://localhost:3000/login" \
 ```bash
 # 确认 auth9-core 健康
 curl -sf http://localhost:8080/health
-# 预期: HTTP 200
-
-# 确认 Keycloak 健康
-curl -sf http://localhost:8081/health/ready
 # 预期: HTTP 200
 ```
 
@@ -123,13 +118,13 @@ state=test-pkce-state&\
 code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&\
 code_challenge_method=S256" 2>&1 | grep -i "location:"
 ```
-2. 解析返回的 302 Location 头中的 Keycloak URL
+2. 解析返回的 302 Location 头中的授权 URL
 
 ### 预期结果
-- 返回 302 重定向到 Keycloak 授权端点
+- 返回 302 重定向到 Auth9 OIDC 授权端点
 - Location URL 包含 `code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM`
 - Location URL 包含 `code_challenge_method=S256`
-- 其他标准参数（`response_type`、`client_id`、`scope`、`state`）正常透传
+- 其他标准参数（`response_type`、`client_id`、`scope`、`state`）正常处理
 
 ---
 
@@ -155,10 +150,10 @@ state=test-no-pkce" 2>&1 | grep -i "location:"
 2. 解析返回的 302 Location 头
 
 ### 预期结果
-- 返回 302 重定向到 Keycloak 授权端点
+- 返回 302 重定向到 Auth9 OIDC 授权端点
 - Location URL **不包含** `code_challenge` 或 `code_challenge_method` 参数
-- 其他标准 OIDC 参数正常透传
-- 登录流程正常完成（Keycloak 对 confidential client 不强制 PKCE）
+- 其他标准 OIDC 参数正常处理
+- 登录流程正常完成（confidential client 不强制 PKCE）
 
 ---
 
@@ -166,27 +161,21 @@ state=test-no-pkce" 2>&1 | grep -i "location:"
 
 ### 初始状态
 - auth9-demo client 已注册且为 public client（`public_client: true`）
-- Keycloak 中 auth9-demo 的 `pkce.code.challenge.method` 已设置为 `S256`
+- auth9-demo 的 `pkce.code.challenge.method` 已设置为 `S256`
 
 ### 目的
-验证 public client（auth9-demo）被 Keycloak 强制要求 PKCE
+验证 public client（auth9-demo）被 Auth9 OIDC 引擎强制要求 PKCE
 
 ### 测试操作流程
 
-#### 步骤 0: 验证 Keycloak 客户端 PKCE 配置
+#### 步骤 0: 验证客户端 PKCE 配置
 ```bash
-# 获取 Keycloak admin token
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli" \
-  -d "username=admin" \
-  -d "password=admin" \
-  -d "grant_type=password" | jq -r '.access_token')
-
-# 查询 auth9-demo 客户端的 PKCE 配置
-curl -s "http://localhost:8081/admin/realms/auth9/clients?clientId=auth9-demo" \
-  -H "Authorization: Bearer $KC_TOKEN" | jq '.[0].attributes["pkce.code.challenge.method"]'
-# 预期: "S256"
-# 若返回 null，需执行 ./scripts/reset-docker.sh 重新 seed
+# 通过 Auth9 管理 API 查询 auth9-demo 客户端配置
+TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+curl -s "http://localhost:8080/api/v1/services?client_id=auth9-demo" \
+  -H "Authorization: Bearer $TOKEN" | jq '.data[0]'
+# 预期: public_client = true, pkce 配置为 S256
+# 若配置不正确，需执行 ./scripts/reset-docker.sh 重新 seed
 ```
 
 1. 不带 PKCE 参数请求 demo client 授权（模拟攻击者）：
@@ -198,10 +187,10 @@ redirect_uri=http://localhost:8080/api/v1/auth/callback&\
 scope=openid+email+profile&\
 state=no-pkce-demo" 2>&1 | grep -i "location:"
 ```
-2. 跳转到 Keycloak 后，完成登录，观察 token exchange 是否被拒绝
+2. 完成登录后，观察 token exchange 是否被拒绝
 
 ### 预期结果
-- Keycloak 对未提供 `code_challenge` 的 public client 请求返回错误
+- Auth9 OIDC 引擎对未提供 `code_challenge` 的 public client 请求返回错误
 - 或在 token exchange 阶段因缺少 `code_verifier` 而拒绝：返回 `400 Bad Request`，错误信息包含 PKCE 相关描述
 - 这证明 public client 的 PKCE 强制配置生效
 
@@ -215,4 +204,4 @@ state=no-pkce-demo" 2>&1 | grep -i "location:"
 | 2 | PKCE Cookie 存储与生命周期 | ☐ | | | |
 | 3 | Authorize 端点 PKCE 参数透传 | ☐ | | | |
 | 4 | 无 PKCE 参数向后兼容 | ☐ | | | |
-| 5 | Demo Client (Public) PKCE 强制 | ☐ | | | 需 Keycloak PKCE 配置 |
+| 5 | Demo Client (Public) PKCE 强制 | ⏭️ 待实现 | | | **功能尚未实现**：`public_client` 字段存在但 PKCE 强制逻辑未编写，跳过此场景 |

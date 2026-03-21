@@ -42,7 +42,6 @@
 | [13-landing-page-interactions.md](./13-landing-page-interactions.md) | Landing 页卡片悬停效果、Navbar 控件可点击性、入场动画 | 4 |
 | [14-global-controls-placement.md](./14-global-controls-placement.md) | 主题/语言切换控件在 Landing 和 Dashboard 中的无重叠布局 | 5 |
 | [15-error-message-ux.md](./15-error-message-ux.md) | 错误消息人类可读性、mapApiError 两层映射、内联错误本地化 | 5 |
-| [16-keycloak-theme-i18n.md](./16-keycloak-theme-i18n.md) | Keycloak 认证页 i18n 文案覆盖、语言参数透传 | 4 |
 | [17-account-pages.md](./17-account-pages.md) | 账户管理（Profile、Security、Passkeys、Sessions）布局与深色模式 | 6 |
 | [18-roles-abac-pages.md](./18-roles-abac-pages.md) | 角色 Tab/层级树/权限复选框、ABAC 策略编辑器与模拟引擎 | 6 |
 | [19-analytics-audit-pages.md](./19-analytics-audit-pages.md) | Analytics 趋势图表、Audit Logs 表格、Security Alerts 严重度过滤 | 6 |
@@ -59,8 +58,8 @@
 | 视觉设计 | 3 | 13 |
 | 交互体验 | 3 | 14 |
 | 可访问性 | 1 | 5 |
-| 页面专项 | 16 | 85 |
-| **总计** | **23** | **117** |
+| 页面专项 | 15 | 81 |
+| **总计** | **22** | **113** |
 
 ---
 

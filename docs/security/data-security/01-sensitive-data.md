@@ -51,7 +51,7 @@ Auth9 敏感数据类型：
 # 用户详情检查
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/users/me | jq .
-# 不应包含: password, password_hash, keycloak_id (如果敏感)
+# 不应包含: password, password_hash, identity_subject
 
 # 服务客户端检查 - 常规列表端点
 curl -H "Authorization: Bearer $TOKEN" \
@@ -332,7 +332,7 @@ curl http://localhost:8080/nonexistent
 
 | 数据类型 | 存储位置 | 处理要求 |
 |---------|---------|---------|
-| 用户密码 | Keycloak | 仅哈希存储，永不返回 |
+| 用户密码 | users 表（Argon2id 哈希） | 仅哈希存储，永不返回 |
 | Client Secret | services 表 | 哈希存储，创建时返回一次；管理员可通过 Integration 端点查看（需权限） |
 | API Key | api_keys 表 | 哈希存储，创建时返回一次 |
 | JWT Secret | 环境变量 | 永不记录或返回 |

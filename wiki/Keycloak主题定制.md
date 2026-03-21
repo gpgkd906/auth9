@@ -1,3 +1,7 @@
+> **本文档已废弃** — Auth9 已迁移至 auth9-oidc 内置 OIDC 引擎，不再使用 Keycloak 主题。此文档仅供历史参考。
+
+---
+
 # Keycloak 主题定制
 
 Auth9 提供了自定义的 Keycloak 登录主题，支持动态品牌配置。主题会在运行时从 Auth9 API 获取品牌配置（Logo、颜色、公司名称等），无需重启 Keycloak 即可自定义外观。

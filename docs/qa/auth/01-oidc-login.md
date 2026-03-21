@@ -2,7 +2,7 @@
 
 **模块**: 认证流程
 **测试范围**: OIDC 标准登录流程
-**场景数**: 7
+**场景数**: 4
 
 ---
 
@@ -10,27 +10,44 @@
 
 ## 架构说明
 
-Auth9 采用 Headless Keycloak 架构：
-1. **Keycloak** 仅作为底层 OIDC/MFA 认证引擎，终端用户通过 Auth9 登录入口触发 OIDC 流程（非直接使用 Keycloak 原生入口）
-2. **auth9-keycloak-theme** 对 Keycloak 的登录/注册页面进行完全自定义（基于 Keycloakify），用户看到的是 Auth9 品牌风格的登录界面，而非 Keycloak 原生 UI
+Auth9 采用内置 OIDC 引擎架构（注：Keycloak 已退役，所有认证流程由 Auth9 内置 OIDC 引擎处理）：
+1. **Auth9 OIDC 引擎** 作为底层认证引擎，终端用户通过 Auth9 登录入口触发 OIDC 流程
+2. **Auth9 品牌认证页** 对登录/注册页面进行完全自定义，用户看到的是 Auth9 品牌风格的登录界面
 3. **Auth9 Core** 处理所有业务逻辑（用户管理、多租户、RBAC 等）
-4. **Token Exchange** 将 Keycloak 签发的 Identity Token 转换为包含角色/权限的 Tenant Access Token
+4. **Token Exchange** 将 Auth9 签发的 Identity Token 转换为包含角色/权限的 Tenant Access Token
 
 **Portal 登录页三种认证方式**（`/login`）：
 
 | 按钮 | 认证方式 | 流程 |
 |------|---------|------|
-| **Continue with Enterprise SSO** | 企业 SSO | 输入邮箱 → 域名发现 → Keycloak + `kc_idp_hint` → 直跳企业 IdP |
-| **Sign in with password** | 密码登录 | → Auth9 品牌认证页（由 auth9-keycloak-theme 承载）→ 输入用户名+密码 |
+| **Continue with Enterprise SSO** | 企业 SSO | 输入邮箱 → 域名发现 → Auth9 broker + `kc_idp_hint` → 直跳企业 IdP |
+| **Sign in with password** | 密码登录 | → Auth9 品牌认证页（由 Auth9 托管认证页承载）→ 输入用户名+密码 |
 | **Sign in with email code** | Email OTP | → `/auth/email-otp` → 输入邮箱 → 输入 6 位验证码（需启用 `email_otp_enabled`，见 [17-email-otp-login.md](./17-email-otp-login.md)） |
-| **Sign in with passkey** | Passkey | WebAuthn API → 无密码认证（不经过 Keycloak） |
+| **Sign in with passkey** | Passkey | WebAuthn API → 无密码认证 |
 
 **本文档测试的是「Sign in with password」路径**，即通过 Auth9 品牌认证页进行用户名+密码认证。
 
 **登录流程中的页面归属**：
 - Portal `/login` 页面 → 认证方式选择入口（Auth9 Portal 提供）
-- 用户名密码/注册/MFA 页面 → 由托管认证页承载，使用 auth9-keycloak-theme 自定义外观
+- 用户名密码/注册/MFA 页面 → 由 Auth9 托管认证页承载
 - Tenant 选择页面 `/tenant/select` 与 Dashboard/管理页面 → 由 Auth9 Portal（React Router 7）提供
+
+---
+
+## 前置条件（所有场景通用）
+
+> **重要**：在执行本文档的任何测试场景前，必须确保环境已正确初始化。
+
+```bash
+# 1. 重置 Docker 环境（清空数据库、重建容器、执行 seeder）
+./scripts/reset-docker.sh
+
+# 2. 验证服务健康
+curl -sf http://localhost:8080/health && echo "Core OK"
+curl -sf http://localhost:3000/ > /dev/null && echo "Portal OK"
+```
+
+若登录时出现「邮箱或密码无效」，**首先确认是否已执行 `reset-docker.sh`**。该脚本初始化测试用户密码凭证；未执行时数据库中可能没有密码记录。
 
 ---
 
@@ -46,7 +63,7 @@ Auth9 采用 Headless Keycloak 架构：
 ### 测试操作流程
 1. 访问 Auth9 Portal（`http://localhost:3000/login`）
 2. 点击「**Sign in with password**」按钮
-3. 跳转到 Auth9 品牌认证页（由 auth9-keycloak-theme 承载）
+3. 跳转到 Auth9 托管认证页
 4. 输入用户名和密码
 5. 底层认证验证成功
 6. 重定向回 Auth9 Portal → `/tenant/select`
@@ -86,11 +103,11 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 
 ### 预期结果
 - 用户自动创建在 Auth9 数据库中
-- 用户信息从 Keycloak 同步
+- 用户信息从认证引擎同步
 
 ### 预期数据状态
 ```sql
-SELECT id, keycloak_id, email, display_name FROM users WHERE keycloak_id = '{keycloak_user_id}';
+SELECT id, identity_subject, email, display_name FROM users WHERE email = '{user_email}';
 -- 预期: 存在记录
 ```
 
@@ -128,11 +145,9 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 - 用户启用了 MFA
 
 ### 前置条件
-- **Keycloak 事件桥接已部署**：MFA 失败事件由 Keycloak 产生，需通过 ext-event-http SPI 插件（p2-inc/keycloak-events）以 Webhook 方式推送到 auth9-core 的 `POST /api/v1/keycloak/events` 端点才能写入 `login_events` 表。
-  - SPI 插件通过 `auth9-keycloak-events-builder` 构建并部署到 Keycloak providers 目录
-  - seeder 在 `KEYCLOAK_WEBHOOK_SECRET` 配置时自动注册 `ext-event-http` 事件监听器
-- **注意**：auth9-core 的 OIDC 回调仅记录**成功登录**事件（`record_successful_login`）。失败事件（密码错误、MFA 失败）发生在 Keycloak 侧，回调不会被触发，因此必须依赖事件桥接。
-- 如果事件桥接未部署，本场景的 UI 行为测试仍然有效，但 `login_events` 数据库断言将不适用。
+- **事件兼容入口已配置**：MFA 失败事件由内置 OIDC 引擎产生，通过事件兼容入口写入 `login_events` 表。（注：Keycloak 已退役，原 ext-event-http SPI 事件桥接由 Auth9 内置事件系统替代）
+- **注意**：auth9-core 的 OIDC 回调仅记录**成功登录**事件（`record_successful_login`）。失败事件（密码错误、MFA 失败）通过事件兼容入口记录。
+- 如果事件兼容入口未配置，本场景的 UI 行为测试仍然有效，但 `login_events` 数据库断言将不适用。
 
 ### 目的
 验证 MFA 验证失败处理
@@ -150,85 +165,19 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 ```sql
 SELECT event_type, failure_reason FROM login_events WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 -- 预期: event_type = 'failed_mfa'
--- ⚠️ 仅在 Keycloak 事件桥接已部署时有效
+-- ⚠️ 仅在事件兼容入口已配置时有效
 ```
 
 ### 故障排查
 
 | 症状 | 原因 | 解决方案 |
 |------|------|---------|
-| UI 显示 MFA 错误但 `login_events` 无新记录 | Keycloak ext-event-http SPI 未部署 | 确认 `keycloak-events-*.jar` 已部署到 providers 目录，检查 Keycloak 启动日志是否加载 SPI |
-| auth9-core 日志无 "Recorded login event" | Webhook 未到达 auth9-core | 检查 `KEYCLOAK_WEBHOOK_SECRET` 是否配置，确认 Keycloak realm Events → Event Listeners 包含 `ext-event-http` |
+| UI 显示 MFA 错误但 `login_events` 无新记录 | 事件兼容入口未配置 | 检查 auth9-core 日志确认事件系统正常运行 |
+| auth9-core 日志无 "Recorded login event" | 事件记录异常 | 检查 auth9-core 日志排查事件记录链路 |
 
 ---
 
-## 场景 5：MFA 首次配置（TOTP 注册）
-
-### 初始状态
-- 管理员已通过 Portal 为用户启用 MFA（`POST /api/v1/users/{id}/mfa`）
-- 用户尚未完成 TOTP 注册（Keycloak required action: `CONFIGURE_TOTP`）
-
-### 目的
-验证用户首次配置 TOTP 的完整流程。此流程由 Keycloak 在认证中强制触发，配置页面由 auth9-keycloak-theme 自定义渲染（`LoginConfigTotp.tsx`），保持 Liquid Glass 品牌风格。
-
-### 测试操作流程
-1. 在 Portal `/login` 页面点击「**Sign in with password**」
-2. 在 Auth9 品牌认证页输入用户名和密码
-3. 自动跳转到 TOTP 配置页面（QR 码页面）
-4. 验证页面保持 Auth9 品牌风格（Liquid Glass），**非** Keycloak 默认 PatternFly UI
-5. 页面显示三步引导：
-   - Step 1: 安装 authenticator 应用（如 FreeOTP, Google Authenticator）
-   - Step 2: 扫描 QR 码（或点击「Unable to scan?」切换手动输入密钥模式）
-   - Step 3: 输入验证码
-6. 使用 authenticator 应用扫描 QR 码
-7. 输入 6 位 TOTP 验证码
-8. 输入设备名称（可选）
-9. 点击提交
-10. 验证成功，进入后续登录流程
-
-### 预期结果
-- TOTP 配置页面使用 Auth9 品牌风格（Liquid Glass 毛玻璃卡片、渐变背景）
-- QR 码正常显示，可被 authenticator 应用识别
-- 手动输入密钥模式可正常切换
-- 验证码输入后成功完成 TOTP 注册
-- 后续登录正常进入 MFA 验证页（场景 3 的 `LoginOtp` 页面）
-
-### 品牌一致性检查
-- ☐ 页面背景为 Liquid Glass 渐变效果
-- ☐ QR 码容器使用圆角白色背景
-- ☐ 步骤编号为蓝色圆形气泡
-- ☐ 输入框使用 Glass Input 组件
-- ☐ 按钮为蓝色主题按钮
-- ☐ 不出现 Keycloak 默认 PatternFly 样式
-
----
-
-## 场景 6：认证器选择（多认证方式）
-
-### 初始状态
-- 用户配置了多种认证方式（如 TOTP + WebAuthn/Passkey）
-- Keycloak authentication flow 包含多个 authenticator
-
-### 目的
-验证多认证方式选择页面。此页面由 auth9-keycloak-theme 自定义渲染（`SelectAuthenticator.tsx`），在用户有多种认证选项时触发。
-
-### 测试操作流程
-1. 使用配置了多种认证方式的账号登录
-2. 输入密码后，跳转到认证器选择页面
-3. 验证页面保持 Auth9 品牌风格
-4. 页面显示可用的认证方式列表（带图标、名称、描述）
-5. 点击选择一种认证方式
-6. 跳转到对应的认证页面
-
-### 预期结果
-- 选择页面使用 Auth9 品牌风格
-- 每个认证方式显示为卡片式选项，带图标和描述
-- 悬停有视觉反馈（蓝色边框、轻微上移）
-- 点击后正确跳转到对应认证流程
-
----
-
-## 场景 7：登出流程
+## 场景 5：登出流程
 
 ### 初始状态
 - 用户已登录
@@ -261,6 +210,4 @@ SELECT revoked_at FROM sessions WHERE id = '{session_id}';
 | 2 | 首次登录同步 | ☐ | | | |
 | 3 | 带 MFA 登录 | ☐ | | | |
 | 4 | MFA 验证失败 | ☐ | | | |
-| 5 | MFA 首次配置（TOTP 注册） | ☐ | | | 需管理员先启用 MFA |
-| 6 | 认证器选择（多认证方式） | ☐ | | | 需多种认证方式 |
-| 7 | 登出流程 | ☐ | | | |
+| 5 | 登出流程 | ☐ | | | |

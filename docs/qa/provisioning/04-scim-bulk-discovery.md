@@ -248,8 +248,8 @@ SELECT email FROM users WHERE email = 'bulk-user3@example.com';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | ServiceProviderConfig 发现 | ☐ | | | |
-| 2 | Schemas 端点 | ☐ | | | |
-| 3 | ResourceTypes 端点 | ☐ | | | |
-| 4 | Bulk 批量创建用户 | ☐ | | | |
-| 5 | Bulk 混合操作与 failOnErrors | ☐ | | | |
+| 1 | ServiceProviderConfig 发现 | ✅ PASS | 2026-03-20 | QA | |
+| 2 | Schemas 端点 | ✅ PASS | 2026-03-20 | QA | |
+| 3 | ResourceTypes 端点 | ✅ PASS | 2026-03-20 | QA | |
+| 4 | Bulk 批量创建用户 | ✅ PASS | 2026-03-20 | QA | |
+| 5 | Bulk 混合操作与 failOnErrors | ✅ PASS | 2026-03-20 | QA | |

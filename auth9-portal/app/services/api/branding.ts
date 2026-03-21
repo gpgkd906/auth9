@@ -70,6 +70,16 @@ export interface BrandingConfig {
   email_otp_enabled?: boolean;
 }
 
+export const DEFAULT_PUBLIC_BRANDING: BrandingConfig = {
+  primary_color: "#007AFF",
+  secondary_color: "#5856D6",
+  background_color: "#F5F5F7",
+  text_color: "#1D1D1F",
+  company_name: "Auth9",
+  allow_registration: false,
+  email_otp_enabled: false,
+};
+
 // Public Branding API (no authentication required)
 export const publicBrandingApi = {
   get: async (clientId?: string): Promise<{ data: BrandingConfig }> => {

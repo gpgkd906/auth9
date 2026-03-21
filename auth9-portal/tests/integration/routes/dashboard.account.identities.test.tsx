@@ -194,19 +194,25 @@ describe("Account Identities Page", () => {
     });
 
     it("action redirects to provider linking flow", async () => {
-        const request = createFormRequest({ intent: "link", providerAlias: "github" });
-        const result = await action({ request, params: {}, context: {} });
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn().mockResolvedValue({
+            status: 302,
+            headers: new Headers({
+                Location: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test&state=abc",
+            }),
+        }) as unknown as typeof fetch;
 
-        expect(result).toBeInstanceOf(Response);
-        expect((result as Response).status).toBe(302);
-        const location = (result as Response).headers.get("Location");
-        expect(location).toContain("/realms/auth9/broker/github/link");
-        expect(location).toContain("client_id=auth9-portal");
-        expect(location).toContain(
-            "redirect_uri=http%3A%2F%2Flocalhost%2Fdashboard%2Faccount%2Fidentities"
-        );
-        expect(location).toContain("nonce=");
-        expect(location).toContain("hash=");
+        try {
+            const request = createFormRequest({ intent: "link", providerAlias: "github" });
+            const result = await action({ request, params: {}, context: {} });
+
+            expect(result).toBeInstanceOf(Response);
+            expect((result as Response).status).toBe(302);
+            const location = (result as Response).headers.get("Location");
+            expect(location).toContain("accounts.google.com");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
     });
 
     it("action returns error when not authenticated", async () => {

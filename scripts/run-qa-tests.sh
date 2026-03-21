@@ -367,7 +367,7 @@ run_agent() {
             run_cmd "${t[@]}" minicode -p --dangerously-skip-permissions "读取文档：${rel_path}，执行QA测试"
             ;;
         minimax)
-            run_cmd "${t[@]}" opencode run "读取文档：${rel_path}，执行QA测试" -m "minimax-coding-plan/MiniMax-M2.5-highspeed"
+            run_cmd "${t[@]}" opencode run "读取文档：${rel_path}，执行QA测试" -m "minimax-coding-plan/MiniMax-M2.7-highspeed"
             ;;
         glm-5)
             run_cmd "${t[@]}" kilocode run "读取文档：${rel_path}，执行QA测试" -m "kilo/z-ai/glm-5:free"

@@ -6,6 +6,10 @@
 
 ---
 
+## 入口可见性说明
+
+本文件的 UI 操作默认从用户列表或用户详情页的可见入口进入，不要求通过手输 URL 触发。若需显式验证入口可见性，请与 [01-crud.md](./01-crud.md) 和 [06-account-navigation.md](./06-account-navigation.md) 联合执行。
+
 ## 场景 1：删除用户（级联删除）
 
 ### 初始状态
@@ -47,29 +51,25 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}';
 ### 前置检查
 
 ```bash
-# 1. Keycloak 运行且可访问（MFA 操作需要同步到 Keycloak）
-curl -sf http://localhost:8081/health/ready
+# 1. Auth9 内置 OIDC 引擎运行且可访问
+curl -sf http://localhost:8090/health
 # 预期: HTTP 200
 
-# 2. 确认目标用户有 Keycloak 映射
+# 2. 确认目标用户有底层认证主体映射
 mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
-  "SELECT id, email, keycloak_id FROM users WHERE id = '{user_id}';"
-# 预期: keycloak_id 非空
+  "SELECT id, email, identity_subject FROM users WHERE id = '{user_id}';"
+# 预期: identity_subject 非空
 
-# 3. 确认 Keycloak 中实际存在该用户（避免仅 DB 有映射、底层认证主体已缺失）
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
-curl -sf "http://localhost:8081/admin/realms/auth9/users/{keycloak_id}" \
-  -H "Authorization: Bearer $KC_TOKEN" > /dev/null
+# 3. 确认底层认证引擎中实际存在该用户（避免仅 DB 有映射、底层认证主体已缺失）
+curl -sf "http://localhost:8080/api/v1/users/{user_id}" \
+  -H "Authorization: Bearer $TOKEN" > /dev/null
 # 预期: HTTP 200
 ```
 
 ### 初始状态
 - 存在用户 id=`{user_id}`，mfa_enabled=false
-- **目标用户必须具备有效的底层认证主体映射**（`keycloak_id` 非空）
-- **目标用户必须真实存在于 Keycloak 中**；仅在 Auth9 数据库里手动插入 `keycloak_id` 不足以支持 MFA
+- **目标用户必须具备有效的底层认证主体映射**（`identity_subject` 非空）
+- **目标用户必须真实存在于 Auth9 内置 OIDC 引擎中**；仅在 Auth9 数据库里手动插入 `identity_subject` 不足以支持 MFA
 - 管理员已登录且知道自己的密码（用于二次确认）
 - **Token 类型要求**：Portal UI 自动使用 Tenant Access Token；手动 API 测试时 **必须** 使用 Tenant Access Token（通过 `node scripts/qa/gen-access-token.js` 生成）。Identity Token 仅允许租户选择/exchange 操作，对此端点会返回 403。
 
@@ -92,14 +92,14 @@ curl -sf "http://localhost:8081/admin/realms/auth9/users/{keycloak_id}" \
 
 | 现象 | 原因 | 解决方法 |
 |------|------|----------|
-| 对话框显示错误信息 | 管理员密码输入错误 | 检查输入的密码是否为当前登录管理员的密码（即 **Keycloak admin 密码**，默认 `SecurePass123!`） |
-| 对话框显示 "not found" | 目标用户无 Keycloak 账户 | 确认用户是通过正常注册流程创建的，非直接插入 DB |
-| 数据库里有 `keycloak_id`，但仍然 "not found" | Keycloak 侧真实用户已被删除，DB 映射陈旧 | 重新通过正常注册/创建流程生成用户，勿手工插入测试数据 |
+| 对话框显示错误信息 | 管理员密码输入错误 | 检查输入的密码是否为当前登录管理员的密码（默认 `SecurePass123!`） |
+| 对话框显示 "not found" | 目标用户无底层认证主体 | 确认用户是通过正常注册流程创建的，非直接插入 DB |
+| 数据库里有 `identity_subject`，但仍然 "not found" | Auth9 内置 OIDC 引擎侧真实用户已被删除，DB 映射陈旧 | 重新通过正常注册/创建流程生成用户，勿手工插入测试数据 |
 | 对话框关闭但状态未变 | 页面重新加载延迟 | 等待 1-2 秒或手动刷新页面后检查 |
 | 无任何响应 | accessToken 缺失（session 过期） | 重新登录后再试 |
 | API 返回 403 "Identity token is only allowed..." | 手动 API 测试使用了 Identity Token | **必须使用 Tenant Access Token**（`node scripts/qa/gen-access-token.js` 生成） |
 | API 返回 405 Method Not Allowed | 手动 API 测试使用了错误的 HTTP 方法 | **启用 MFA 使用 POST，禁用使用 DELETE**（不是 PUT） |
-| API 返回 500 连接错误 | Keycloak 未运行或不可达 | `curl -sf http://localhost:8081/health/ready` 确认 Keycloak 健康 |
+| API 返回 500 连接错误 | 底层认证引擎未运行或不可达 | `curl -sf http://localhost:8090/health` 确认 auth9-oidc 健康 |
 
 ### 手动 API 测试参考
 
@@ -125,13 +125,13 @@ SELECT mfa_enabled FROM users WHERE id = '{user_id}';
 ```
 
 ### 后续流程说明
-管理员启用 MFA 后，auth9-core 会在 Keycloak 中为该用户设置 `required_actions: ["CONFIGURE_TOTP"]`。用户**下次登录时**，Keycloak 将强制跳转到 TOTP 配置页（`login-config-totp.ftl`），引导用户：
+管理员启用 MFA 后，auth9-core 会为该用户设置 `required_actions: ["CONFIGURE_TOTP"]`。用户**下次登录时**，Auth9 托管认证页将强制跳转到 TOTP 配置页，引导用户：
 1. 安装 authenticator 应用（FreeOTP / Google Authenticator 等）
 2. 扫描 QR 码或手动输入密钥
 3. 输入 6 位验证码完成注册
 4. 命名设备（可选）
 
-此 TOTP 配置页由 auth9-keycloak-theme 自定义渲染（`LoginConfigTotp.tsx`），保持 Liquid Glass 品牌风格。完整的 UI 流程测试见 `docs/qa/auth/01-oidc-login.md` 场景 5。
+此 TOTP 配置页由 Auth9 品牌认证页自定义渲染，保持 Liquid Glass 品牌风格。完整的 UI 流程测试见 `docs/qa/auth/01-oidc-login.md` 场景 5。
 
 ---
 

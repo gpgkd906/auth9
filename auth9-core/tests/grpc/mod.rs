@@ -171,7 +171,7 @@ pub fn create_test_user(id: Uuid) -> User {
         email: "test@example.com".to_string(),
         display_name: Some("Test User".to_string()),
         avatar_url: None,
-        keycloak_id: "kc-user-id".to_string(),
+        identity_subject: "kc-user-id".to_string(),
         scim_external_id: None,
         scim_provisioned_by: None,
         mfa_enabled: false,
@@ -188,7 +188,7 @@ pub fn create_test_user_with_email(id: Uuid, email: &str) -> User {
         email: email.to_string(),
         display_name: Some("Test User".to_string()),
         avatar_url: None,
-        keycloak_id: format!("kc-{}", id),
+        identity_subject: format!("kc-{}", id),
         scim_external_id: None,
         scim_provisioned_by: None,
         mfa_enabled: false,
@@ -234,6 +234,7 @@ pub fn create_test_client(id: Uuid, service_id: Uuid, client_id: &str) -> Client
         client_id: client_id.to_string(),
         name: Some("Test Client".to_string()),
         client_secret_hash: "hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     }
 }

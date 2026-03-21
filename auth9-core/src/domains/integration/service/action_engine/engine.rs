@@ -304,14 +304,15 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 
             // Set up near-heap-limit callback to terminate execution on OOM.
             // Strategy: on first call, terminate execution and double the limit so V8
-            // has room to process the termination (large single allocations like
+            // has room to complete the pending allocation (large single allocations like
             // `new Array(10M)` can request memory exceeding the current limit in one
-            // shot, so a generous first bump prevents V8 from invoking its fatal OOM
-            // handler which aborts the process). On subsequent calls, bump by 5MB
-            // so V8 can complete GC and termination cleanup.
+            // shot). On subsequent calls, give smaller bumps but cap the total extra
+            // memory to prevent runaway allocation from scripts that allocate massive
+            // amounts in a loop (e.g., 100M * 1000 bytes).
             // CRITICAL: The callback MUST always return a value > current_limit,
             // otherwise V8 invokes its fatal OOM handler which aborts the process.
-            const HEAP_BUMP_BYTES: usize = 5 * 1024 * 1024; // 5MB
+            const HEAP_BUMP_BYTES: usize = 2 * 1024 * 1024; // 2MB per subsequent callback
+            const MAX_CALLBACK_COUNT: u32 = 10; // After first generous bump, allow max 10 more
             let heap_handle = isolate_handle;
             let heap_callback_count = std::rc::Rc::new(std::cell::Cell::new(0u32));
             let heap_callback_count_clone = heap_callback_count.clone();
@@ -326,9 +327,21 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                         current_limit / (1024 * 1024)
                     );
                     heap_handle.terminate_execution();
+                    // Generous first bump: double the limit so V8 can complete the
+                    // pending allocation and reach the next termination checkpoint.
                     current_limit + initial_limit
-                } else {
+                } else if count <= MAX_CALLBACK_COUNT {
+                    // Subsequent callbacks: small bumps for GC and termination cleanup.
                     current_limit + HEAP_BUMP_BYTES
+                } else {
+                    // Safety cap: after many callbacks, give minimal bump.
+                    // The timeout watchdog will kill the isolate if we get here.
+                    tracing::error!(
+                        "V8 heap limit callback called {} times, possible runaway allocation",
+                        count
+                    );
+                    heap_handle.terminate_execution();
+                    current_limit + 4096
                 }
             });
 

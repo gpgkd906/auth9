@@ -8,7 +8,8 @@ use crate::cache::CacheOperations;
 use crate::config::Config;
 use crate::domains::authorization::service::{ClientService, RbacService};
 use crate::domains::identity::service::{
-    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
+    EmailVerificationService, IdentityProviderService, PasswordService, RequiredActionService,
+    SessionService, WebAuthnService,
 };
 use crate::domains::integration::service::{ActionService, WebhookService};
 use crate::domains::platform::service::{
@@ -19,8 +20,8 @@ use crate::domains::security_observability::service::{AnalyticsService, Security
 use crate::domains::tenant_access::service::{
     InvitationService, SamlApplicationService, TenantService, UserService,
 };
+use crate::identity_engine::IdentityEngine;
 use crate::jwt::JwtManager;
-use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
 use crate::repository::scim_group_mapping::ScimGroupRoleMappingRepository;
 use crate::repository::scim_log::ScimProvisioningLogRepository;
@@ -118,8 +119,8 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     /// Get the JWT manager
     fn jwt_manager(&self) -> &JwtManager;
 
-    /// Get the Keycloak client
-    fn keycloak_client(&self) -> &KeycloakClient;
+    /// Get the abstract identity engine
+    fn identity_engine(&self) -> &std::sync::Arc<dyn IdentityEngine>;
 
     /// Get the action service
     fn action_service(&self) -> &ActionService<Self::ActionRepo>;
@@ -229,13 +230,9 @@ pub trait HasWebAuthn: Clone + Send + Sync + 'static {
 pub trait HasIdentityProviders: Clone + Send + Sync + 'static {
     /// The linked identity repository type
     type LinkedIdentityRepo: LinkedIdentityRepository;
-    /// The user repository type
-    type IdpUserRepo: UserRepository;
 
     /// Get the identity provider service
-    fn identity_provider_service(
-        &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo>;
+    fn identity_provider_service(&self) -> &IdentityProviderService<Self::LinkedIdentityRepo>;
 
     /// Get the JWT manager for token verification
     fn jwt_manager(&self) -> &JwtManager;
@@ -337,4 +334,22 @@ pub trait HasCache: Clone + Send + Sync + 'static {
 
     /// Get the cache manager
     fn cache(&self) -> &Self::Cache;
+}
+
+/// Trait for states that provide email verification services
+pub trait HasEmailVerification: Clone + Send + Sync + 'static {
+    /// Get the email verification service
+    fn email_verification_service(&self) -> &EmailVerificationService;
+}
+
+/// Trait for states that provide required actions services
+pub trait HasRequiredActions: Clone + Send + Sync + 'static {
+    /// Get the required actions service
+    fn required_actions_service(&self) -> &RequiredActionService;
+}
+
+/// Trait for states that provide MFA services (TOTP + recovery codes)
+pub trait HasMfa: Clone + Send + Sync + 'static {
+    fn totp_service(&self) -> &crate::domains::identity::service::TotpService;
+    fn recovery_code_service(&self) -> &crate::domains::identity::service::RecoveryCodeService;
 }

@@ -2,11 +2,11 @@
 
 ## 1. 项目概述
 
-Auth9 是一个自托管的身份认证服务，设计用于替代昂贵的 Auth0 等商业解决方案。系统作为 Keycloak 的包装层，提供多租户管理、SSO 单点登录和动态 RBAC 能力。
+Auth9 是一个自托管的身份认证与访问管理平台，设计用于替代昂贵的 Auth0 等商业解决方案。系统内置 OIDC 引擎（auth9-oidc），提供多租户管理、SSO 单点登录和动态 RBAC 能力。
 
 ### 1.1 核心理念
 
-- **Headless Keycloak**: Keycloak 仅负责核心协议（OIDC）、MFA 和基础账号存储
+- **内置 OIDC 引擎**: auth9-oidc 负责核心协议（OIDC）、MFA 和账号存储，无需外部身份提供商
 - **管理面与数据面合一**: Identity Service 承载管理 UI 及其对应的 API 服务
 - **Token 瘦身**: 通过 Token Exchange 策略，将庞大的租户/角色信息从初始登录 Token 中剥离，按需交换
 
@@ -15,7 +15,7 @@ Auth9 是一个自托管的身份认证服务，设计用于替代昂贵的 Auth
 | 组件 | 定位 | 职责 |
 |------|------|------|
 | **auth9-portal** | Management UI | 提供精美的 Dashboard 供租户管理员配置用户、角色和审计日志 |
-| **auth9-core** | Business Logic Backend | Keycloak 包装器，管理本地数据库，Token Exchange 处理器 |
+| **auth9-core** | Business Logic Backend | 身份与访问管理后端，管理本地数据库，Token Exchange 处理器 |
 | **auth9-sdk** | Optional SDK | 给其他服务的极简接入包，封装 gRPC 调用逻辑 |
 
 ## 2. 系统架构
@@ -36,10 +36,6 @@ flowchart TB
         Cache[(Redis Cluster)]
     end
 
-    subgraph auth [Auth Engine]
-        Keycloak[Keycloak<br/>OIDC Provider]
-    end
-
     subgraph storage [Storage Layer]
         TiDB[(TiDB Cluster)]
     end
@@ -48,10 +44,8 @@ flowchart TB
     BizServices -->|gRPC| Auth9Core
     SDK -->|gRPC| Auth9Core
     Gateway --> Auth9Core
-    Auth9Core -->|Admin REST API| Keycloak
     Auth9Core --> Cache
     Auth9Core --> TiDB
-    Keycloak -->|User Auth| TiDB
 ```
 
 ### 2.2 部署模型
@@ -62,7 +56,7 @@ flowchart TB
   - auth9-core: 8080 (HTTP) + 50051 (gRPC)，3-10 副本
   - TiDB: 集群现有，4000 端口
   - Redis: 集群，6379 端口
-  - Keycloak: 认证引擎，不暴露公网
+  - auth9-oidc: 内置 OIDC 引擎（集成在 auth9-core 内）
 
 ## 3. 技术栈选择
 
@@ -131,7 +125,7 @@ auth9-core/
 │   ├── repository/                     # 数据访问层
 │   ├── service/                        # 兼容层（re-export 到 domains）
 │   ├── server/                         # Router 组装与启动
-│   ├── keycloak/                       # Keycloak Admin API 客户端
+│   ├── identity_engine/                # 身份引擎抽象层（auth9-oidc adapter）
 │   ├── jwt/                            # JWT 签发与验证
 │   ├── cache/                          # Redis 缓存层
 │   └── error/                          # 统一错误处理
@@ -231,7 +225,7 @@ erDiagram
 
     users {
         uuid id PK
-        varchar keycloak_id UK
+        varchar keycloak_id UK "-- legacy, 迁移兼容"
         varchar email UK
         varchar display_name
         varchar avatar_url
@@ -325,7 +319,7 @@ erDiagram
 | 表名 | 用途 |
 |------|------|
 | `tenants` | 租户信息，包含名称、slug、配置等 |
-| `users` | 用户信息，关联 Keycloak ID |
+| `users` | 用户信息，关联身份主体 ID |
 | `tenant_users` | 用户-租户多对多关系 |
 | `services` | OIDC 客户端/服务注册 |
 | `permissions` | 权限点定义（如 user:read） |
@@ -562,7 +556,7 @@ strategy:
 ## 10. 安全设计
 
 - **Secrets 管理**: 敏感配置存储于 K8s Secrets
-- **Admin API 保护**: Identity Service 与 Keycloak 的交互在 K8s 内部网络完成
+- **Admin API 保护**: 管理 API 通过 JWT 鉴权和策略引擎保护
 - **Token 校验**: 所有 Access Token 必须包含 aud (Audience) 校验
 - **密码哈希**: 使用 Argon2 算法
 - **HTTPS**: 生产环境强制 TLS
@@ -574,18 +568,18 @@ strategy:
 ```
 用户访问业务服务 -> 发现无 Token
     ↓
-重定向 -> Keycloak 认证页面
+重定向 -> Auth9 托管认证页面
     ↓
-认证成功 -> Keycloak 带 Code 回跳业务服务
+认证成功 -> Auth9 带 Code 回跳业务服务
     ↓
 换取 Token -> 业务服务拿到 Identity Token
     ↓
-Token Exchange -> 业务服务通过 gRPC 请求 Identity Service
+Token Exchange -> 业务服务通过 gRPC 请求 Auth9 Core
     ↓
 返回结果 -> 业务服务获得包含 Tenant_A: [Editor] 角色的 Access Token
 ```
 
 ### 11.2 架构师建议
 
-1. **SPI 扩展**: 如需极致实时性，建议在 Keycloak 中实现 EventListener SPI，通过消息队列实时通知用户状态变更
+1. **事件驱动**: 如需极致实时性，建议通过消息队列实时通知用户状态变更
 2. **网关集成**: 建议将 Token Exchange 逻辑下沉到 API Gateway 层，让业务服务对认证完全无感

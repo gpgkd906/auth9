@@ -53,7 +53,7 @@ async fn test_mock_user_repository_find_by_email() {
 #[tokio::test]
 async fn test_mock_user_repository_create() {
     let mut mock = MockUserRepository::new();
-    let keycloak_id = "kc-123";
+    let identity_subject = "subj-123";
     let input = CreateUserInput {
         email: "new@example.com".to_string(),
         display_name: Some("New User".to_string()),
@@ -68,7 +68,7 @@ async fn test_mock_user_repository_create() {
         })
     });
 
-    let result = mock.create(keycloak_id, &input).await.unwrap();
+    let result = mock.create(identity_subject, &input).await.unwrap();
     assert_eq!(result.email, "new@example.com");
     assert_eq!(result.display_name, Some("New User".to_string()));
 }

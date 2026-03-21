@@ -133,6 +133,8 @@ pub struct Client {
     #[serde(skip_serializing)]
     pub client_secret_hash: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub public_client: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -158,6 +160,8 @@ pub struct CreateServiceInput {
 pub struct CreateClientInput {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
+    #[serde(default)]
+    pub public_client: bool,
 }
 
 /// Input for updating a service
@@ -260,6 +264,7 @@ mod tests {
             client_id: "test-client".to_string(),
             client_secret_hash: "secret-hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         };
 
@@ -277,6 +282,7 @@ mod tests {
             client_id: "test-client".to_string(),
             client_secret_hash: "secret-hash".to_string(),
             name: None,
+            public_client: false,
             created_at: Utc::now(),
         };
 
@@ -384,6 +390,7 @@ mod tests {
     fn test_create_client_input_valid() {
         let input = CreateClientInput {
             name: Some("My Client".to_string()),
+            public_client: false,
         };
 
         assert!(input.validate().is_ok());
@@ -391,7 +398,10 @@ mod tests {
 
     #[test]
     fn test_create_client_input_no_name() {
-        let input = CreateClientInput { name: None };
+        let input = CreateClientInput {
+            name: None,
+            public_client: false,
+        };
 
         assert!(input.validate().is_ok());
     }
@@ -400,6 +410,7 @@ mod tests {
     fn test_create_client_input_empty_name() {
         let input = CreateClientInput {
             name: Some("".to_string()),
+            public_client: false,
         };
 
         // Empty string is within length bounds (0 is not < 1 for Some values)
@@ -469,6 +480,7 @@ mod tests {
             client_id: "test-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: None,
+            public_client: false,
             created_at: Utc::now(),
         };
         let client_secret = "secret123".to_string();
@@ -497,6 +509,7 @@ mod tests {
             client_id: "test-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: None,
+            public_client: false,
             created_at: Utc::now(),
         };
 
@@ -523,6 +536,7 @@ mod tests {
             client_id: "my-client".to_string(),
             client_secret_hash: "hashed".to_string(),
             name: Some("My Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         };
 

@@ -16,10 +16,10 @@ mod tests;
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait UserRepository: Send + Sync {
-    async fn create(&self, keycloak_id: &str, input: &CreateUserInput) -> Result<User>;
+    async fn create(&self, identity_subject: &str, input: &CreateUserInput) -> Result<User>;
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>>;
     async fn find_by_email(&self, email: &str) -> Result<Option<User>>;
-    async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>>;
+    async fn find_by_identity_subject(&self, identity_subject: &str) -> Result<Option<User>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>>;
     async fn count(&self) -> Result<i64>;
     async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<User>>;

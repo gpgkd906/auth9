@@ -9,7 +9,6 @@ use crate::support::http::{
 use crate::support::{
     create_test_identity_token, create_test_jwt_manager, create_test_tenant,
     create_test_tenant_access_token, create_test_tenant_access_token_for_tenant,
-    MockKeycloakServer,
 };
 use auth9_core::http_support::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::models::system_settings::TenantMaliciousIpBlacklistEntry;
@@ -27,8 +26,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_list_tenants_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token(); // Platform admin token
 
     // Add some test tenants
@@ -54,8 +52,7 @@ async fn test_list_tenants_returns_200() {
 
 #[tokio::test]
 async fn test_list_tenants_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token();
 
     // Add 25 tenants
@@ -84,8 +81,7 @@ async fn test_list_tenants_pagination() {
 
 #[tokio::test]
 async fn test_list_tenants_empty() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
@@ -105,8 +101,7 @@ async fn test_list_tenants_empty() {
 
 #[tokio::test]
 async fn test_get_tenant_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
@@ -129,8 +124,7 @@ async fn test_get_tenant_returns_200() {
 
 #[tokio::test]
 async fn test_get_tenant_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let nonexistent_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(nonexistent_id);
     let app = build_test_router(state);
@@ -147,8 +141,7 @@ async fn test_get_tenant_returns_404() {
 
 #[tokio::test]
 async fn test_create_tenant_returns_201() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token(); // Platform admin Identity token required
     let app = build_test_router(state);
 
@@ -175,8 +168,7 @@ async fn test_create_tenant_returns_201() {
 
 #[tokio::test]
 async fn test_create_tenant_duplicate_slug() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
 
     // Add existing tenant with slug "existing-tenant"
@@ -200,8 +192,7 @@ async fn test_create_tenant_duplicate_slug() {
 
 #[tokio::test]
 async fn test_create_tenant_validation_error_empty_name() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
     let app = build_test_router(state);
 
@@ -219,8 +210,7 @@ async fn test_create_tenant_validation_error_empty_name() {
 
 #[tokio::test]
 async fn test_create_tenant_validation_error_empty_slug() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
     let app = build_test_router(state);
 
@@ -237,8 +227,7 @@ async fn test_create_tenant_validation_error_empty_slug() {
 
 #[tokio::test]
 async fn test_create_tenant_with_settings() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
     let app = build_test_router(state);
 
@@ -268,8 +257,7 @@ async fn test_create_tenant_with_settings() {
 
 #[tokio::test]
 async fn test_update_tenant_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
@@ -299,8 +287,7 @@ async fn test_update_tenant_returns_200() {
 
 #[tokio::test]
 async fn test_update_tenant_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let nonexistent_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(nonexistent_id);
     let app = build_test_router(state);
@@ -322,8 +309,7 @@ async fn test_update_tenant_returns_404() {
 
 #[tokio::test]
 async fn test_update_tenant_status() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
@@ -352,8 +338,7 @@ async fn test_update_tenant_status() {
 
 #[tokio::test]
 async fn test_update_tenant_logo_url() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
 
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
@@ -389,8 +374,7 @@ async fn test_update_tenant_logo_url() {
 
 #[tokio::test]
 async fn test_delete_tenant_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token(); // Platform admin Identity token required
 
     let tenant_id = Uuid::new_v4();
@@ -430,8 +414,7 @@ async fn test_delete_tenant_returns_200() {
 
 #[tokio::test]
 async fn test_delete_tenant_returns_404() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
     let app = build_test_router(state);
 
@@ -453,8 +436,7 @@ async fn test_delete_tenant_returns_404() {
 
 #[tokio::test]
 async fn test_delete_tenant_requires_confirmation_header() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
@@ -476,8 +458,7 @@ async fn test_delete_tenant_requires_confirmation_header() {
 
 #[tokio::test]
 async fn test_tenant_with_unicode_name() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
     let app = build_test_router(state);
 
@@ -497,8 +478,7 @@ async fn test_tenant_with_unicode_name() {
 
 #[tokio::test]
 async fn test_tenant_with_special_chars_in_name() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_identity_token();
     let app = build_test_router(state);
 
@@ -518,8 +498,7 @@ async fn test_tenant_with_special_chars_in_name() {
 
 #[tokio::test]
 async fn test_list_tenants_default_pagination() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let token = create_test_tenant_access_token();
 
     // Add 5 tenants
@@ -546,8 +525,7 @@ async fn test_list_tenants_default_pagination() {
 
 #[tokio::test]
 async fn test_get_tenant_malicious_ip_blacklist_returns_entries() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
     state
@@ -582,8 +560,7 @@ async fn test_get_tenant_malicious_ip_blacklist_returns_entries() {
 
 #[tokio::test]
 async fn test_update_tenant_malicious_ip_blacklist_returns_200() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let token = create_test_tenant_access_token_for_tenant(tenant_id);
     state
@@ -623,8 +600,7 @@ async fn test_update_tenant_malicious_ip_blacklist_returns_200() {
 
 #[tokio::test]
 async fn test_update_tenant_malicious_ip_blacklist_denies_cross_tenant_access() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
     let other_tenant_id = Uuid::new_v4();
     let token = create_test_jwt_manager()

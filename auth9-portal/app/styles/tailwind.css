@@ -1239,12 +1239,12 @@
     animation: fadeInUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 
-  .delay-1 { animation-delay: 50ms; opacity: 0; }
-  .delay-2 { animation-delay: 100ms; opacity: 0; }
-  .delay-3 { animation-delay: 150ms; opacity: 0; }
-  .delay-4 { animation-delay: 200ms; opacity: 0; }
-  .delay-5 { animation-delay: 250ms; opacity: 0; }
-  .delay-6 { animation-delay: 300ms; opacity: 0; }
+  .delay-1 { animation-delay: 0ms; opacity: 0; }
+  .delay-2 { animation-delay: 50ms; opacity: 0; }
+  .delay-3 { animation-delay: 100ms; opacity: 0; }
+  .delay-4 { animation-delay: 150ms; opacity: 0; }
+  .delay-5 { animation-delay: 200ms; opacity: 0; }
+  .delay-6 { animation-delay: 250ms; opacity: 0; }
 
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {

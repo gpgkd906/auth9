@@ -1,14 +1,14 @@
 //! Identity Provider API handlers
 
 use crate::error::AppError;
-use crate::http_support::{MessageResponse, SuccessResponse};
+use crate::http_support::{write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::models::common::StringUuid;
 use crate::models::identity_provider::{
     CreateIdentityProviderInput, IdentityProvider, IdentityProviderTemplate,
     UpdateIdentityProviderInput,
 };
 use crate::models::linked_identity::LinkedIdentityInfo;
-use crate::state::{HasIdentityProviders, HasServices};
+use crate::state::{HasAnalytics, HasIdentityProviders, HasServices};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -144,20 +144,6 @@ pub async fn list_my_linked_identities<S: HasIdentityProviders + HasServices>(
     headers: HeaderMap,
 ) -> Result<Json<SuccessResponse<Vec<LinkedIdentityInfo>>>, AppError> {
     let user_id = extract_user_id(&state, &headers)?;
-    let user = state.user_service().get(user_id).await?;
-
-    if let Err(error) = state
-        .identity_provider_service()
-        .sync_user_identities(user.id, &user.keycloak_id)
-        .await
-    {
-        tracing::warn!(
-            user_id = %user.id,
-            keycloak_user_id = %user.keycloak_id,
-            "Failed to sync linked identities before listing: {}",
-            error
-        );
-    }
 
     let identities = state
         .identity_provider_service()
@@ -176,17 +162,43 @@ pub async fn list_my_linked_identities<S: HasIdentityProviders + HasServices>(
     )
 )]
 /// Unlink an identity from the current user
-pub async fn unlink_identity<S: HasIdentityProviders + HasServices>(
+pub async fn unlink_identity<S: HasIdentityProviders + HasServices + HasAnalytics>(
     State(state): State<S>,
     headers: HeaderMap,
     Path(identity_id): Path<StringUuid>,
 ) -> Result<Json<MessageResponse>, AppError> {
     let user_id = extract_user_id(&state, &headers)?;
 
+    // Fetch identity info before unlink for event/audit
+    let identities = state
+        .identity_provider_service()
+        .get_user_identities(user_id)
+        .await
+        .unwrap_or_default();
+    let identity_info = identities.iter().find(|i| i.id == identity_id.to_string());
+
     state
         .identity_provider_service()
         .unlink_identity(user_id, identity_id)
         .await?;
+
+    // Record unlink event and audit log
+    if let Some(info) = identity_info {
+        let _ = state
+            .analytics_service()
+            .record_identity_unlinked(user_id, &info.provider_alias, &info.provider_type)
+            .await;
+    }
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "identity.unlinked",
+        "linked_identity",
+        Some(*identity_id),
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(MessageResponse::new(
         "Identity unlinked successfully.",
@@ -194,7 +206,7 @@ pub async fn unlink_identity<S: HasIdentityProviders + HasServices>(
 }
 
 /// Extract user ID from JWT token
-fn extract_user_id<S: HasIdentityProviders + HasServices>(
+pub(crate) fn extract_user_id<S: HasIdentityProviders + HasServices>(
     state: &S,
     headers: &HeaderMap,
 ) -> Result<StringUuid, AppError> {
@@ -217,20 +229,9 @@ fn extract_user_id<S: HasIdentityProviders + HasServices>(
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    let allowed = &state.config().jwt_tenant_access_allowed_audiences;
-    if !allowed.is_empty() {
-        if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
-            return StringUuid::parse_str(&claims.sub)
-                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
-        }
-    } else if !state.config().is_production() {
-        #[allow(deprecated)]
-        if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
-            metrics::counter!("auth9_jwt_legacy_fallback_total", "caller" => "idp_extract_user")
-                .increment(1);
-            return StringUuid::parse_str(&claims.sub)
-                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
-        }
+    if let Ok(claims) = jwt.verify_tenant_access_token_any_audience(token) {
+        return StringUuid::parse_str(&claims.sub)
+            .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
     Err(AppError::Unauthorized(

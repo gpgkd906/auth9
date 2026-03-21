@@ -13,11 +13,11 @@
 
 ## 背景知识
 
-Auth9 接收来自 Keycloak 的 Event Webhook，并向外部系统发送 Webhook 通知：
+Auth9 接收认证事件 Webhook，并向外部系统发送 Webhook 通知：
 
-**入站 Webhook（Keycloak → Auth9）**:
+**入站 Webhook（Auth9 OIDC Engine → Auth9 Core）**:
 - 端点: `POST /api/v1/keycloak/events`
-- 验证: `X-Keycloak-Signature` 头（HMAC-SHA256 签名，格式 `sha256=<hex>`）与 `KEYCLOAK_WEBHOOK_SECRET` 计算的签名比较
+- 验证: `X-Keycloak-Signature` 头（HMAC-SHA256 签名，格式 `sha256=<hex>`）与 webhook secret 计算的签名比较
 - 备用头: `X-Webhook-Signature`（兼容旧版）
 - 用途: 接收用户登录事件、管理事件等
 - **注意**: 使用常数时间比较（`hmac::verify_slice`）防止时间侧信道攻击
@@ -33,11 +33,11 @@ Webhook 伪造可导致：虚假用户事件注入、安全告警绕过、业务
 ## 场景 1：入站 Webhook 签名伪造
 
 ### 前置条件
-- 了解 Keycloak Webhook 端点路径
+- 了解事件 Webhook 端点路径
 - 了解 Webhook 请求格式
 
 ### 攻击目标
-验证 Keycloak Event Webhook 是否严格验证签名
+验证事件 Webhook 是否严格验证签名
 
 ### 攻击步骤
 1. 发送无签名头的 Webhook 请求
@@ -56,26 +56,23 @@ Webhook 伪造可导致：虚假用户事件注入、安全告警绕过、业务
 
 ### 前置条件（重要）
 
-**必须确保 `KEYCLOAK_WEBHOOK_SECRET` 已配置**，否则签名验证不会启用。
+**必须确保 webhook secret 已配置**，否则签名验证不会启用。
 
-Docker 默认配置中已在 `docker-compose.yml` 中设置：
-```yaml
-KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
-```
+Docker 默认配置中已在 `docker-compose.yml` 中设置 webhook secret（开发默认值：`dev-webhook-secret-change-in-production`）。
 
 如需手动验证：
 ```bash
 # 确认环境变量已生效
-docker exec auth9-core env | grep KEYCLOAK_WEBHOOK_SECRET
-# 预期输出: KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret-change-in-production
+docker exec auth9-core env | grep WEBHOOK_SECRET
+# 预期输出: 包含 webhook secret 配置
 ```
 
 ### 验证方法
 ```bash
 # 设置 webhook secret（与 docker-compose.yml 一致）
-export KEYCLOAK_WEBHOOK_SECRET="dev-webhook-secret-change-in-production"
+export WEBHOOK_SECRET="dev-webhook-secret-change-in-production"
 
-# Keycloak 事件 payload（time 字段为毫秒时间戳）
+# 事件 payload（time 字段为毫秒时间戳）
 CURRENT_TIME_MILLIS=$(($(date +%s) * 1000))
 EVENT="{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"userId\":\"test-user\",\"time\":${CURRENT_TIME_MILLIS}}"
 
@@ -107,7 +104,7 @@ curl -s -o /dev/null -w "%{http_code}" \
 # 预期: 401 (Invalid webhook signature)
 
 # 正确签名（验证合法请求可通过）
-SIGNATURE=$(echo -n "$EVENT" | openssl dgst -sha256 -hmac "$KEYCLOAK_WEBHOOK_SECRET" | awk '{print $2}')
+SIGNATURE=$(echo -n "$EVENT" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')
 curl -s -o /dev/null -w "%{http_code}" \
   -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
@@ -147,7 +144,7 @@ PYEOF
 
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
-| 所有请求返回 204 | `KEYCLOAK_WEBHOOK_SECRET` 未配置 | 在 docker-compose.yml 或 .env 中设置 |
+| 所有请求返回 204 | webhook secret 未配置 | 在 docker-compose.yml 或 .env 中设置 |
 | 404 Not Found | 端点路径错误 | 使用 `/api/v1/keycloak/events`（不是 `/api/v1/webhooks/keycloak`） |
 | 正确签名仍返回 401 | 签名格式错误 | 确保格式为 `sha256=<hex>`，使用 HMAC-SHA256 |
 
@@ -169,7 +166,7 @@ PYEOF
 验证是否可以重放已截获的合法 Webhook 请求
 
 ### 攻击步骤
-1. 截获一个合法的 Keycloak Webhook 请求（含正确签名）
+1. 截获一个合法的事件 Webhook 请求（含正确签名）
 2. 在 5 分钟后重放该请求
 3. 在 1 小时后重放
 4. 多次快速重放同一请求
@@ -183,7 +180,7 @@ PYEOF
 
 ### 前置条件（重要）
 
-**必须确保 `KEYCLOAK_WEBHOOK_SECRET` 已配置**，否则签名验证不会启用。Docker 默认配置已设置为 `dev-webhook-secret-change-in-production`。
+**必须确保 webhook secret 已配置**，否则签名验证不会启用。Docker 默认配置已设置为 `dev-webhook-secret-change-in-production`。
 
 **必须确保 Redis 正常运行**，否则去重机制使用内存缓存（仅进程内有效）。
 
@@ -192,7 +189,7 @@ PYEOF
 ### 验证方法
 ```bash
 # 重要: 必须先定义 EVENT，再计算签名（顺序不可颠倒）
-VALID_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
+VALID_SECRET="${WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
 # 使用当前毫秒时间戳，确保事件不过期（5 分钟窗口）
 CURRENT_TIME_MILLIS=$(($(date +%s) * 1000))
@@ -234,7 +231,7 @@ curl -s -o /dev/null -w "%{http_code}" \
 |------|------|----------|
 | 重放请求未被去重（两次都返回 204 且都执行了业务逻辑） | event payload 缺少 `id` 字段 | 确保 JSON 中包含 `"id": "event-xxx"` 字段 |
 | 重放请求未被去重，但 Redis key 存在 | 去重日志级别为 `debug`，RUST_LOG=info 不显示 | 将 `RUST_LOG` 改为 `debug` 后重启，确认日志输出 `Duplicate webhook event detected` |
-| 签名验证未生效（所有请求都返回 204） | `KEYCLOAK_WEBHOOK_SECRET` 未配置 | 在 docker-compose.yml 中设置该环境变量 |
+| 签名验证未生效（所有请求都返回 204） | webhook secret 未配置 | 在 docker-compose.yml 中设置该环境变量 |
 | 签名不匹配（返回 401） | 测试脚本使用的 secret 与服务端不同（默认值为 `dev-webhook-secret-change-in-production`） | 确认 `VALID_SECRET` 与 docker-compose.yml 中的值一致 |
 | 签名不匹配（返回 401） | 签名计算在 EVENT 定义之前，或 EVENT 包含额外空白 | 先定义 EVENT，再计算签名；使用 `echo -n` 避免尾部换行 |
 | 过期事件未被拒绝 | payload 中的 `time` 字段在 5 分钟窗口内 | 使用明确的旧毫秒时间戳（如 `1600000000000`） |

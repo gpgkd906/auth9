@@ -26,7 +26,7 @@ pub struct SamlApplication {
     pub sp_certificate: Option<String>,
     #[sqlx(json)]
     pub attribute_mappings: Vec<AttributeMapping>,
-    pub keycloak_client_id: String,
+    pub backend_client_id: String,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -378,7 +378,7 @@ mod tests {
             encrypt_assertions: false,
             sp_certificate: None,
             attribute_mappings: vec![],
-            keycloak_client_id: "kc-uuid-123".to_string(),
+            backend_client_id: "kc-uuid-123".to_string(),
             enabled: true,
             created_at: Utc::now(),
             updated_at: Utc::now(),

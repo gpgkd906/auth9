@@ -60,6 +60,10 @@ pub fn describe_metrics() {
     );
     // Auth metrics
     describe_counter!("auth9_auth_login_total", "Total number of login attempts");
+    describe_histogram!(
+        "auth9_hosted_login_duration_seconds",
+        "Hosted login password validation duration in seconds"
+    );
     describe_counter!(
         "auth9_auth_token_exchange_total",
         "Total number of token exchange requests"
@@ -115,7 +119,10 @@ pub fn describe_metrics() {
     // counters gated behind specific code-paths need an explicit zero-increment.
     counter!("auth9_grpc_requests_total", "service" => "TokenExchange", "method" => "exchange_token", "status" => "ok").absolute(0);
     histogram!("auth9_grpc_request_duration_seconds", "service" => "TokenExchange", "method" => "exchange_token").record(0.0);
-    counter!("auth9_auth_login_total", "result" => "success").absolute(0);
+    counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted").absolute(0);
+    counter!("auth9_auth_login_total", "result" => "success", "backend" => "oidc").absolute(0);
+    counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").absolute(0);
+    histogram!("auth9_hosted_login_duration_seconds", "method" => "password").record(0.0);
     counter!("auth9_auth_token_exchange_total", "result" => "success").absolute(0);
     counter!("auth9_auth_token_validation_total", "result" => "valid").absolute(0);
     counter!("auth9_auth_invalid_state_total", "reason" => "missing").absolute(0);

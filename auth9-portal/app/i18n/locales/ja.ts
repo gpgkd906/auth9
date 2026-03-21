@@ -21,6 +21,9 @@ export default {
       back: "戻る",
       edit: "編集",
       close: "閉じる",
+      updatePassword: "パスワードを更新",
+      updating: "更新中...",
+      saving: "保存中...",
     },
     labels: {
       email: "メールアドレス",
@@ -112,6 +115,11 @@ export default {
     },
   },
   auth: {
+    shared: {
+      hostedEyebrow: "ID プラットフォーム",
+      hostedTitle: "アプリのための安全な認証",
+      hostedDescription: "パスワード、SSO、パスキー、ソーシャルログインを Auth9 で一元管理。",
+    },
     login: {
       metaTitle: "サインイン - Auth9",
       title: "サインイン",
@@ -119,8 +127,11 @@ export default {
       description: "サインイン方法を選択してください",
       accessDenied: "アクセスが拒否されました。もう一度お試しいただくか、管理者にお問い合わせください。",
       genericError: "サインイン中にエラーが発生しました: {{error}}",
+      ssoTitle: "Enterprise SSO",
+      ssoDescription: "会社のメールアドレスを入力して続行",
       ssoButton: "Enterprise SSOで続ける",
       ssoFinding: "SSOを検索中...",
+      ssoSubmit: "続行",
       passwordButton: "パスワードでサインイン", // pragma: allowlist secret
       redirecting: "リダイレクト中...",
       passkeyButton: "パスキーでサインイン",
@@ -137,6 +148,17 @@ export default {
       emailOtpButton: "メールコードでサインイン",
       invalidAction: "無効なアクション",
       missingAccessToken: "アクセストークンがありません",
+      passwordRevealDetails: "フォームを表示", // pragma: allowlist secret
+      passwordHideDetails: "フォームを隠す", // pragma: allowlist secret
+      passwordEmailPlaceholder: "ユーザー名またはメールアドレス",
+      passwordPlaceholder: "パスワード", // pragma: allowlist secret
+      passwordSubmit: "サインイン", // pragma: allowlist secret
+      signingIn: "サインイン中...",
+      backToMethods: "他のサインイン方法",
+      socialDivider: "または以下で続行",
+      credentialsRequired: "メールアドレスとパスワードを入力してください。", // pragma: allowlist secret
+      futureMethodsEyebrow: "拡張予定の方式",
+      futureMethodsDescription: "このレイアウトは password、enterprise SSO、social login、追加認証方式の拡張枠を確保しています。", // pragma: allowlist secret
       oauthErrors: {
         accessDenied: "アクセスが拒否されました。もう一度お試しいただくか、管理者にお問い合わせください。",
         stateMismatch: "サインインセッションの有効期限が切れました。もう一度お試しください。",
@@ -169,6 +191,8 @@ export default {
       metaTitle: "サインアップ - Auth9",
       title: "アカウントを作成",
       description: "Auth9でアイデンティティ管理を始めましょう",
+      panelTitle: "Auth9 に参加",
+      panelDescription: "アカウントを作成して、アプリの ID とアクセス管理を始めましょう。",
       submit: "アカウント作成",
       footerPrefix: "すでにアカウントをお持ちですか？",
       footerAction: "サインイン",
@@ -179,6 +203,8 @@ export default {
       metaTitle: "パスワードをお忘れですか - Auth9",
       title: "パスワードをお忘れですか？",
       description: "メールアドレスを入力すると、パスワードリセット用のリンクをお送りします。",
+      panelTitle: "アカウントを復旧",
+      panelDescription: "パスワードを安全にリセットします。リセットリンクがメールアドレスに送信されます。",
       successTitle: "メールを確認してください",
       successDescription:
         "{{email}}のアカウントが存在する場合、パスワードリセットの手順をそのアドレスに送信しました。",
@@ -188,6 +214,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "パスワードをリセット - Auth9",
+      panelTitle: "新しいパスワードを設定",
+      panelDescription: "アカウントを保護するために強力なパスワードを選択してください。",
       invalidToken: "無効またはリセットトークンがありません",
       expiredToken: "このリセットリンクは有効期限切れです。新しいリンクを再申請してください。",
       invalidTitle: "無効なリンク",
@@ -200,6 +228,69 @@ export default {
       passwordMismatch: "パスワードが一致しません。", // pragma: allowlist secret
       failed: "パスワードのリセットに失敗しました",
     },
+    mfaVerify: {
+      metaTitle: "MFA を確認 - Auth9",
+      panelTitle: "二要素認証",
+      panelDescription: "認証アプリの確認コードを入力してサインインを完了します。",
+      title: "二要素認証",
+      totpDescription: "認証アプリの 6 桁のコードを入力してください。",
+      recoveryDescription: "リカバリーコードを入力してください。",
+      codeLabel: "確認コード",
+      codePlaceholder: "123456",
+      recoveryLabel: "リカバリーコード",
+      recoveryPlaceholder: "リカバリーコードを入力",
+      codeRequired: "確認コードを入力してください。",
+      invalidCode: "確認コードが無効です。もう一度お試しください。",
+      sessionExpired: "MFA セッションが期限切れです。もう一度サインインしてください。",
+      switchToRecovery: "リカバリーコードを使用",
+      switchToTotp: "認証アプリを使用",
+      submit: "確認",
+      verifying: "確認中...",
+    },
+    mfaSetup: {
+      metaTitle: "二要素認証の設定 - Auth9",
+      panelTitle: "二要素認証を設定",
+      panelDescription: "認証アプリでアカウントを保護します。",
+      title: "認証アプリの設定",
+      description: "認証アプリ（Google Authenticator、Authy など）で下の QR コードをスキャンしてください。",
+      qrAlt: "TOTP QR コード",
+      manualEntryToggle: "スキャンできませんか？",
+      manualEntryLabel: "手動入力キー",
+      verifyTitle: "設定を確認",
+      verifyDescription: "認証アプリの 6 桁のコードを入力して設定を確認してください。",
+      submit: "確認して有効化",
+      submitting: "確認中...",
+      setupFailed: "認証アプリの設定に失敗しました。もう一度お試しください。",
+    },
+    verifyEmail: {
+      metaTitle: "メール確認 - Auth9",
+      panelTitle: "メールアドレスを確認",
+      panelDescription: "送信されたメール内のリンクをクリックしてアカウントを確認してください。",
+      successTitle: "メール確認完了",
+      successDescription: "メールアドレスが確認されました。サインインできます。",
+      errorTitle: "確認に失敗しました",
+      invalidToken: "無効または欠落した確認トークンです。",
+      expiredToken: "この確認リンクは期限切れか、すでに使用されています。",
+    },
+    forceUpdatePassword: {
+      metaTitle: "パスワード更新 - Auth9",
+      panelTitle: "パスワードの更新が必要です",
+      panelDescription: "管理者により、続行する前に新しいパスワードの設定が求められています。",
+      title: "パスワードを更新",
+      description: "続行するには新しいパスワードを設定してください。",
+      passwordHint: "大文字・小文字・数字・記号を含む12文字以上", // pragma: allowlist secret
+      passwordRequired: "パスワードは必須です。", // pragma: allowlist secret
+      passwordMismatch: "パスワードが一致しません。", // pragma: allowlist secret
+    },
+    completeProfile: {
+      metaTitle: "プロフィール完成 - Auth9",
+      panelTitle: "プロフィールを完成させてください",
+      panelDescription: "続行するために必要な情報を入力してください。",
+      title: "プロフィールを完成させる",
+      description: "あなたについて教えてください。",
+      nameRequired: "表示名は必須です。",
+      displayNamePlaceholder: "あなたの名前",
+    },
   },
   dashboard: {
     metaTitle: "{{tenantName}} - Auth9",
@@ -211,8 +302,8 @@ export default {
     metaTitle: "アカウント - Auth9",
     title: "アカウント",
     description: "個人アカウント設定を管理",
-    nav: { profile: "プロフィール", security: "セキュリティ", passkeys: "パスキー", sessions: "セッション", identities: "リンク済みアカウント" },
-    navDescriptions: { profile: "個人情報", security: "パスワードの変更", passkeys: "パスワードレス認証", sessions: "アクティブなセッション", identities: "接続済みアカウント" },
+    nav: { profile: "プロフィール", security: "セキュリティ", passkeys: "パスキー", mfa: "MFA", sessions: "セッション", identities: "リンク済みアカウント" },
+    navDescriptions: { profile: "個人情報", security: "パスワードの変更", mfa: "多要素認証", passkeys: "パスワードレス認証", sessions: "アクティブなセッション", identities: "接続済みアカウント" },
     profile: { title: "プロフィール", description: "個人情報。プラットフォーム上で他のユーザーに表示される内容です。", loadError: "プロフィールの読み込みに失敗しました。後でもう一度お試しください。", serverUnavailable: "サーバーに接続できません。後でもう一度お試しください。", notAuthenticated: "認証されていません", updated: "プロフィールを更新しました", updateFailed: "プロフィールの更新に失敗しました", displayName: "表示名", displayNamePlaceholder: "表示名を入力", avatarUrl: "アバターURL", avatarUrlPlaceholder: "https://example.com/avatar.png", avatarHint: "プロフィール画像のURL", email: "メールアドレス", emailHint: "メールアドレスはここでは変更できません", mfa: "MFA", joined: "参加日", enabled: "有効", disabled: "無効", save: "変更を保存", saving: "保存中..." },
     security: { title: "パスワードの変更", description: "アカウントのパスワードを更新します。現在のパスワードの入力が必要です。", currentPassword: "現在のパスワード", newPassword: "新しいパスワード", confirmPassword: "新しいパスワード（確認）", required: "すべてのパスワード欄を入力してください", mismatch: "新しいパスワードが一致しません", success: "パスワードを変更しました", failed: "パスワードの変更に失敗しました", change: "パスワードを変更", changing: "変更中..." },
     sessions: { loadError: "セッションの読み込みに失敗しました", operationFailed: "操作に失敗しました", invalidAction: "無効な操作です", justNow: "たった今", minutesAgo: "{{count}}分前", hoursAgo: "{{count}}時間前", daysAgo: "{{count}}日前", currentTitle: "現在のセッション", currentDescription: "現在使用中のデバイスです。", unknownCurrent: "現在のセッションを特定できません", otherTitle: "他のセッション", otherDescription: "現在サインイン中のデバイスです。", signOutAll: "すべてサインアウト", noOtherSessions: "他のアクティブなセッションはありません", unknownDevice: "不明なデバイス", current: "現在", lastActive: "最終アクティブ", started: "開始日時", revoke: "取り消す", securityTips: "セキュリティのヒント", tips: { unrecognized: "心当たりのないセッションはサインアウトしてください", sharedDevices: "共有・公共のデバイスではサインインしたままにしないでください", mfa: "二要素認証を有効にしてセキュリティを強化してください", passwords: "各アカウントで固有の強力なパスワードを使用してください" } },
@@ -248,8 +339,8 @@ export default {
     invitations: { metaTitle: "招待 - Auth9", title: "招待", description: "{{tenantName}}のユーザー招待を管理", inviteUser: "ユーザーを招待", dialogTitle: "ユーザーを招待", dialogDescription: "{{tenantName}}への参加招待メールを送信します", emailAddress: "メールアドレス", emailPlaceholder: "user@example.com", expiresIn: "有効期限", selectExpiration: "有効期限を選択", expiration24h: "24時間", expiration48h: "48時間", expiration72h: "72時間（デフォルト）", expiration7d: "7日間", assignRoles: "ロールを割り当て", noServices: "このテナントにサービスが設定されていません。先にサービスを作成してください。", noRoles: "サービスはありますがロールが定義されていません。先にサービスのロールを作成してください。", noRolesDefined: "ロールが定義されていません", cancel: "キャンセル", sending: "送信中...", sendInvitation: "招待を送信", listTitle: "保留中・過去の招待", listDescription: "{{total}}件の招待 • {{totalPages}}ページ中{{page}}ページ目", statusFilter: "ステータスで絞り込み", allStatuses: "すべてのステータス", email: "メール", status: "ステータス", roles: "ロール", expiresAt: "有効期限", created: "作成日", roleCount: "{{count}}件のロール", roleCount_one: "{{count}}件のロール", roleCount_other: "{{count}}件のロール", menuActions: "操作", resendEmail: "メールを再送信", revoke: "取り消す", delete: "削除", noInvitations: "招待が見つかりません。「ユーザーを招待」をクリックして招待を送信してください。", deleteTitle: "招待を削除", deleteDescription: "この招待を削除してもよろしいですか？", revokeTitle: "招待を取り消す", revokeDescription: "この招待を取り消してもよろしいですか？", revokeConfirm: "取り消す", resent: "招待メールを再送信しました", authRequired: "認証が必要です", roleRequired: "少なくとも1つのロールを選択してください" },
     services: { metaTitle: "Services - {{tenantName}} - Auth9", title: "{{tenantName}}のServices", description: "このテナントのグローバルサービスを有効または無効にします", totalServices: "サービス合計", enabled: "有効", disabled: "無効", globalServices: "グローバルサービス", globalServicesDescription: "このテナントのサービスをオン/オフにします。有効なサービスはこのテナントのユーザーが利用できます。", noServices: "グローバルサービスがありません", noServicesDescription: "tenant_idなしでサービスを作成すると、ここで利用可能になります。", enabledState: "有効", disabledState: "無効" },
     webhooks: { metaTitle: "Webhooks - Auth9", title: "Webhooks", description: "アプリケーション内のイベントのリアルタイム通知を受け取ります。", addWebhook: "Webhookを追加", emptyTitle: "Webhookが設定されていません", emptyDescription: "リアルタイムイベント通知を受け取るためにWebhookを追加してください。", addFirstWebhook: "最初のWebhookを追加", created: "Webhookを作成しました", updated: "Webhookを更新しました", deleted: "Webhookを削除しました", secretRegenerated: "シークレットを再生成しました", newSecret: "新しいシークレット:", test: "テスト", testSuccess: "テスト成功（{{statusCode}}、{{responseTime}}ms）", testFailed: "テスト失敗: {{error}}", operationFailed: "操作に失敗しました", invalidAction: "無効な操作", dialog: { createTitle: "Webhookを追加", editTitle: "Webhookを編集", createDescription: "新しいWebhookエンドポイントを設定します。", editDescription: "Webhookの設定を更新します。", name: "名前", endpointUrl: "エンドポイントURL", secret: "シークレット（任意）", secretHelp: "検証用のWebhookペイロード署名に使用します。", events: "イベント", enabled: "有効", placeholderName: "My Webhook", placeholderUrl: "https://example.com/webhook", placeholderSecret: "HMAC署名検証用", save: "変更を保存", add: "Webhookを追加", saving: "保存中..." }, createdDialog: { title: "Webhookを作成しました", description: "Webhookが作成されました。以下の署名シークレットをコピーしてください。再度表示されません。", signingSecret: "署名シークレット", help: "このシークレットは安全に保管してください。Webhook署名の検証に必要です。", done: "完了" }, list: { eventCount: "{{count}}件のイベント", eventCount_one: "{{count}}件のイベント", failures: "{{count}}件の失敗", failures_one: "{{count}}件の失敗", neverTriggered: "未トリガー", lastTriggered: "最終トリガー: {{date}}", regenerateSecret: "シークレットを再生成", regenerateTitle: "シークレットを再生成", regenerateDescription: "よろしいですか？古いシークレットは即座に無効になります。", deleteTitle: "Webhookを削除", deleteDescription: "このWebhookを削除してもよろしいですか？この操作は取り消せません。" } },
-    sso: { metaTitle: "Enterprise SSO - {{tenantName}} - Auth9", title: "{{tenantName}}のEnterprise SSO", description: "テナントスコープのEnterprise SAML/OIDCコネクタを設定します。", createTitle: "コネクタを作成", createDescription: "カンマ区切りのドメインを使用します。SAMLの場合は、Entity ID、SSO URL、証明書を指定してください。", alias: "エイリアス", aliasPlaceholder: "corp-saml", displayName: "表示名", displayNamePlaceholder: "Acme SSO", providerType: "プロバイダータイプ", priority: "優先度", domains: "ドメイン", domainsPlaceholder: "acme.com, acme.org", samlEntityId: "SAML Entity ID", samlEntityIdPlaceholder: "https://idp.acme.com/entity", samlSsoUrl: "SAML SSO URL", samlSsoUrlPlaceholder: "https://idp.acme.com/sso", samlCertificate: "SAML署名証明書", samlCertificatePlaceholder: "-----BEGIN CERTIFICATE-----...", oidcClientId: "OIDC Client ID", oidcClientSecret: "OIDC Client Secret", oidcAuthorizationUrl: "OIDC Authorization URL", oidcTokenUrl: "OIDC Token URL", createConnector: "コネクタを作成", configuredTitle: "設定済みコネクタ", configuredDescription: "テナントルーティングコネクタの利用可否と検証を管理します。", noConnectors: "Enterpriseコネクタが設定されていません。", connectorCreated: "コネクタを作成しました", connectorDeleted: "コネクタを削除しました", connectorUpdated: "コネクタを更新しました" }, // pragma: allowlist secret
-    samlApps: { metaTitle: "SAMLアプリケーション - {{tenantName}} - Auth9", title: "{{tenantName}}のSAMLアプリケーション", description: "Auth9をIdPとして外部サービスプロバイダーのSAML SSOを登録します。", createTitle: "SAMLアプリケーション登録", createDescription: "外部サービスプロバイダーをAuth9のSAML IdPとして設定します。", name: "アプリケーション名", namePlaceholder: "Salesforce SSO", entityId: "Entity ID (SP)", entityIdPlaceholder: "https://sp.example.com/saml/metadata", acsUrl: "ACS URL", acsUrlPlaceholder: "https://sp.example.com/saml/acs", sloUrl: "SLO URL（任意）", sloUrlPlaceholder: "https://sp.example.com/saml/slo", nameIdFormat: "NameIDフォーマット", nameIdFormats: { email: "メール", persistent: "永続", transient: "一時", unspecified: "未指定" }, signAssertions: "アサーション署名", signResponses: "レスポンス署名", encryptAssertions: "アサーション暗号化", spCertificate: "SP証明書（PEM）", spCertificatePlaceholder: "-----BEGIN CERTIFICATE-----...", attributeMappings: "属性マッピング", attributeSource: "ソース", samlAttribute: "SAML属性", friendlyName: "フレンドリー名", addMapping: "マッピング追加", createApp: "アプリケーション登録", configuredTitle: "登録済みSAMLアプリケーション", configuredDescription: "設定済みのサービスプロバイダー連携を管理します。", noApps: "SAMLアプリケーションが登録されていません。", metadataUrl: "IdP Metadata URL", ssoUrl: "SSO URL", appCreated: "SAMLアプリケーションを登録しました", appDeleted: "SAMLアプリケーションを削除しました", appUpdated: "SAMLアプリケーションを更新しました", downloadCertificate: "IdP証明書をダウンロード", certExpired: "証明書期限切れ", certExpiresSoon: "{{days}}日後に期限切れ", certValid: "有効（{{days}}日）", encryptionRequiresCert: "暗号化を有効にする場合、SP証明書が必要です。" },
+    sso: { metaTitle: "Enterprise SSO - {{tenantName}} - Auth9", title: "{{tenantName}}のEnterprise SSO", description: "テナントスコープのEnterprise SAML/OIDCコネクタを設定します。", createTitle: "コネクタを作成", createDescription: "カンマ区切りのドメインを使用します。SAMLの場合は、Entity ID、SSO URL、証明書を指定してください。", alias: "エイリアス", aliasPlaceholder: "corp-saml", displayName: "表示名", displayNamePlaceholder: "Acme SSO", providerType: "プロバイダータイプ", priority: "優先度", domains: "ドメイン", domainsPlaceholder: "acme.com, acme.org", samlEntityId: "SAML Entity ID", samlEntityIdPlaceholder: "https://idp.acme.com/entity", samlSsoUrl: "SAML SSO URL", samlSsoUrlPlaceholder: "https://idp.acme.com/sso", samlCertificate: "SAML署名証明書", samlCertificatePlaceholder: "-----BEGIN CERTIFICATE-----...", oidcClientId: "OIDC Client ID", oidcClientSecret: "OIDC Client Secret", oidcAuthorizationUrl: "OIDC Authorization URL", oidcTokenUrl: "OIDC Token URL", oidcUserInfoUrl: "OIDC UserInfo URL", createConnector: "コネクタを作成", configuredTitle: "設定済みコネクタ", configuredDescription: "テナントルーティングコネクタの利用可否と検証を管理します。", noConnectors: "Enterpriseコネクタが設定されていません。", connectorCreated: "コネクタを作成しました", connectorDeleted: "コネクタを削除しました", connectorUpdated: "コネクタを更新しました" }, // pragma: allowlist secret
+    samlApps: { metaTitle: "SAMLアプリケーション - {{tenantName}} - Auth9", title: "{{tenantName}}のSAMLアプリケーション", description: "Auth9をIdPとして外部サービスプロバイダーのSAML SSOを登録します。", createTitle: "SAMLアプリケーション登録", createDescription: "外部サービスプロバイダーをAuth9のSAML IdPとして設定します。", name: "アプリケーション名", namePlaceholder: "Salesforce SSO", entityId: "Entity ID (SP)", entityIdPlaceholder: "https://sp.example.com/saml/metadata", acsUrl: "ACS URL", acsUrlPlaceholder: "https://sp.example.com/saml/acs", sloUrl: "SLO URL（任意）", sloUrlPlaceholder: "https://sp.example.com/saml/slo", nameIdFormat: "NameIDフォーマット", nameIdFormats: { email: "メール", persistent: "永続", transient: "一時", unspecified: "未指定" }, signAssertions: "アサーション署名", signResponses: "レスポンス署名", encryptAssertions: "アサーション暗号化", spCertificate: "SP証明書（PEM）", spCertificatePlaceholder: "-----BEGIN CERTIFICATE-----...", attributeMappings: "属性マッピング", attributeSource: "ソース", samlAttribute: "SAML属性", friendlyName: "フレンドリー名", addMapping: "マッピング追加", createApp: "アプリケーション登録", configuredTitle: "登録済みSAMLアプリケーション", configuredDescription: "設定済みのサービスプロバイダー連携を管理します。", noApps: "SAMLアプリケーションが登録されていません。", metadataUrl: "IdP Metadata URL", ssoUrl: "SSO URL", appCreated: "SAMLアプリケーションを登録しました", appDeleted: "SAMLアプリケーションを削除しました", appUpdated: "SAMLアプリケーションを更新しました", downloadCertificate: "IdP証明書をダウンロード", certExpired: "証明書期限切れ", certExpiresSoon: "{{days}}日後に期限切れ", certValid: "有効（{{days}}日）", encryptionRequiresCert: "暗号化を有効にする場合、SP証明書が必要です。", advancedSourceHint: "上級 — このテナントでRBAC設定が必要です。", setupInstructions: "セットアップ手順", setupGenericTitle: "汎用SP設定", setupGenericStep1: "上記のIdP Metadata URLをコピーするか、Metadata XMLをダウンロードしてください。", setupGenericStep2: "SSO URLをコピーし、SPのIdPログインURLとして設定してください。", setupGenericStep3: "IdP署名証明書をダウンロードし、SPにアップロードしてください。", setupGenericStep4: "SPでEntity ID（Audience）とACS URLをここで登録した値と一致させてください。", setupSalesforceTitle: "Salesforce", setupSalesforceStep1: "Setup → Identity → Single Sign-On Settings → SAMLを有効にします。", setupSalesforceStep2: "「New」をクリックしてSAML SSO設定を作成します。", setupSalesforceStep3: "IssuerをIdP MetadataのEntity IDに設定します。", setupSalesforceStep4: "Identity Provider Login URLを上記のSSO URLに設定します。", setupSalesforceStep5: "IdP署名証明書をアップロードします。", setupAwsTitle: "AWS IAM Identity Center", setupAwsStep1: "AWS IAM Identity Center → Settings → Identity sourceを開きます。", setupAwsStep2: "「External identity provider」を選択します。", setupAwsStep3: "IdP Metadata XMLをアップロードするか、Issuer URLとSSO URLを手動入力します。", setupAwsStep4: "IdP署名証明書をアップロードします。", setupGoogleTitle: "Google Workspace", setupGoogleStep1: "管理コンソール → セキュリティ → 認証 → サードパーティIdPでのSSOを開きます。", setupGoogleStep2: "「サードパーティのIDプロバイダでSSOを設定する」にチェックを入れます。", setupGoogleStep3: "ログインページURLを上記のSSO URLに設定します。", setupGoogleStep4: "IdP検証証明書をアップロードします。" },
     errors: { tenantIdRequired: "テナントIDが必要です", invalidStatus: "無効なステータス", invalidIntent: "無効なインテント", unknown: "不明なエラー" },
     menu: { actions: "操作" },
   },
@@ -258,7 +349,7 @@ export default {
     statuses: { active: "active", inactive: "inactive", suspended: "suspended", pending: "pending" },
     errors: { serviceIdRequired: "サービスIDが必要です", invalidIntent: "無効なインテント", unknown: "不明なエラー" },
     detail: { metaTitle: "{{serviceName}} - サービス詳細 - Auth9", description: "サービス設定と統合", tabs: { configuration: "設定", integration: "統合", actions: "Actions（{{count}}）", branding: "ブランディング" }, configurationTitle: "設定", configurationDescription: "サービスの一般設定", saveChanges: "変更を保存", saving: "保存中...", clientsTitle: "Clients", clientsDescription: "認証情報（API Keys）", createClientTitle: "新しいClientを作成", createClientDescription: "このサービスの新しい認証情報セットを作成します。", clientDescriptionOptional: "説明（任意）", clientDescriptionPlaceholder: "e.g. Production Web App", create: "作成", copyClientId: "Client IDをコピー", noDescription: "説明なし", createdOn: "作成日: {{date}}", regenerateSecretTitle: "シークレットを再生成", regenerateSecretDescription: "シークレットを再生成しますか？古いシークレットは即座に無効になります。", regenerate: "再生成", deleteClientTitle: "Clientを削除", deleteClientDescription: "このClientを削除しますか？この操作は取り消せません。", noClients: "Clientが見つかりません。", integrationUnavailable: "統合情報を取得できません。Auth9 Coreが起動し、Keycloakに接続できることを確認してください。", secretDialogNewTitle: "Clientを作成しました", secretDialogRegeneratedTitle: "シークレットを再生成しました", secretDialogDescription: "Client Secretを今すぐコピーしてください。再度表示されません。", clientSecret: "Client Secret", clientCreated: "Client ID", brandingSaved: "サービスのブランディングを保存しました", close: "閉じる" },
-    integration: { clientsCredentials: "Clients & Credentials", clientsCredentialsDescription: "SDK統合用のClient IDとシークレット", noClientsConfigured: "Clientが設定されていません。設定タブでClientを作成してください。", public: "Public", confidential: "Confidential", publicNoSecret: "Public client - シークレット不要", hide: "非表示", reveal: "表示", copySecret: "シークレットをコピー", keycloakUnavailable: "取得できません - Keycloakを確認してください", environmentVariables: "環境変数", environmentVariablesDescription: "アプリケーションの.envファイルに追加してください", endpoints: "OAuth/OIDCエンドポイント", endpointsDescription: "OIDC統合用の標準エンドポイント", endpoint: "エンドポイント", url: "URL", sdkInitialization: "SDK初期化", sdkInitializationDescription: "アプリケーションのクイックスタートコード", endpointLabels: { authorize: "Authorize", token: "Token", callback: "Callback", logout: "Logout", userinfo: "UserInfo", openidConfiguration: "OIDC Discovery", jwks: "JWKS" } }, // pragma: allowlist secret
+    integration: { clientsCredentials: "Clients & Credentials", clientsCredentialsDescription: "SDK統合用のClient IDとシークレット", noClientsConfigured: "Clientが設定されていません。設定タブでClientを作成してください。", public: "Public", confidential: "Confidential", publicNoSecret: "Public client - シークレット不要", hide: "非表示", reveal: "表示", copySecret: "シークレットをコピー", clientSecretUnavailable: "クライアントシークレットを取得できません", environmentVariables: "環境変数", environmentVariablesDescription: "アプリケーションの.envファイルに追加してください", endpoints: "OAuth/OIDCエンドポイント", endpointsDescription: "OIDC統合用の標準エンドポイント", endpoint: "エンドポイント", url: "URL", sdkInitialization: "SDK初期化", sdkInitializationDescription: "アプリケーションのクイックスタートコード", endpointLabels: { authorize: "Authorize", token: "Token", callback: "Callback", logout: "Logout", userinfo: "UserInfo", openidConfiguration: "OIDC Discovery", jwks: "JWKS" } }, // pragma: allowlist secret
     branding: { systemDefaultTitle: "システムデフォルトのブランディングを使用中", systemDefaultDescription: "このサービスはシステム全体のブランディング設定を使用しています。カスタマイズして独自の見た目にできます。", customize: "ブランディングをカスタマイズ", title: "サービスブランディング", description: "このサービスのログインページの外観をカスタマイズします。システムデフォルトを上書きします。", companyIdentity: "企業情報", companyName: "会社名", companyNamePlaceholder: "Your Company Name", logoUrl: "Logo URL", logoUrlPlaceholder: "https://example.com/logo.png", faviconUrl: "Favicon URL", faviconUrlPlaceholder: "https://example.com/favicon.ico", loginOptions: "ログインオプション", allowRegistration: "登録を許可", allowRegistrationHint: "ログインページに「アカウント作成」リンクを表示", toggleAllowRegistration: "登録許可を切り替え", colors: "色", primaryColor: "プライマリカラー", secondaryColor: "セカンダリカラー", backgroundColor: "背景色", textColor: "文字色", customCss: "カスタムCSS", advanced: "詳細", customCssPlaceholder: ".login-form {\n  border-radius: 16px;\n}", saveBranding: "ブランディングを保存", resetToDefault: "デフォルトに戻す", chooseColor: "{{label}}を選択" },
   },
   serviceActions: {
@@ -291,6 +382,51 @@ export default {
   accountPasskeys: {
     loadError: "パスキーの読み込みに失敗しました", deleted: "パスキーを削除しました", operationFailed: "操作に失敗しました", invalidAction: "無効なアクション", title: "パスキー", description: "パスキーは、デバイスの生体認証（指紋、顔）や画面ロックを使って、パスワードなしで安全にサインインする方法です。", registering: "登録中...", add: "パスキーを追加", startFailed: "登録の開始に失敗しました", completeFailed: "登録の完了に失敗しました", cancelled: "登録がキャンセルされたか、タイムアウトしました。", registrationFailed: "登録に失敗しました", registered: "パスキーを登録しました！", passwordless: "パスワードレス", twoFactor: "二要素認証", yourPasskeys: "あなたのパスキー", addFirst: "最初のパスキーを追加", passkeyFallback: "パスキー",
     about: "パスキーについて", secureTitle: "より安全", secureDescription: "パスキーはフィッシングに強く、パスワードのように盗まれることはありません。", fastTitle: "高速で簡単", fastDescription: "デバイスの生体認証で、タッチや顔認証ですぐにサインインできます。", everywhereTitle: "どこでも使える", everywhereDescription: "同じアカウントでサインインしているデバイス間でパスキーが同期されます。",
+  },
+  accountMfa: {
+    loadError: "MFA ステータスの読み込みに失敗しました",
+    invalidAction: "無効なアクション",
+    title: "多要素認証 (MFA)",
+    description: "MFA 方式を管理してアカウントのセキュリティを強化します。",
+    totp: {
+      title: "TOTP 認証アプリ",
+      description: "認証アプリを使用してワンタイムパスワードを生成します。",
+      enabled: "有効",
+      notEnabled: "未設定",
+      setup: "TOTP を設定",
+      qrAlt: "TOTP 設定用 QR コード",
+      manualEntryToggle: "スキャンできない場合はキーを手動入力",
+      manualEntryLabel: "手動入力キー",
+      verifyDescription: "認証アプリの 6 桁のコードを入力して確認してください。",
+      cancel: "キャンセル",
+      remove: "TOTP を削除",
+      removeTitle: "TOTP 認証アプリを削除",
+      removeConfirm: "TOTP を削除してもよろしいですか？削除すると認証アプリでサインインできなくなります。",
+      removeSuccess: "TOTP 認証アプリを削除しました",
+      setupSuccess: "TOTP 認証アプリの設定が完了しました",
+      enrollFailed: "TOTP の登録開始に失敗しました",
+      retry: "再試行",
+    },
+    recovery: {
+      title: "リカバリーコード",
+      description: "認証アプリにアクセスできない場合、リカバリーコードでサインインできます。",
+      remaining: "残り {{count}} / 8 個",
+      warning: "リカバリーコードが残りわずかです。新しいコードの生成をお勧めします。",
+      generate: "新しいコードを生成",
+      generated: "リカバリーコードを生成しました",
+      generatedHint: "これらのコードを安全な場所に保存してください。各コードは一度だけ使用できます。このダイアログを閉じると再表示できません。",
+      copyAll: "すべてコピー",
+      copied: "コピーしました",
+      close: "保存しました、閉じる",
+      notAvailable: "リカバリーコードを使用するには、まず TOTP を設定してください。",
+    },
+    passkeys: {
+      title: "パスキー",
+      description: "生体認証やデバイスの画面ロックを使ったパスワードレスサインイン。",
+      enabled: "有効",
+      notEnabled: "未設定",
+      manage: "パスキーを管理",
+    },
   },
   accountIdentities: {
     loadError: "リンク済みアイデンティティの読み込みに失敗しました", notAuthenticated: "認証されていません", providerAliasRequired: "プロバイダーエイリアスが必要です", unlinkSuccess: "アイデンティティのリンクを解除しました", operationFailed: "操作に失敗しました", invalidAction: "無効なアクション", title: "リンク済みアイデンティティ", description: "Auth9アカウントに接続された外部アカウント。サードパーティプロバイダーでサインインできます。", linkAnother: "別のアイデンティティをリンク", linkAnotherDescription: "このアカウントに追加のサインイン方法を接続するため、検証済みプロバイダーフローを開始します。", linkAction: "{{provider}}をリンク", linkedOn: "{{date}}にリンク", unlink: "リンク解除", noIdentities: "リンク済みアイデンティティがありません", noIdentitiesWithProviders: "まだ外部アカウントを接続していません。上のリンクアクションで今すぐ追加できます。", noIdentitiesWithoutProviders: "まだ外部アカウントを接続していません。プロバイダーが有効になれば、ここでリンクできます。",
@@ -341,6 +477,9 @@ export default {
     notFound: "リクエストされたリソースが見つかりません。",
     badRequest: "リクエストが無効です。入力内容をご確認ください。",
     unauthorized: "セッションの有効期限が切れました。再度ログインしてください。",
+    invalidCredentials: "メールアドレスまたはパスワードが無効です。",
+    invalidTotpCode: "無効な認証コードです。もう一度お試しください。",
+    invalidRecoveryCode: "無効または使用済みのリカバリーコードです。",
     forbidden: "この操作を実行する権限がありません。",
     conflict: "この識別子のリソースはすでに存在します。",
     serverError: "サーバーエラーが発生しました。しばらくしてから再度お試しください。",

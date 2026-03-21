@@ -9,7 +9,7 @@ import { useFormatters } from "~/i18n/format";
 import { useI18n } from "~/i18n";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { analyticsApi, type LoginEvent } from "~/services/api";
-import { getAccessToken, getSession } from "~/services/session.server";
+import { getAccessToken } from "~/services/session.server";
 import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
 
@@ -27,11 +27,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const perPage = 20;
   const email = url.searchParams.get("email") || undefined;
 
-  const session = await getSession(request);
-  const tenantId = session?.activeTenantId;
-
   try {
-    const response = await analyticsApi.listEvents(page, perPage, email, accessToken, tenantId);
+    const response = await analyticsApi.listEvents(page, perPage, email, accessToken);
     return { events: response.data, pagination: response.pagination, email };
   } catch {
     return {

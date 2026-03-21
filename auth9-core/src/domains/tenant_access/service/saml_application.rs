@@ -1,8 +1,9 @@
 //! SAML Application service — business logic for SAML IdP outbound
 
 use crate::error::{AppError, Result};
-use crate::keycloak::KeycloakClient;
-use crate::keycloak::{KeycloakProtocolMapper, KeycloakSamlClient};
+use crate::identity_engine::{
+    IdentityEngine, IdentityProtocolMapperRepresentation, IdentitySamlClientRepresentation,
+};
 use crate::models::common::StringUuid;
 use crate::models::saml_application::{
     validate_attribute_mappings, AttributeMapping, CertificateInfo, CreateSamlApplicationInput,
@@ -17,12 +18,15 @@ use validator::Validate;
 
 pub struct SamlApplicationService<R: SamlApplicationRepository> {
     repo: Arc<R>,
-    keycloak: Arc<KeycloakClient>,
+    identity_engine: Arc<dyn IdentityEngine>,
 }
 
 impl<R: SamlApplicationRepository> SamlApplicationService<R> {
-    pub fn new(repo: Arc<R>, keycloak: Arc<KeycloakClient>) -> Self {
-        Self { repo, keycloak }
+    pub fn new(repo: Arc<R>, identity_engine: Arc<dyn IdentityEngine>) -> Self {
+        Self {
+            repo,
+            identity_engine,
+        }
     }
 
     /// Create a new SAML Application
@@ -65,8 +69,8 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             .as_ref()
             .unwrap_or(&NameIdFormat::Email);
 
-        // Build Keycloak SAML Client
-        let kc_client = build_keycloak_saml_client(
+        // Build SAML Client representation
+        let kc_client = build_saml_client_representation(
             &input.name,
             &input.entity_id,
             &input.acs_url,
@@ -79,8 +83,12 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             &input.attribute_mappings,
         );
 
-        // Create in Keycloak
-        let kc_client_uuid = self.keycloak.create_saml_client(&kc_client).await?;
+        // Create in identity engine
+        let kc_client_uuid = self
+            .identity_engine
+            .client_store()
+            .create_saml_client(&kc_client)
+            .await?;
 
         // Build domain model
         let app = SamlApplication {
@@ -96,7 +104,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             encrypt_assertions: input.encrypt_assertions,
             sp_certificate: input.sp_certificate,
             attribute_mappings: input.attribute_mappings,
-            keycloak_client_id: kc_client_uuid,
+            backend_client_id: kc_client_uuid,
             enabled: true,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -142,7 +150,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
 
         let existing = self.find_owned(tenant_id, app_id).await?;
 
-        // Rebuild Keycloak client with merged values
+        // Rebuild SAML client representation with merged values
         let name = input.name.as_ref().unwrap_or(&existing.name);
         let acs_url = input.acs_url.as_ref().unwrap_or(&existing.acs_url);
         let slo_url = input
@@ -177,7 +185,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             ));
         }
 
-        let mut kc_client = build_keycloak_saml_client(
+        let mut kc_client = build_saml_client_representation(
             name,
             &existing.entity_id,
             acs_url,
@@ -189,11 +197,12 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             sp_certificate,
             attribute_mappings,
         );
-        kc_client.id = Some(existing.keycloak_client_id.clone());
+        kc_client.id = Some(existing.backend_client_id.clone());
         kc_client.enabled = enabled;
 
-        self.keycloak
-            .update_saml_client(&existing.keycloak_client_id, &kc_client)
+        self.identity_engine
+            .client_store()
+            .update_saml_client(&existing.backend_client_id, &kc_client)
             .await?;
 
         let updated = self.repo.update(app_id, &input).await?;
@@ -204,9 +213,10 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
     pub async fn delete(&self, tenant_id: StringUuid, app_id: StringUuid) -> Result<()> {
         let existing = self.find_owned(tenant_id, app_id).await?;
 
-        // Delete from Keycloak first
-        self.keycloak
-            .delete_saml_client(&existing.keycloak_client_id)
+        // Delete from identity engine first
+        self.identity_engine
+            .client_store()
+            .delete_saml_client(&existing.backend_client_id)
             .await?;
 
         // Delete from database
@@ -227,7 +237,10 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
     ) -> Result<String> {
         // Verify the app exists and belongs to the tenant
         let _app = self.find_owned(tenant_id, app_id).await?;
-        self.keycloak.get_saml_idp_descriptor().await
+        self.identity_engine
+            .client_store()
+            .get_saml_idp_descriptor()
+            .await
     }
 
     /// Get IdP signing certificate in PEM format
@@ -252,6 +265,20 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
     ) -> Result<CertificateInfo> {
         let _app = self.find_owned(tenant_id, app_id).await?;
         let cert_base64 = self.find_active_signing_cert().await?;
+
+        // If no real certificate is available yet, return a placeholder response
+        if base64::engine::general_purpose::STANDARD
+            .decode(&cert_base64)
+            .is_err()
+        {
+            return Ok(CertificateInfo {
+                certificate_pem: String::new(),
+                expires_at: Utc::now(),
+                expires_soon: false,
+                days_until_expiry: -1,
+            });
+        }
+
         let (pem, expires_at) = parse_certificate_expiry(&cert_base64)?;
         let days_until_expiry = (expires_at - chrono::Utc::now()).num_days();
         Ok(CertificateInfo {
@@ -262,20 +289,12 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
         })
     }
 
-    /// Find the active RSA signing certificate from Keycloak realm keys
+    /// Find the active RSA signing certificate from identity engine realm keys
     async fn find_active_signing_cert(&self) -> Result<String> {
-        let keys = self.keycloak.get_realm_keys().await?;
-        keys.keys
-            .iter()
-            .find(|k| {
-                k.status.as_deref() == Some("ACTIVE")
-                    && k.key_use.as_deref() == Some("SIG")
-                    && k.key_type.as_deref() == Some("RSA")
-            })
-            .and_then(|k| k.certificate.clone())
-            .ok_or_else(|| {
-                AppError::Internal(anyhow::anyhow!("No active RSA signing certificate found"))
-            })
+        self.identity_engine
+            .client_store()
+            .get_active_signing_certificate()
+            .await
     }
 
     /// Find an app and verify it belongs to the tenant
@@ -301,11 +320,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
 
     /// Convert domain model to API response with computed SSO URL
     fn to_response(&self, app: SamlApplication) -> SamlApplicationResponse {
-        let sso_url = format!(
-            "{}/realms/{}/protocol/saml",
-            self.keycloak.public_url(),
-            self.keycloak.realm()
-        );
+        let sso_url = self.identity_engine.client_store().saml_sso_url();
         SamlApplicationResponse { app, sso_url }
     }
 }
@@ -315,7 +330,10 @@ fn parse_certificate_expiry(cert_base64: &str) -> Result<(String, DateTime<Utc>)
     let der_bytes = base64::engine::general_purpose::STANDARD
         .decode(cert_base64)
         .map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to decode certificate base64: {}", e))
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to decode certificate base64: {}",
+                e
+            ))
         })?;
 
     let (_, cert) = x509_parser::parse_x509_certificate(&der_bytes).map_err(|e| {
@@ -324,8 +342,10 @@ fn parse_certificate_expiry(cert_base64: &str) -> Result<(String, DateTime<Utc>)
 
     let not_after = cert.validity().not_after;
     let offset_dt = not_after.to_datetime();
-    let expires_at = DateTime::<Utc>::from_timestamp(offset_dt.unix_timestamp(), 0)
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Invalid certificate expiry timestamp")))?;
+    let expires_at =
+        DateTime::<Utc>::from_timestamp(offset_dt.unix_timestamp(), 0).ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Invalid certificate expiry timestamp"))
+        })?;
 
     let pem = format!(
         "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----",
@@ -335,9 +355,9 @@ fn parse_certificate_expiry(cert_base64: &str) -> Result<(String, DateTime<Utc>)
     Ok((pem, expires_at))
 }
 
-/// Build a Keycloak SAML Client representation from Auth9 input
+/// Build a SAML Client representation from Auth9 input
 #[allow(clippy::too_many_arguments)]
-fn build_keycloak_saml_client(
+fn build_saml_client_representation(
     name: &str,
     entity_id: &str,
     acs_url: &str,
@@ -348,7 +368,7 @@ fn build_keycloak_saml_client(
     encrypt_assertions: bool,
     sp_certificate: Option<&str>,
     attribute_mappings: &[AttributeMapping],
-) -> KeycloakSamlClient {
+) -> IdentitySamlClientRepresentation {
     let mut attributes = HashMap::new();
 
     // SAML signing/encryption settings
@@ -362,7 +382,7 @@ fn build_keycloak_saml_client(
     );
     attributes.insert("saml.encrypt".to_string(), encrypt_assertions.to_string());
 
-    // NameID format — Keycloak uses short names
+    // NameID format — uses short names
     let kc_name_id = match name_id_format {
         NameIdFormat::Email => "email",
         NameIdFormat::Persistent => "persistent",
@@ -396,7 +416,7 @@ fn build_keycloak_saml_client(
 
     let protocol_mappers = build_protocol_mappers(attribute_mappings);
 
-    KeycloakSamlClient {
+    IdentitySamlClientRepresentation {
         id: None,
         client_id: entity_id.to_string(),
         name: Some(name.to_string()),
@@ -409,14 +429,24 @@ fn build_keycloak_saml_client(
     }
 }
 
-/// Convert Auth9 attribute mappings to Keycloak SAML Protocol Mappers
-fn build_protocol_mappers(mappings: &[AttributeMapping]) -> Vec<KeycloakProtocolMapper> {
+/// Convert Auth9 attribute mappings to identity engine SAML Protocol Mappers.
+///
+/// For `tenant_roles`: uses `saml-role-list-mapper` which emits the user's role
+/// assignments as a multi-valued SAML attribute. Requires that Auth9 tenant roles
+/// are synced to the identity engine's role model.
+///
+/// For `tenant_permissions`: uses `saml-user-attribute-idp-mapper` with the
+/// namespaced attribute `auth9.tenant.permissions`. Requires that resolved
+/// permissions are synced to the identity engine's user attributes.
+fn build_protocol_mappers(
+    mappings: &[AttributeMapping],
+) -> Vec<IdentityProtocolMapperRepresentation> {
     mappings
         .iter()
         .map(|m| {
             let mut config = HashMap::new();
 
-            // Map source to Keycloak user attribute or property
+            // Map source to identity engine user attribute or property
             let (mapper_type, user_attr) = match m.source.as_str() {
                 "email" => ("saml-user-property-idp-mapper", "email"),
                 "first_name" => ("saml-user-property-idp-mapper", "firstName"),
@@ -424,7 +454,9 @@ fn build_protocol_mappers(mappings: &[AttributeMapping]) -> Vec<KeycloakProtocol
                 "user_id" => ("saml-user-property-idp-mapper", "id"),
                 "display_name" => ("saml-user-attribute-idp-mapper", "displayName"),
                 "tenant_roles" => ("saml-role-list-mapper", ""),
-                "tenant_permissions" => ("saml-user-attribute-idp-mapper", "permissions"),
+                "tenant_permissions" => {
+                    ("saml-user-attribute-idp-mapper", "auth9.tenant.permissions")
+                }
                 _ => ("saml-user-attribute-idp-mapper", m.source.as_str()),
             };
 
@@ -444,7 +476,7 @@ fn build_protocol_mappers(mappings: &[AttributeMapping]) -> Vec<KeycloakProtocol
                 config.insert("friendly.name".to_string(), friendly.clone());
             }
 
-            KeycloakProtocolMapper {
+            IdentityProtocolMapperRepresentation {
                 name: format!("auth9-{}", m.source),
                 protocol: "saml".to_string(),
                 protocol_mapper: mapper_type.to_string(),
@@ -462,18 +494,14 @@ mod tests {
     use chrono::Utc;
     use mockall::predicate::*;
 
-    fn test_keycloak() -> Arc<KeycloakClient> {
-        Arc::new(KeycloakClient::new(crate::config::KeycloakConfig {
-            url: "http://localhost:8080".to_string(),
-            public_url: "http://localhost:8081".to_string(),
-            realm: "auth9".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "".to_string(),
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        }))
+    fn test_identity_engine() -> Arc<dyn IdentityEngine> {
+        use crate::identity_engine::adapters::auth9_oidc::Auth9OidcIdentityEngineAdapter;
+        use crate::repository::social_provider::MockSocialProviderRepository;
+
+        let pool = sqlx::MySqlPool::connect_lazy("mysql://fake:fake@localhost/fake").unwrap();
+        let social_repo: Arc<dyn crate::repository::SocialProviderRepository> =
+            Arc::new(MockSocialProviderRepository::new());
+        Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo, None))
     }
 
     fn make_test_app(tenant_id: StringUuid) -> SamlApplication {
@@ -490,7 +518,7 @@ mod tests {
             encrypt_assertions: false,
             sp_certificate: None,
             attribute_mappings: vec![],
-            keycloak_client_id: "kc-uuid-123".to_string(),
+            backend_client_id: "kc-uuid-123".to_string(),
             enabled: true,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -498,8 +526,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_saml_client_basic() {
-        let kc = build_keycloak_saml_client(
+    fn test_build_saml_client_representation_basic() {
+        let kc = build_saml_client_representation(
             "My SP",
             "https://sp.example.com",
             "https://sp.example.com/acs",
@@ -529,8 +557,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_saml_client_with_slo_and_cert() {
-        let kc = build_keycloak_saml_client(
+    fn test_build_saml_client_representation_with_slo_and_cert() {
+        let kc = build_saml_client_representation(
             "SP with SLO",
             "https://sp.example.com",
             "https://sp.example.com/acs",
@@ -605,6 +633,30 @@ mod tests {
     }
 
     #[test]
+    fn test_build_protocol_mappers_tenant_permissions() {
+        let mappings = vec![AttributeMapping {
+            source: "tenant_permissions".to_string(),
+            saml_attribute: "http://schemas.auth9.com/claims/permissions".to_string(),
+            friendly_name: Some("permissions".to_string()),
+        }];
+
+        let mappers = build_protocol_mappers(&mappings);
+        assert_eq!(mappers.len(), 1);
+        assert_eq!(
+            mappers[0].protocol_mapper,
+            "saml-user-attribute-idp-mapper"
+        );
+        assert_eq!(
+            mappers[0].config.get("user.attribute"),
+            Some(&"auth9.tenant.permissions".to_string())
+        );
+        assert_eq!(
+            mappers[0].config.get("friendly.name"),
+            Some(&"permissions".to_string())
+        );
+    }
+
+    #[test]
     fn test_build_protocol_mappers_multiple() {
         let mappings = vec![
             AttributeMapping {
@@ -649,9 +701,9 @@ mod tests {
             .with(eq(tenant_id), eq("https://sp.test.com"))
             .returning(move |tid, _| Ok(Some(make_test_app(tid))));
 
-        let keycloak = test_keycloak();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let input = CreateSamlApplicationInput {
             name: "Duplicate SP".to_string(),
@@ -686,9 +738,9 @@ mod tests {
             .with(eq(app_id))
             .returning(|_| Ok(None));
 
-        let keycloak = test_keycloak();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.get(tenant_id, app_id).await;
         assert!(result.is_err());
@@ -707,9 +759,9 @@ mod tests {
             .with(eq(app_id))
             .returning(move |_| Ok(Some(make_test_app(other_tenant))));
 
-        let keycloak = test_keycloak();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.get(tenant_id, app_id).await;
         assert!(result.is_err());
@@ -725,9 +777,9 @@ mod tests {
             .with(eq(tenant_id))
             .returning(|_| Ok(vec![]));
 
-        let keycloak = test_keycloak();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.list(tenant_id).await.unwrap();
         assert!(result.is_empty());
@@ -741,8 +793,8 @@ mod tests {
         mock.expect_find_by_tenant_and_entity_id()
             .returning(|_, _| Ok(None));
 
-        let keycloak = test_keycloak();
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let identity_engine = test_identity_engine();
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let input = CreateSamlApplicationInput {
             name: "Encrypted SP".to_string(),
@@ -778,8 +830,8 @@ mod tests {
             .with(eq(app_id))
             .returning(move |_| Ok(Some(make_test_app(tenant_id))));
 
-        let keycloak = test_keycloak();
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let identity_engine = test_identity_engine();
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let input = UpdateSamlApplicationInput {
             name: None,
@@ -805,8 +857,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_keycloak_saml_client_without_slo() {
-        let kc = build_keycloak_saml_client(
+    fn test_build_saml_client_representation_without_slo() {
+        let kc = build_saml_client_representation(
             "No SLO SP",
             "https://sp.example.com",
             "https://sp.example.com/acs",
@@ -886,15 +938,13 @@ QRuQujMkNHI=";
             .with(eq(tenant_id))
             .returning(move |tid| Ok(vec![make_test_app(tid)]));
 
-        let keycloak = test_keycloak();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.list(tenant_id).await.unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0].sso_url,
-            "http://localhost:8081/realms/auth9/protocol/saml"
-        );
+        // Auth9Oidc adapter returns empty SSO URL (will be populated after FR4 config refactor)
+        assert_eq!(result[0].sso_url, "");
     }
 }

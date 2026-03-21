@@ -4,7 +4,7 @@
 //!   serve   - Start the API server (default)
 //!   init    - Run migrations and seed default data
 //!   migrate - Run database migrations only
-//!   seed    - Seed Keycloak with default data only
+//!   seed    - Seed default data only
 //!   reset   - Reset database (drop all tables)
 //!   openapi - Export OpenAPI spec to stdout (JSON)
 
@@ -29,7 +29,7 @@ enum Commands {
     Init,
     /// Run database migrations only
     Migrate,
-    /// Seed Keycloak with default data only
+    /// Seed default data only
     Seed,
     /// Reset database (drop all tables)
     Reset,
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
         Some(Commands::Init) => {
             info!("Running init (migrate + seed)...");
             migration::run_migrations(&config).await?;
-            migration::seed_keycloak(&config).await?;
+            migration::seed_services(&config).await?;
             info!("Init completed successfully");
         }
         Some(Commands::Migrate) => {
@@ -65,8 +65,8 @@ async fn main() -> Result<()> {
             info!("Migrations completed successfully");
         }
         Some(Commands::Seed) => {
-            info!("Seeding Keycloak with default data...");
-            migration::seed_keycloak(&config).await?;
+            info!("Seeding services with default data...");
+            migration::seed_services(&config).await?;
             info!("Seed completed successfully");
         }
         Some(Commands::Openapi) => {
