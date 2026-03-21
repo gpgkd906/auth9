@@ -47,55 +47,51 @@
 
 ---
 
-## 场景 2：切换到 `auth9_oidc` stub backend 后最小 wiring 仍成立
+## 场景 2：auth9_oidc backend wiring 验证
 
-### 步骤 0：验证 backend 配置
-
-```bash
-echo "${IDENTITY_BACKEND:-keycloak}"
-# 预期: 如需测试本场景，应显式启动为 auth9_oidc；若输出不是 auth9_oidc，请按步骤 1 重启服务
-```
+> **已完成/已淘汰**: Phase 5 FR3 已完全移除 Keycloak 代码路径，`backend_switch_smoke_test` 测试目标已被删除。auth9_oidc 现在是唯一的 identity backend，无需再验证 backend 切换。以下改为验证 `identity_engine` 相关测试通过。
 
 ### 初始状态
 - Rust 依赖已安装
 - 本地可执行 `cargo test`
 
 ### 目的
-验证 `auth9_oidc` backend 仍具备最小 wiring 与 smoke test，不因 Phase 1 抽象化回归而失效。
+验证 auth9_oidc backend 的 identity engine wiring 正常工作。
 
 ### 测试操作流程
-1. 执行 smoke test：
+1. 执行 identity engine 测试：
    ```bash
-   cd auth9-core && cargo test --test backend_switch_smoke_test -- --nocapture
+   cd auth9-core && cargo test identity_engine -- --nocapture
    ```
-2. 如需手动启动验证，使用：
+2. 验证健康端点：
    ```bash
-   IDENTITY_BACKEND=auth9_oidc cargo run --manifest-path auth9-core/Cargo.toml -- serve 2>&1 | tee /tmp/auth9-phase1-auth9-oidc.log
+   curl -sf http://localhost:8080/health
    ```
 
 ### 预期结果
-- `backend_switch_smoke_test` 通过
-- `IdentityBackend::Auth9Oidc` 分支可完成 `session_store`、`federation_broker`、`identity_engine` 注入
-- 未实现操作返回显式错误，不出现 wiring panic
+- `cargo test identity_engine` 通过
+- auth9_oidc 为当前唯一 identity backend，`session_store`、`federation_broker`、`identity_engine` 注入链正常
+- `/health` 返回 200
 
 ---
 
-## 场景 3：adapter contract 与业务抽象边界保持稳定
+## 场景 3：业务抽象边界保持稳定（Keycloak 已移除）
+
+> **已更新**: Phase 5 FR3 已完全移除 Keycloak 代码路径，`keycloak_adapter_contract_test` 测试目标已被删除。本场景改为验证 identity engine 测试通过且业务层无 Keycloak 直接依赖残留。
 
 ### 初始状态
 - Rust 依赖已安装
 - 本地可执行 `cargo test` 与 `rg`
 
 ### 目的
-验证 adapter contract 持续成立，且目标业务层文件不回退为直接依赖 `KeycloakClient`。
+验证 identity engine 抽象边界稳定，且目标业务层文件不包含已移除的 `KeycloakClient` 直接依赖。
 
 ### 测试操作流程
-1. 执行 contract 回归：
+1. 执行 identity engine 测试：
    ```bash
    cd auth9-core && cargo test identity_engine -- --nocapture
-   cd auth9-core && cargo test --test keycloak_adapter_contract_test -- --nocapture
    ```
-2. 扫描目标服务文件的非测试区域：
+2. 扫描目标服务文件的非测试区域，确认无 Keycloak 残留依赖：
    ```bash
    for f in \
      auth9-core/src/domains/tenant_access/service/user.rs \
@@ -109,9 +105,9 @@ echo "${IDENTITY_BACKEND:-keycloak}"
    ```
 
 ### 预期结果
-- `identity_engine` 与 `keycloak_adapter_contract_test` 通过
+- `cargo test identity_engine` 通过
 - 目标服务实现文件的非测试区域无 `KeycloakClient` 命中
-- `keycloak` backend 仍通过 adapter 暴露中性 contract
+- Keycloak 代码路径已在 Phase 5 FR3 中完全移除，业务层仅通过 `IdentityEngine` 抽象访问身份服务
 
 ---
 
@@ -146,6 +142,6 @@ echo "${IDENTITY_BACKEND:-keycloak}"
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
 | 1 | 默认 `keycloak` backend 启动与注入链正常 | ☑ | 2026-03-17 | Codex | `docker inspect` 未发现 `IDENTITY_BACKEND` 覆盖，默认回落 `keycloak`；`/health` 返回 healthy |
-| 2 | 切换到 `auth9_oidc` stub backend 后最小 wiring 仍成立 | ☑ | 2026-03-17 | Codex | `cargo test --test backend_switch_smoke_test -- --nocapture` 2/2 通过 |
-| 3 | adapter contract 与业务抽象边界保持稳定 | ☑ | 2026-03-17 | Codex | `identity_engine` 与 `--test keycloak_adapter_contract_test` 通过；非测试区域扫描无 `KeycloakClient` 命中 |
+| 2 | auth9_oidc backend wiring 验证 | ☑ | 2026-03-17 | Codex | `backend_switch_smoke_test` 已在 Phase 5 FR3 中移除；改用 `cargo test identity_engine` 验证 |
+| 3 | 业务抽象边界保持稳定（Keycloak 已移除） | ☑ | 2026-03-17 | Codex | `keycloak_adapter_contract_test` 已在 Phase 5 FR3 中移除；`identity_engine` 通过；非测试区域扫描无 `KeycloakClient` 命中 |
 | 4 | 中性字段成为 QA 主断言路径 | ☑ | 2026-03-17 | Codex | `rg` 确认 `identity_subject` / `provider_session_id` / `provider_alias` 已成为 QA 主断言字段 |

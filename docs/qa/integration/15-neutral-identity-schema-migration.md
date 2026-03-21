@@ -60,7 +60,7 @@ SHOW INDEX FROM enterprise_sso_connectors WHERE Key_name='idx_enterprise_sso_pro
 
 ---
 
-## 场景 2：创建用户后 API 与数据库优先返回 `identity_subject`
+## 场景 2：创建用户后数据库包含 `identity_subject`（API 不暴露该内部字段）
 
 ### 初始状态
 - 已获取平台管理员 Identity Token：
@@ -69,7 +69,7 @@ TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
 ```
 
 ### 目的
-验证用户创建路径已把中性字段作为主读写语义。
+验证用户创建路径已把中性字段写入数据库。`identity_subject` 是内部字段（User 模型上标记了 `#[serde(skip_serializing)]`），不会出现在 API 响应中，需通过 SQL 查询验证。
 
 ### 测试操作流程
 1. 创建用户：
@@ -80,7 +80,7 @@ curl -X POST 'http://localhost:8080/api/v1/users' \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"display_name\":\"Neutral Model QA\"}"
 ```
-2. 查询数据库：
+2. 查询数据库验证 `identity_subject` 已写入：
 ```bash
 mysql -h 127.0.0.1 -P 4000 -u root auth9 -e "
 SELECT email, identity_subject, keycloak_id
@@ -91,7 +91,7 @@ WHERE email = '$EMAIL';
 
 ### 预期结果
 - HTTP 状态码 `201`
-- 返回体 `data.identity_subject` 非空，不再暴露 `data.keycloak_id`
+- API 返回体中 **不包含** `identity_subject` 字段（该字段通过 `#[serde(skip_serializing)]` 排除，属于内部字段），也不暴露 `keycloak_id`
 - 数据库中 `identity_subject` 非空，且在当前 migration period 下与 `keycloak_id` 保持一致
 
 ---

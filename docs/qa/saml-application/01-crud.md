@@ -192,6 +192,8 @@ curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/saml-apps/{app_id}" \
 - **单个**：HTTP 200，返回完整数据（含 `sso_url`、`attribute_mappings`）
 - 每条记录包含 `sso_url` 字段，指向 Auth9 SAML SSO 端点
 
+> **注意**: `sso_url` 的值依赖 `AUTH9_CORE_PUBLIC_URL` 环境变量。在默认 Docker 开发环境中，该变量可能未设置，导致 `sso_url` 为空字符串或使用 localhost 地址。这是预期行为，不是 bug。生产环境中应配置 `AUTH9_CORE_PUBLIC_URL` 为实际的公开访问 URL。
+
 ---
 
 ## 场景 4：更新 SAML Application

@@ -8,6 +8,27 @@
 **OWASP ASVS 5.0**: V6.7,V6.8,V7.3
 **回归任务映射**: Backlog #20
 
+---
+
+> **前置条件（所有场景通用）**: 本文档中的所有场景均需要至少一个已启用 TOTP 的用户账户。默认 Docker 开发环境（`./scripts/reset-docker.sh`）**不会** 自动创建 TOTP 用户。测试前需手动设置：
+>
+> **通过 Portal UI 设置 TOTP 用户**:
+> 1. 以管理员身份登录 Portal（http://localhost:3000）
+> 2. 进入用户详情页，找到「Security」/「Multi-Factor Authentication」区域
+> 3. 点击「Enable TOTP」，使用 Google Authenticator 等应用扫描二维码完成注册
+>
+> **通过 API 设置 TOTP 用户**:
+> ```bash
+> # 1. 开始 TOTP 注册（获取 secret 和 QR code）
+> curl -s -X POST http://localhost:8080/api/v1/mfa/totp/enroll \
+>   -H "Authorization: Bearer $TOKEN" | jq .
+>
+> # 2. 使用 Authenticator 应用生成验证码，完成注册
+> curl -s -X POST http://localhost:8080/api/v1/mfa/totp/enroll/verify \
+>   -H "Authorization: Bearer $TOKEN" \
+>   -H "Content-Type: application/json" \
+>   -d '{"code": "123456"}'
+> ```
 
 ---
 

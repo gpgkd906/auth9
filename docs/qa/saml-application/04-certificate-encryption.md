@@ -92,6 +92,8 @@ curl -s -o /dev/null -w "%{http_code}" \
   - `expires_soon`：布尔值（剩余天数 < 30 时为 `true`）
 - 无 Token 时返回 401
 
+> **注意（占位证书环境）**: 在未配置真实 RSA 签名密钥的全新环境中，OIDC 引擎使用占位证书。此时 `certificate-info` 端点会返回 HTTP 200 并携带 `days_until_expiry: -1`（表示占位证书无有效过期信息），而非返回 500 错误。这是预期行为，不是 bug。
+
 ---
 
 ## 场景 3：Assertion 加密 — 缺少 SP 证书被拒绝
@@ -239,11 +241,13 @@ SELECT slo_url FROM saml_applications WHERE keycloak_client_id = '$KC_CLIENT_ID'
 ### 预期结果
 - 列表中每个 SAML Application 显示：
   - 「Download IdP Certificate」链接，点击后下载 `idp-signing.crt` 文件
-  - 证书状态 badge：
+  - 证书状态 badge（`CertExpiryBadge` 组件）：
     - 绿色 "Valid (N days)" — 剩余 > 30 天
     - 黄色 "Expires in N days" — 剩余 < 30 天
     - 红色 "Certificate expired" — 已过期
 - 下载的证书文件为有效 PEM 格式
+
+> **注意**: `CertExpiryBadge` 组件仅在证书信息可用时渲染。如果 badge 未显示，通常是上游 `certificate-info` API 调用失败（例如占位证书环境返回 `days_until_expiry: -1`）导致数据不可用。这不是 Portal 组件缺失的问题。
 - 开启加密后：
   - SP Certificate 字段标记为必填（红色 `*`）
   - 字段边框变为黄色高亮

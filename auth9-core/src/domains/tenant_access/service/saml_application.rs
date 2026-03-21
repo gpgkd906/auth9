@@ -265,6 +265,20 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
     ) -> Result<CertificateInfo> {
         let _app = self.find_owned(tenant_id, app_id).await?;
         let cert_base64 = self.find_active_signing_cert().await?;
+
+        // If no real certificate is available yet, return a placeholder response
+        if base64::engine::general_purpose::STANDARD
+            .decode(&cert_base64)
+            .is_err()
+        {
+            return Ok(CertificateInfo {
+                certificate_pem: String::new(),
+                expires_at: Utc::now(),
+                expires_soon: false,
+                days_until_expiry: -1,
+            });
+        }
+
         let (pem, expires_at) = parse_certificate_expiry(&cert_base64)?;
         let days_until_expiry = (expires_at - chrono::Utc::now()).num_days();
         Ok(CertificateInfo {
