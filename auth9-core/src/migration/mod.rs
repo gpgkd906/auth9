@@ -417,8 +417,8 @@ async fn seed_demo_service(config: &Config) -> Result<()> {
     // Create client
     let client_result = sqlx::query(
         r#"
-        INSERT IGNORE INTO clients (id, service_id, client_id, client_secret_hash, name, created_at)
-        VALUES (?, ?, ?, ?, 'Auth9 Demo Client', NOW())
+        INSERT IGNORE INTO clients (id, service_id, client_id, client_secret_hash, name, public_client, created_at)
+        VALUES (?, ?, ?, ?, 'Auth9 Demo Client', TRUE, NOW())
         "#,
     )
     .bind(&client_record_id)
@@ -429,11 +429,18 @@ async fn seed_demo_service(config: &Config) -> Result<()> {
     .await
     .context("Failed to create demo client")?;
 
+    // Ensure demo client is marked as public (idempotent for existing deployments)
+    sqlx::query("UPDATE clients SET public_client = TRUE WHERE client_id = ? AND public_client = FALSE")
+        .bind(DEFAULT_DEMO_CLIENT_ID)
+        .execute(&pool)
+        .await
+        .context("Failed to update demo client public_client flag")?;
+
     pool.close().await;
 
     if client_result.rows_affected() > 0 {
         info!(
-            "Created demo service and client '{}' in database",
+            "Created demo service and public client '{}' in database",
             DEFAULT_DEMO_CLIENT_ID
         );
     } else {
