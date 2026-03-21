@@ -188,14 +188,14 @@ export default function EmailSettingsPage() {
   };
 
   useEffect(() => {
-    if (actionData && "success" in actionData && actionData.success && isTestEmailOpen) {
+    if (actionData && "success" in actionData && actionData.success) {
       const isSendTest = actionData.message && String(actionData.message).startsWith("Test email sent");
-      if (!isSendTest) {
-        setIsTestEmailOpen(false);
+      if (isSendTest) {
+        // Keep dialog open to show success message; clear input for next send
         setTestEmail("");
       }
     }
-  }, [actionData, isTestEmailOpen]);
+  }, [actionData]);
 
   return (
     <div className="space-y-6">

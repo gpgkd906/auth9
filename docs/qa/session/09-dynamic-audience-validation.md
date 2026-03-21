@@ -45,10 +45,15 @@ docker exec auth9-redis redis-cli SMEMBERS auth9:valid_audiences
 ### 目的
 验证启动时 `clients` 表中所有 `client_id` 被加载到 Redis SET
 
+> **⚠️ 注意: Docker 环境中实际存在的 seeded clients**
+> Docker 环境中通过 seed 数据创建的 client_id 为：`auth9-portal`、`auth9-demo`、`auth9-m2m-test`。
+> 其他 client_id（如单元测试中使用的 `existing-client`）仅存在于单元测试常量中，不会出现在 Docker 环境的数据库中。
+> 测试时请以 `SELECT client_id FROM clients` 的实际查询结果为准，不要假设某个 client_id 存在。
+
 ### 测试操作流程
 
 ```bash
-# 查询 DB 中的 client_id
+# 查询 DB 中的 client_id（Docker 环境预期为 auth9-portal, auth9-demo, auth9-m2m-test 加上任何通过 API 创建的 client）
 mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT client_id FROM clients ORDER BY client_id;"
 
 # 查询 Redis SET
@@ -56,7 +61,7 @@ docker exec auth9-redis redis-cli SMEMBERS auth9:valid_audiences
 ```
 
 ### 预期结果
-- Redis SET 包含 DB 中所有 `client_id`
+- Redis SET 包含 DB 中所有 `client_id`（以 DB 查询结果为准，不假设特定 client 存在）
 - 如果 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 环境变量非空，其值也在 SET 中
 - 启动日志包含 `Audience validation set loaded into Redis` 及 count
 
@@ -66,7 +71,7 @@ docker exec auth9-redis redis-cli SMEMBERS auth9:valid_audiences
 
 ### 初始状态
 - 用户属于 `{tenant_id}`
-- 已知至少两个不同的 client_id（如 `auth9-portal`、`auth9-demo`）
+- 已知至少两个不同的 client_id（Docker seed 数据包含：`auth9-portal`、`auth9-demo`、`auth9-m2m-test`）
 
 ### 目的
 验证 middleware 不再硬编码 audience 白名单，所有已注册 client 签发的 token 均有效

@@ -27,20 +27,32 @@
 ### 前置条件
 
 - auth9-core 运行中 (`http://localhost:8080/health`)
-- 已获取有效的 Admin Token（平台管理员）
+- 已获取有效的 **Tenant Access Token**（平台管理员）
 - 已有至少一个租户（用于 tenant-scoped 端点）
+
+> **⚠️ 重要: API 字段命名规范**
+> auth9 API 使用 **snake_case** 命名（如 `display_name`、`provider_id`、`service_id`），不使用 camelCase。
+> 请求和响应的 JSON 字段均为 snake_case。
 
 ---
 
-## 步骤 0：Gate Check — 获取 Admin Token 和租户 ID
+## 步骤 0：获取 Tenant Access Token 和租户 ID
 
 ```bash
-TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
-echo $TOKEN | head -c 20
+# 1. 获取 Identity Token
+IDENTITY_TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+echo $IDENTITY_TOKEN | head -c 20
 
-TENANT_ID=$(curl -s http://localhost:8080/api/v1/tenants \
-  -H "Authorization: Bearer $TOKEN" | jq -r '.data[0].id')
+# 2. 获取 tenant_id
+TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;" 2>/dev/null)
 echo "Tenant: $TENANT_ID"
+
+# 3. 用 Identity Token 换取 Tenant Access Token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/tenant-token \
+  -H "Authorization: Bearer $IDENTITY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"tenant_id\":\"$TENANT_ID\",\"service_id\":\"auth9-portal\"}" | jq -r '.access_token')
+echo $TOKEN | head -c 20
 ```
 
 **预期**: Token 非空，TENANT_ID 非空
@@ -66,10 +78,10 @@ curl -s http://localhost:8080/api/v1/identity-providers/templates \
 curl -s -X POST http://localhost:8080/api/v1/identity-providers \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"alias":"sdk-test-google","displayName":"SDK Test Google","providerId":"google","config":{"clientId":"test-client-id","clientSecret":"test-client-secret"}}' | jq .  # pragma: allowlist secret
+  -d '{"alias":"sdk-test-google","display_name":"SDK Test Google","provider_id":"google","config":{"client_id":"test-client-id","client_secret":"test-client-secret"}}' | jq .  # pragma: allowlist secret
 ```
 
-**预期**: 返回 `data.alias` = "sdk-test-google"，`data.providerId` = "google"，`data.enabled` = true
+**预期**: 返回 `data.alias` = "sdk-test-google"，`data.provider_id` = "google"，`data.enabled` = true
 
 3. **获取 Identity Provider**
 
@@ -86,7 +98,7 @@ curl -s http://localhost:8080/api/v1/identity-providers/sdk-test-google \
 curl -s -X PUT http://localhost:8080/api/v1/identity-providers/sdk-test-google \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"displayName":"SDK Updated Google","enabled":false}' | jq '.data.displayName'
+  -d '{"display_name":"SDK Updated Google","enabled":false}' | jq '.data.display_name'
 ```
 
 **预期**: 返回 "SDK Updated Google"
@@ -211,25 +223,31 @@ curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/simulate \
 
 ## 场景 4：Sessions — 查询与撤销
 
+> **⚠️ 注意**: `/api/v1/users/me/sessions` 端点需要真实的浏览器会话（session cookie），不能仅通过 JWT Bearer token 访问。
+> 使用 curl + JWT 调用这些端点会返回 401，这是预期行为。
+> 要测试 session 端点，请通过浏览器登录 Portal 后在 DevTools 中操作，或使用 Playwright E2E 测试。
+
 ### 步骤
 
-1. **列出当前用户会话**
+1. **列出当前用户会话**（需通过浏览器会话访问）
 
 ```bash
+# 注意: 此端点需要真实 browser session，curl + JWT 会返回 401
 curl -s http://localhost:8080/api/v1/users/me/sessions \
   -H "Authorization: Bearer $TOKEN" | jq '.data | length'
 ```
 
-**预期**: 返回数量 >= 0（端点正常响应）
+**预期**: 若通过浏览器会话访问，返回数量 >= 0；若通过 curl + JWT 访问，返回 401（预期行为）
 
-2. **撤销其他会话**
+2. **撤销其他会话**（需通过浏览器会话访问）
 
 ```bash
+# 注意: 此端点需要真实 browser session，curl + JWT 会返回 401
 curl -s -X DELETE http://localhost:8080/api/v1/users/me/sessions \
   -H "Authorization: Bearer $TOKEN" -w "%{http_code}"
 ```
 
-**预期**: HTTP 状态码 200 或 204
+**预期**: 若通过浏览器会话访问，HTTP 状态码 200 或 204；若通过 curl + JWT，返回 401（预期行为）
 
 ---
 
@@ -265,7 +283,7 @@ if [ -n "$SVC_ID" ]; then
   curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/services \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"serviceId\":\"$SVC_ID\",\"enabled\":true}" -w "%{http_code}"
+    -d "{\"service_id\":\"$SVC_ID\",\"enabled\":true}" -w "%{http_code}"
 fi
 ```
 

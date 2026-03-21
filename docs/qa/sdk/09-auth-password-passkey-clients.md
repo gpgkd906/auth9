@@ -24,19 +24,39 @@
 ### 前置条件
 
 - auth9-core 运行中 (`http://localhost:8080/health`)
-- 已获取有效的 Admin Token（平台管理员）
+- 已获取有效的 **Tenant Access Token**（用于密码策略等管理端点）和 **Identity Token**（用于 passkeys、userinfo 等 `/me` 端点）
 - `npm run build` 在 `sdk/packages/core` 通过
+
+> **⚠️ 重要: Token 类型说明**
+> `gen-admin-token.sh` 生成的是 **Identity Token**（`token_type: "identity"`），只能用于 tenant-token exchange、userinfo、passkeys 等 `/me` 端点。
+> 密码策略管理（`GET/PUT /api/v1/tenants/{id}/password-policy`）、管理员设置用户密码（`PUT /api/v1/users/{id}/password`）等管理端点需要 **Tenant Access Token**。
+> 必须先用 Identity Token 换取 Tenant Access Token（见步骤 0）。
 
 ---
 
-## 步骤 0：Gate Check — 获取 Admin Token
+## 步骤 0：获取 Token
 
 ```bash
-TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+# 1. 获取 Identity Token（用于 passkeys / userinfo / organizations 等 /me 端点）
+IDENTITY_TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+echo $IDENTITY_TOKEN | head -c 20
+
+# 2. 获取 tenant_id
+TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;" 2>/dev/null)
+echo "Tenant: $TENANT_ID"
+
+# 3. 用 Identity Token 换取 Tenant Access Token（用于密码策略、用户管理等管理端点）
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/tenant-token \
+  -H "Authorization: Bearer $IDENTITY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"tenant_id\":\"$TENANT_ID\",\"service_id\":\"auth9-portal\"}" | jq -r '.access_token')
 echo $TOKEN | head -c 20
 ```
 
-**预期**: 输出 JWT token 前 20 个字符（非空）
+**预期**: `$IDENTITY_TOKEN` 为 Identity Token，`$TOKEN` 为 Tenant Access Token（均非空）。
+- 场景 1（密码策略）和场景 5（organizations 创建）使用 `$TOKEN`（Tenant Access Token）
+- 场景 2（passkeys）使用 `$IDENTITY_TOKEN`
+- 场景 4（userinfo）使用 `$IDENTITY_TOKEN`
 
 ---
 

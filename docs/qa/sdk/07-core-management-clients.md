@@ -26,18 +26,35 @@
 ### 前置条件
 
 - auth9-core 运行中 (`http://localhost:8080/health`)
-- 已获取有效的 Admin Token（平台管理员）
+- 已获取有效的 **Tenant Access Token**（平台管理员）
+
+> **⚠️ 重要: Token 类型说明**
+> `gen-admin-token.sh` 生成的是 **Identity Token**（`token_type: "identity"`），只能用于 tenant-token exchange 和 userinfo 端点。
+> 本文档中的所有 CRUD 操作（tenants / users / services / roles / permissions / invitations）需要使用 **Tenant Access Token**。
+> 必须先用 Identity Token 换取 Tenant Access Token（见步骤 0）。
 
 ---
 
-## 步骤 0：Gate Check — 获取 Admin Token
+## 步骤 0：获取 Tenant Access Token
 
 ```bash
-TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+# 1. 获取 Identity Token
+IDENTITY_TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+echo $IDENTITY_TOKEN | head -c 20
+
+# 2. 获取 tenant_id（使用 identity token 可以访问 userinfo 或直接从数据库查）
+TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;" 2>/dev/null)
+echo "Tenant: $TENANT_ID"
+
+# 3. 用 Identity Token 换取 Tenant Access Token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/tenant-token \
+  -H "Authorization: Bearer $IDENTITY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"tenant_id\":\"$TENANT_ID\",\"service_id\":\"auth9-portal\"}" | jq -r '.access_token')
 echo $TOKEN | head -c 20
 ```
 
-**预期**: 输出 JWT token 前 20 个字符（非空）
+**预期**: 最终 `$TOKEN` 为 Tenant Access Token（非空），后续步骤均使用此 token
 
 ---
 
