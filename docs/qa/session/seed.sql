@@ -4,7 +4,7 @@
 --       Do NOT seed the admin user here to avoid keycloak_id conflicts.
 
 -- Target user (seeded if missing)
-INSERT IGNORE INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at) VALUES
+INSERT IGNORE INTO users (id, identity_subject, email, display_name, mfa_enabled, created_at, updated_at) VALUES
 ('50587266-c621-42d7-9d3d-8fc8e0ed00ef', 'ced89b18-8713-46ff-b1f0-d136b1f1cc78', 'target@example.com', 'Target User', 0, NOW(), NOW());
 
 -- Remove existing seed sessions

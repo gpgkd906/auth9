@@ -30,6 +30,8 @@ describe("OrganizationsClient", () => {
     id: "tenant-1",
     name: "Acme Corp",
     slug: "acme-corp",
+    settings: {},
+    status: "active",
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
   };

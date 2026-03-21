@@ -62,8 +62,9 @@ describe("TenantServicesClient", () => {
       const mockService: Service = {
         id: "svc-1",
         name: "User Management",
-        slug: "user-mgmt",
-        description: "User management service",
+        redirectUris: [],
+        logoutUris: [],
+        status: "active",
         createdAt: "2026-01-01T00:00:00Z",
         updatedAt: "2026-01-01T00:00:00Z",
       };

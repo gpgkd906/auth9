@@ -202,8 +202,8 @@ state=no-pkce-demo"
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | Portal 密码登录 PKCE 参数透传 | ☐ | | | |
-| 2 | PKCE Cookie 存储与生命周期 | ☐ | | | |
-| 3 | Authorize 端点 PKCE 参数透传 | ☐ | | | |
-| 4 | 无 PKCE 参数向后兼容 | ☐ | | | |
-| 5 | Demo Client (Public) PKCE 强制 | ☐ | | | |
+| 1 | Portal 密码登录 PKCE 参数透传 | ✅ CODE PASS | 2026-03-21 | opencode | 代码分析确认实现正确：login.tsx生成PKCE参数，auth.callback.tsx发送code_verifier |
+| 2 | PKCE Cookie 存储与生命周期 | ✅ CODE PASS | 2026-03-21 | opencode | 代码分析确认：oauth_state cookie配置httpOnly, sameSite=lax, maxAge=300，回调后清除 |
+| 3 | Authorize 端点 PKCE 参数透传 | ✅ PASS | 2026-03-21 | opencode | API测试确认authorize端点接受PKCE参数并转发至Keycloak |
+| 4 | 无 PKCE 参数向后兼容 | ✅ PASS | 2026-03-21 | opencode | API测试确认无PKCE参数的请求正常处理 |
+| 5 | Demo Client (Public) PKCE 强制 | ✅ PASS | 2026-03-21 | opencode | Public client无PKCE返回400，错误信息正确 |

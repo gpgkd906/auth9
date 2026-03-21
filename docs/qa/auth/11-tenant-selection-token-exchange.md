@@ -43,6 +43,14 @@
 - 成功后跳转到 `/dashboard`
 - Dashboard 中组织切换器显示刚才选择的 tenant
 
+> **故障排除**
+>
+> | 症状 | 原因 | 解决方案 |
+> |------|------|---------|
+> | "邮箱或密码无效" | `auth9-core init` 未成功种子化 admin 密码凭据到 `credentials` 表 | 1. 检查 auth9-init 容器日志：`docker logs auth9-init 2>&1 \| grep -i credential` 2. 确认看到 "Admin password credential set" 3. 若看到 "Skipping admin password credential"，运行 `./scripts/reset-docker.sh` 重置 |
+> | "请求的资源不存在"（Enterprise SSO） | 默认环境未配置企业 SSO 提供商 | 此场景仅测试密码登录；Enterprise SSO 需单独配置 |
+> | Passkey 验证卡住 | WebAuthn 需要 HTTPS 或 localhost 环境支持 | 在 localhost 环境中测试，确保浏览器支持 WebAuthn |
+
 ---
 
 ## 场景 2：单租户用户自动 exchange 并进入 Dashboard

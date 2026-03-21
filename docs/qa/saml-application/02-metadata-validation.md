@@ -178,8 +178,10 @@ curl -s "http://localhost:8080/api/v1/tenants/{tenant_a_id}/saml-apps/{app_id}" 
 ```
 
 ### 预期结果
-- 跨租户路径返回 404（数据不可见）
-- 越权 Token 返回 403（policy 拒绝）
+- **跨租户路径 + 正确 Token**（路径 tenant_b + TOKEN_B → 查 app 不属于 B）返回 **404**（数据不可见）
+- **越权 Token**（路径 tenant_a + TOKEN_B → policy 拒绝）返回 **403**（policy enforcement 先于数据查询）
+
+> **重要区分**: 403 和 404 取决于请求组合。Token 的 tenant 与路径的 tenant 不匹配时返回 403（policy 层拦截）；匹配时查询数据不存在则返回 404。测试时必须注意使用正确的 path + token 组合。
 
 ---
 

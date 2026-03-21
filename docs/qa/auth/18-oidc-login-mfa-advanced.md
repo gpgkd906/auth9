@@ -24,6 +24,7 @@
 ### 初始状态
 - 管理员已通过 Portal 为用户启用 MFA（`POST /api/v1/users/{id}/mfa`）
 - 用户尚未完成 TOTP 注册（required action: `CONFIGURE_TOTP`）
+- **用户必须能够成功完成密码登录**（依赖 `auth9-core init` 已正确种子化 admin 密码凭据）
 
 ### 目的
 验证用户首次配置 TOTP 的完整流程。此流程由认证引擎在认证中强制触发，配置页面由 Auth9 品牌认证页自定义渲染（`LoginConfigTotp.tsx`），保持 Liquid Glass 品牌风格。
@@ -57,6 +58,14 @@
 - ☐ 输入框使用 Glass Input 组件
 - ☐ 按钮为蓝色主题按钮
 - ☐ 不出现原生认证 UI 的默认样式
+
+> **故障排除**
+>
+> | 症状 | 原因 | 解决方案 |
+> |------|------|---------|
+> | `ApiResponseError: Invalid or expired token` on `/mfa/setup-totp` | 用户未完成密码登录，或 session token 已过期 | 确保先完成密码登录流程（依赖 admin 凭据正确种子化），然后再访问 TOTP 页面 |
+> | 页面显示通用错误 | Portal 调用 `totpEnrollStart` API 时 token 无效 | 运行 `./scripts/reset-docker.sh` 重置环境后重新登录 |
+> | 密码登录失败（前置步骤） | `auth9-core init` 未能种子化 admin 密码凭据 | 检查 auth9-init 容器日志，确认 "Admin password credential set" 消息 |
 
 ---
 

@@ -73,49 +73,37 @@ grep -rn "struct KeycloakEvent" auth9-core/src/
 
 ---
 
-## 场景 2: 旧路径兼容性
+## 场景 2: 旧路径已移除验证
 
-**目的**: 验证 POST `/api/v1/keycloak/events`（deprecated alias）仍然能正常工作，确保向后兼容。
+**目的**: 确认 POST `/api/v1/keycloak/events` 旧路径已完全移除（Keycloak 已被 auth9-oidc 替代，不再需要向后兼容）。
 
 **类型**: API 验证
 
-### 步骤 0: Gate Check
-
-```bash
-curl -sf http://localhost:8080/health && echo "OK"
-```
-
 ### 步骤
 
-1. 使用与场景 1 相同的 payload 和签名
+1. 验证旧路径返回 404
 
 ```bash
-SECRET="${IDENTITY_WEBHOOK_SECRET:-your-webhook-secret}"
-PAYLOAD='{"type":"user.login","userId":"test-user-001","tenantId":"test-tenant-001","timestamp":"2026-03-21T00:00:00Z"}'
-SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')
-```
-
-2. 发送到旧路径
-
-```bash
-curl -v -X POST http://localhost:8080/api/v1/keycloak/events \
+curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Signature: sha256=$SIGNATURE" \
-  -d "$PAYLOAD"
+  -d '{}'
+# 预期: 404
 ```
+
+2. 验证新路径正常工作（参考场景 1）
 
 ### 预期结果
 
-- HTTP 状态码: `200`
-- 行为与新路径 `/api/v1/identity/events` 完全一致
-- 两个路径共用同一个 handler 函数
+- 旧路径 `/api/v1/keycloak/events` 返回 HTTP 404
+- 新路径 `/api/v1/identity/events` 正常工作（见场景 1）
+- 代码中无 `keycloak/events` 路由注册
 
 ### 代码验证
 
 ```bash
-# 确认两条路由指向同一 handler
-grep -n "keycloak/events\|identity/events" auth9-core/src/server/mod.rs
-# 预期: 两条路由均注册，handler 函数相同
+# 确认无旧路由
+grep -rn "keycloak/events" auth9-core/src/
+# 预期: 无匹配
 ```
 
 ---

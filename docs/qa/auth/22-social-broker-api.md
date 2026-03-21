@@ -10,7 +10,23 @@
 
 ### 初始状态
 - Auth9 Core 正在运行
-- 至少配置一个已启用的社交提供商
+- **至少配置一个已启用的社交提供商**（默认 Docker 环境不含种子数据，需手动创建）
+
+### 前置步骤：创建测试社交提供商
+
+> **重要**：默认 Docker 环境不会预配置社交提供商。测试前必须先创建至少一个提供商：
+
+```bash
+# 1. 生成 tenant access token（需要 tenant 级别权限）
+TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -sNe "SELECT id FROM tenants LIMIT 1")
+TENANT_TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js "$TENANT_ID" 2>/dev/null)
+
+# 2. 创建测试用 Google 社交提供商
+curl -s -X POST http://localhost:8080/api/v1/identity-providers \
+  -H "Authorization: Bearer $TENANT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"alias":"google","provider_id":"google","display_name":"Google","enabled":true,"config":{"clientId":"test-client-id","clientSecret":"test-secret"}}' | jq . # pragma: allowlist secret
+```
 
 ### 目的
 验证公开端点返回已启用的非 link_only 社交提供商列表（不包含 secret）

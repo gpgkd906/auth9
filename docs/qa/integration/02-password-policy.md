@@ -101,11 +101,13 @@ WHERE u.email = 'policy-test@example.com'
 - 用户已存在，并在底层认证主体中有密码修改历史
 
 ### 目的
-验证 Auth9 将 `history_count` 同步到底层 realm 的 `passwordHistory` 策略
+验证 Auth9 内置 OIDC 引擎正确执行 `history_count` 密码历史检查
+
+> **注意**: Keycloak 已完全移除。密码历史检查由 auth9-oidc 本地执行，密码历史存储在 `password_history` 表中。不涉及外部 realm 同步。
 
 ### 测试操作流程
 1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
-2. 验证底层 realm 密码策略字符串包含 `passwordHistory(5)`
+2. 验证 Auth9 API 返回的策略包含 `history_count: 5`
 3. 用户通过 Auth9 登录入口触发认证后尝试修改密码为历史密码
 
 ### 验证方式
@@ -145,11 +147,13 @@ FROM tenants WHERE slug = 'test-tenant';
 - 用户密码设置于 100 天前
 
 ### 目的
-验证 Auth9 将 `max_age_days` 同步到底层 realm 的 `forceExpiredPasswordChange` 策略
+验证 Auth9 内置 OIDC 引擎正确执行 `max_age_days` 密码过期策略
+
+> **注意**: Keycloak 已完全移除。密码过期策略由 auth9-oidc 本地执行，通过 `credentials.created_at` 和 `password_changed_at` 字段判断密码年龄。
 
 ### 测试操作流程
 1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
-2. 验证底层 realm 密码策略包含 `forceExpiredPasswordChange(90)`
+2. 验证 Auth9 API 返回的策略包含 `max_age_days: 90`
 3. 用户通过 Auth9 登录入口触发 OIDC 流程尝试登录
 4. 托管认证页应显示 `UPDATE_PASSWORD` required action 页面
 5. 用户修改密码后成功登录

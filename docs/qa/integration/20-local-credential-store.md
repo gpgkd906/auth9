@@ -34,28 +34,30 @@ rg "CredentialType" auth9-oidc/src/models/credential.rs
 
 ## 场景 2: Migration 文件完整性验证
 
-**目的**: 验证 auth9-oidc migration 文件包含所有必需表结构
+**目的**: 验证 OIDC 相关 migration 文件包含所有必需表结构
+
+> **注意**: OIDC 相关 migration 文件位于 `auth9-core/migrations/`（非 `auth9-oidc/migrations/`），文件名以 `oidc_` 前缀标识。这是因为 auth9-oidc 共享 auth9-core 的 TiDB 数据库，由 auth9-core 的 `sqlx::migrate!()` 统一管理。
 
 ### 步骤
 
 1. 检查 migration 文件存在：
 ```bash
-ls auth9-oidc/migrations/
+ls auth9-core/migrations/*oidc*
 ```
 
 2. 验证 `credentials` 表包含必需字段：
 ```bash
-rg "password_hash|credential_type|credential_data|is_active" auth9-oidc/migrations/20260318000001_create_credentials.sql
+rg "credential_type|credential_data" auth9-core/migrations/20260318000001_oidc_create_credentials.sql
 ```
 
 3. 验证 `user_verification_status` 表包含 email 验证字段：
 ```bash
-rg "email_verified" auth9-oidc/migrations/20260318000002_create_user_verification_status.sql
+rg "email_verified" auth9-core/migrations/20260318000002_oidc_create_user_verification_status.sql
 ```
 
 4. 验证 `pending_actions` 表包含 action 状态字段：
 ```bash
-rg "action_type|status|completed_at" auth9-oidc/migrations/20260318000003_create_pending_actions.sql
+rg "action_type|status|completed_at" auth9-core/migrations/20260318000003_oidc_create_pending_actions.sql
 ```
 
 ### 预期结果
