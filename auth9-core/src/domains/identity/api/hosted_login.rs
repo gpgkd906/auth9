@@ -311,6 +311,17 @@ pub async fn password_login<
                 .execute_trigger_by_tenant(membership.tenant_id, "post-login", context)
                 .await
             {
+                // strict_mode action failures must block login
+                if matches!(&e, AppError::ActionExecutionFailed(_)) {
+                    tracing::error!(
+                        tenant_id = %membership.tenant_id,
+                        error = %e,
+                        "Strict-mode action failed, blocking login"
+                    );
+                    metrics::counter!("auth9_auth_login_total", "result" => "action_blocked", "backend" => "hosted")
+                        .increment(1);
+                    return Err(e);
+                }
                 tracing::warn!(
                     tenant_id = %membership.tenant_id,
                     error = %e,
