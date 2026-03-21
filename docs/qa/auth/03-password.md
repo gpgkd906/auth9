@@ -149,7 +149,8 @@ ORDER BY created_at DESC LIMIT 1;
 >
 > | 症状 | 原因 | 解决方案 |
 > |------|------|---------|
-> | 密码重置成功（而非报错） | 令牌实际未过期 | 执行步骤 0 确认 status=EXPIRED |
+> | 密码重置成功（而非报错） | 令牌实际未过期 | 执行步骤 0 确认 status=EXPIRED；注意 MySQL `NOW()` 使用 **数据库服务器 UTC 时间**，非客户端本地时间 |
+> | 密码重置成功（已设 expires_at 为过去） | 时区不匹配：TiDB 使用 UTC，手动设置的时间可能在本地时区已过期但 UTC 未过期 | 使用 `SELECT NOW(), expires_at FROM password_reset_tokens WHERE ...` 验证两者对比 |
 > | 页面直接报"无效令牌" | 令牌已被使用（used_at 非空） | 申请新令牌并确保未使用前手动使其过期 |
 
 ---

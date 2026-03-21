@@ -204,4 +204,4 @@ state=no-pkce-demo" 2>&1 | grep -i "location:"
 | 2 | PKCE Cookie 存储与生命周期 | ☐ | | | |
 | 3 | Authorize 端点 PKCE 参数透传 | ☐ | | | |
 | 4 | 无 PKCE 参数向后兼容 | ☐ | | | |
-| 5 | Demo Client (Public) PKCE 强制 | ☐ | | | 需 OIDC client PKCE 配置 |
+| 5 | Demo Client (Public) PKCE 强制 | ⏭️ 待实现 | | | **功能尚未实现**：`public_client` 字段存在但 PKCE 强制逻辑未编写，跳过此场景 |

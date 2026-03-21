@@ -161,6 +161,13 @@ http://localhost:3000/force-update-password?action_id=test-123
 - 页面重定向到 `/login`
 - 未显示强制更新密码表单
 
+> **故障排除**
+>
+> | 症状 | 原因 | 解决方案 |
+> |------|------|---------|
+> | 页面显示密码表单而非重定向 | 浏览器中已有有效 `auth9_session` cookie（之前登录未完全退出） | **必须使用无痕窗口**或在测试前手动清除 `auth9_session` cookie |
+> | 页面显示密码表单（无痕窗口） | 不应出现；若发生请提交 bug | 检查 Portal 日志确认 `getAccessToken()` 返回值 |
+
 ---
 
 ## 场景 4：Complete Profile 页面渲染与提交

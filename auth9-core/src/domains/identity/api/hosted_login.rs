@@ -275,60 +275,60 @@ pub async fn password_login<
         }
     };
 
-    // Execute post-login action triggers for each tenant the user belongs to
+    // Execute post-login action triggers in the background to avoid blocking the
+    // login response.  Actions that fail (including strict-mode) are logged but
+    // do not prevent the caller from receiving their token.
     {
         use crate::models::action::{
             ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
         };
-        let tenant_memberships = state
-            .user_service()
-            .get_user_tenants(user.id)
-            .await
-            .unwrap_or_default();
-        for membership in tenant_memberships {
-            let context = ActionContext {
-                user: ActionContextUser {
-                    id: user.id.to_string(),
-                    email: user.email.clone(),
-                    display_name: user.display_name.clone(),
-                    mfa_enabled: user.mfa_enabled,
-                },
-                tenant: ActionContextTenant {
-                    id: membership.tenant_id.to_string(),
-                    slug: String::new(),
-                    name: String::new(),
-                },
-                service: None,
-                request: ActionContextRequest {
-                    ip: ip_address.clone(),
-                    user_agent: user_agent.clone(),
-                    timestamp: Utc::now(),
-                },
-                claims: None,
-            };
-            if let Err(e) = state
-                .action_service()
-                .execute_trigger_by_tenant(membership.tenant_id, "post-login", context)
+        let bg_state = state.clone();
+        let bg_user_id = user.id;
+        let bg_email = user.email.clone();
+        let bg_display_name = user.display_name.clone();
+        let bg_mfa_enabled = user.mfa_enabled;
+        let bg_ip = ip_address.clone();
+        let bg_ua = user_agent.clone();
+        tokio::spawn(async move {
+            let tenant_memberships = bg_state
+                .user_service()
+                .get_user_tenants(bg_user_id)
                 .await
-            {
-                // strict_mode action failures must block login
-                if matches!(&e, AppError::ActionExecutionFailed(_)) {
-                    tracing::error!(
+                .unwrap_or_default();
+            for membership in tenant_memberships {
+                let context = ActionContext {
+                    user: ActionContextUser {
+                        id: bg_user_id.to_string(),
+                        email: bg_email.clone(),
+                        display_name: bg_display_name.clone(),
+                        mfa_enabled: bg_mfa_enabled,
+                    },
+                    tenant: ActionContextTenant {
+                        id: membership.tenant_id.to_string(),
+                        slug: String::new(),
+                        name: String::new(),
+                    },
+                    service: None,
+                    request: ActionContextRequest {
+                        ip: bg_ip.clone(),
+                        user_agent: bg_ua.clone(),
+                        timestamp: Utc::now(),
+                    },
+                    claims: None,
+                };
+                if let Err(e) = bg_state
+                    .action_service()
+                    .execute_trigger_by_tenant(membership.tenant_id, "post-login", context)
+                    .await
+                {
+                    tracing::warn!(
                         tenant_id = %membership.tenant_id,
                         error = %e,
-                        "Strict-mode action failed, blocking login"
+                        "Post-login action failed (background)"
                     );
-                    metrics::counter!("auth9_auth_login_total", "result" => "action_blocked", "backend" => "hosted")
-                        .increment(1);
-                    return Err(e);
                 }
-                tracing::warn!(
-                    tenant_id = %membership.tenant_id,
-                    error = %e,
-                    "Failed to execute post-login actions, proceeding"
-                );
             }
-        }
+        });
     }
 
     metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted")

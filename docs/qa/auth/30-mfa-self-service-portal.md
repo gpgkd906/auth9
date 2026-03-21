@@ -88,6 +88,14 @@ curl -s http://localhost:8080/api/v1/mfa/status \
   - 「Set up TOTP」按钮替换为「Remove TOTP」按钮
   - 恢复码卡片显示剩余数量和「Generate new codes」按钮
 
+> **故障排除**
+>
+> | 症状 | 原因 | 解决方案 |
+> |------|------|---------|
+> | 输入正确 OTP 后显示「Invalid request」 | Setup token 已过期（Redis TTL 5 分钟） | 重新点击「Set up TOTP」生成新 QR 码；确保在 5 分钟内完成扫描和验证 |
+> | 直接 API 调用成功但 UI 失败 | Portal session 过期或 accessToken 为空 | 刷新页面重新登录后再尝试；检查浏览器 Network 面板确认请求含 Authorization header |
+> | OTP 代码总是错误 | 设备时间与服务器时间不同步 | 同步设备时间（NTP）；检查 `docker exec auth9-core date -u` 与本地时间差 |
+
 ### 预期数据状态
 ```sql
 SELECT totp_enabled FROM mfa_settings
