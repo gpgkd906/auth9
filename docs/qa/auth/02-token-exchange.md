@@ -54,6 +54,17 @@ WHERE u.identity_subject = '{identity_subject}' AND tu.tenant_id = '{tenant_id}'
 - 用户已登录
 - 用户不是请求的租户成员
 
+> **重要**: 默认 seed 数据中 `admin@auth9.local` 同时属于 `auth9-platform` 和 `demo` 两个租户。
+> 因此本场景 **不能使用 admin 用户** 测试，需要：
+> - 创建一个新测试租户（如 `audit-test-tenant`），且 admin 不是其成员；或
+> - 注册一个新用户，确保该用户只属于一个租户，然后请求另一个租户的 token。
+>
+> 在执行测试前，先验证数据库状态：
+> ```sql
+> SELECT tenant_id FROM tenant_users WHERE user_id = '{user_id}';
+> -- 确认目标租户不在返回结果中
+> ```
+
 ### 目的
 验证非成员无法获取租户令牌
 

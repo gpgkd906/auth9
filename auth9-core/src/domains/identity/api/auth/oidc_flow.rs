@@ -475,6 +475,16 @@ pub async fn token<
 
             metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "auth9_oidc").increment(1);
 
+            // Record successful login event
+            {
+                use crate::domains::security_observability::service::analytics::LoginEventMetadata;
+                let metadata = LoginEventMetadata::new(user_id.into(), &code_data.email)
+                    .with_session_id(session_id.into());
+                if let Err(e) = state.analytics_service().record_successful_login(metadata).await {
+                    tracing::warn!(error = %e, "Failed to record OIDC login event");
+                }
+            }
+
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),

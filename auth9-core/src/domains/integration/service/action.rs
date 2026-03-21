@@ -363,9 +363,18 @@ impl<R: ActionRepository + 'static> ActionService<R> {
             .await?
             .ok_or_else(|| AppError::NotFound("Action stats not found".to_string()))?;
 
+        let execution_count = stats.0;
+        let error_count = stats.1;
+        let success_rate = if execution_count > 0 {
+            ((execution_count - error_count) as f64 / execution_count as f64) * 100.0
+        } else {
+            0.0
+        };
+
         Ok(ActionStats {
-            execution_count: stats.0,
-            error_count: stats.1,
+            execution_count,
+            error_count,
+            success_rate,
             avg_duration_ms: stats.2,
             last_24h_count: stats.3,
         })

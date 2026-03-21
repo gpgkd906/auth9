@@ -14,8 +14,8 @@ use crate::error::{AppError, Result};
 use crate::http_support::{write_audit_log_generic, MessageResponse};
 use crate::models::password::{ForgotPasswordInput, ResetPasswordInput};
 use crate::state::{
-    HasCache, HasMfa, HasPasswordManagement, HasRequiredActions, HasServices, HasSessionManagement,
-    HasWebAuthn,
+    HasAnalytics, HasCache, HasMfa, HasPasswordManagement, HasRequiredActions, HasServices,
+    HasSessionManagement, HasWebAuthn,
 };
 use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 use axum_extra::headers::{authorization::Bearer, Authorization};
@@ -80,7 +80,7 @@ fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
 ///
 /// POST /api/v1/hosted-login/password
 pub async fn password_login<
-    S: HasServices + HasSessionManagement + HasCache + HasRequiredActions + HasMfa + HasWebAuthn,
+    S: HasServices + HasSessionManagement + HasCache + HasRequiredActions + HasMfa + HasWebAuthn + HasAnalytics,
 >(
     State(state): State<S>,
     headers: HeaderMap,
@@ -243,14 +243,6 @@ pub async fn password_login<
         .create_session(user.id, None, ip_address.clone(), user_agent.clone())
         .await?;
 
-    let jwt_manager = HasServices::jwt_manager(&state);
-    let identity_token = jwt_manager.create_identity_token_with_session(
-        *user.id,
-        &user.email,
-        user.display_name.as_deref(),
-        Some(*session.id),
-    )?;
-
     let _ = write_audit_log_generic(
         &state,
         &headers,
@@ -275,60 +267,95 @@ pub async fn password_login<
         }
     };
 
-    // Execute post-login action triggers in the background to avoid blocking the
-    // login response.  Actions that fail (including strict-mode) are logged but
-    // do not prevent the caller from receiving their token.
-    {
+    // Execute post-login action triggers synchronously so that custom claims
+    // set by actions are included in the identity token.  Actions that fail
+    // (including strict-mode) are logged but do not prevent token issuance.
+    let custom_claims = {
         use crate::models::action::{
             ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
         };
-        let bg_state = state.clone();
-        let bg_user_id = user.id;
-        let bg_email = user.email.clone();
-        let bg_display_name = user.display_name.clone();
-        let bg_mfa_enabled = user.mfa_enabled;
-        let bg_ip = ip_address.clone();
-        let bg_ua = user_agent.clone();
-        tokio::spawn(async move {
-            let tenant_memberships = bg_state
-                .user_service()
-                .get_user_tenants(bg_user_id)
+        let mut merged_claims = std::collections::HashMap::<String, serde_json::Value>::new();
+        let tenant_memberships = state
+            .user_service()
+            .get_user_tenants(user.id)
+            .await
+            .unwrap_or_default();
+        for membership in &tenant_memberships {
+            let context = ActionContext {
+                user: ActionContextUser {
+                    id: user.id.to_string(),
+                    email: user.email.clone(),
+                    display_name: user.display_name.clone(),
+                    mfa_enabled: user.mfa_enabled,
+                },
+                tenant: ActionContextTenant {
+                    id: membership.tenant_id.to_string(),
+                    slug: String::new(),
+                    name: String::new(),
+                },
+                service: None,
+                request: ActionContextRequest {
+                    ip: ip_address.clone(),
+                    user_agent: user_agent.clone(),
+                    timestamp: Utc::now(),
+                },
+                claims: None,
+            };
+            match state
+                .action_service()
+                .execute_trigger_by_tenant(membership.tenant_id, "post-login", context)
                 .await
-                .unwrap_or_default();
-            for membership in tenant_memberships {
-                let context = ActionContext {
-                    user: ActionContextUser {
-                        id: bg_user_id.to_string(),
-                        email: bg_email.clone(),
-                        display_name: bg_display_name.clone(),
-                        mfa_enabled: bg_mfa_enabled,
-                    },
-                    tenant: ActionContextTenant {
-                        id: membership.tenant_id.to_string(),
-                        slug: String::new(),
-                        name: String::new(),
-                    },
-                    service: None,
-                    request: ActionContextRequest {
-                        ip: bg_ip.clone(),
-                        user_agent: bg_ua.clone(),
-                        timestamp: Utc::now(),
-                    },
-                    claims: None,
-                };
-                if let Err(e) = bg_state
-                    .action_service()
-                    .execute_trigger_by_tenant(membership.tenant_id, "post-login", context)
-                    .await
-                {
+            {
+                Ok(modified_context) => {
+                    if let Some(claims) = modified_context.claims {
+                        merged_claims.extend(claims);
+                    }
+                }
+                Err(e) => {
                     tracing::warn!(
                         tenant_id = %membership.tenant_id,
                         error = %e,
-                        "Post-login action failed (background)"
+                        "Post-login action failed"
                     );
                 }
             }
-        });
+        }
+        merged_claims
+    };
+
+    // Create identity token, including custom claims from post-login actions
+    let jwt_manager = HasServices::jwt_manager(&state);
+    let identity_token = if custom_claims.is_empty() {
+        jwt_manager.create_identity_token_with_session(
+            *user.id,
+            &user.email,
+            user.display_name.as_deref(),
+            Some(*session.id),
+        )?
+    } else {
+        jwt_manager.create_identity_token_with_session_and_claims(
+            *user.id,
+            &user.email,
+            user.display_name.as_deref(),
+            Some(*session.id),
+            custom_claims,
+        )?
+    };
+
+    // Record successful login event
+    {
+        use crate::domains::security_observability::service::analytics::LoginEventMetadata;
+        let mut metadata = LoginEventMetadata::new(user.id, user.email.clone());
+        if let Some(ref ip) = ip_address {
+            metadata = metadata.with_ip_address(ip.clone());
+        }
+        if let Some(ref ua) = user_agent {
+            metadata = metadata.with_user_agent(ua.clone());
+        }
+        metadata = metadata.with_session_id(session.id);
+        if let Err(e) = state.analytics_service().record_successful_login(metadata).await {
+            tracing::warn!(error = %e, "Failed to record login event");
+        }
     }
 
     metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted")

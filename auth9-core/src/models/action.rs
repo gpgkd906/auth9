@@ -337,6 +337,7 @@ impl Default for AsyncActionConfig {
 pub struct ActionStats {
     pub execution_count: i64,
     pub error_count: i64,
+    pub success_rate: f64,
     pub avg_duration_ms: f64,
     pub last_24h_count: i64,
 }
@@ -694,6 +695,7 @@ mod tests {
         let stats = ActionStats {
             execution_count: 100,
             error_count: 5,
+            success_rate: 95.0,
             avg_duration_ms: 12.5,
             last_24h_count: 42,
         };
@@ -702,6 +704,7 @@ mod tests {
         let deserialized: ActionStats = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.execution_count, 100);
         assert_eq!(deserialized.error_count, 5);
+        assert!((deserialized.success_rate - 95.0).abs() < f64::EPSILON);
         assert!((deserialized.avg_duration_ms - 12.5).abs() < f64::EPSILON);
         assert_eq!(deserialized.last_24h_count, 42);
     }

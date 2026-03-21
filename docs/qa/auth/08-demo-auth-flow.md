@@ -122,7 +122,8 @@ WHERE email = 'admin@auth9.local';
 验证输入凭证后完成 OAuth code exchange，获取 Auth9-signed Identity Token，正确显示用户信息
 
 ### 测试操作流程
-1. 在 Auth9 品牌认证页输入 username: `admin`, password: `SecurePass123!`
+1. 在 Auth9 品牌认证页输入 email: **`admin@auth9.local`**, password: `SecurePass123!`
+   > **注意**: 必须输入完整邮箱地址 `admin@auth9.local`，不能只输入 `admin`。Hosted Login API 要求有效邮箱格式（包含 `@`），否则返回 400 Bad Request。
 2. 点击 "Sign In"
 
 ### 预期结果
