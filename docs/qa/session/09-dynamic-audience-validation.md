@@ -132,19 +132,20 @@ TENANT_TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/tenant-token \
   -d '{"tenant_id":"{tenant_id}","service_id":"auth9-portal"}' | jq -r '.access_token')
 
 # 1. Create new service
-curl -sf -X POST "http://localhost:8080/api/v1/tenants/{tenant_id}/services" \
+# 注意: 服务创建端点是 POST /api/v1/services（不是 /api/v1/tenants/{tenant_id}/services，后者是 toggle_service）
+curl -sf -X POST "http://localhost:8080/api/v1/services" \
   -H "Authorization: Bearer $TENANT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dynamic Test Service","redirect_uris":["https://test.example.com/callback"],"logout_uris":[]}'
+  -d '{"name":"Dynamic Test Service","tenant_id":"{tenant_id}","redirect_uris":["https://test.example.com/callback"],"logout_uris":[]}'
 
 # 2. Get new client_id
-NEW_CLIENT_ID=$(curl -sf "http://localhost:8080/api/v1/tenants/{tenant_id}/services" \
+NEW_CLIENT_ID=$(curl -sf "http://localhost:8080/api/v1/services" \
   -H "Authorization: Bearer $TENANT_TOKEN" | jq -r '.data[-1].clients[0].client_id')
 
 # 3. Verify it's in Redis SET
 docker exec auth9-redis redis-cli SISMEMBER auth9:valid_audiences "$NEW_CLIENT_ID"
 
-# 4. Exchange token with new client
+# 4. Exchange token with new client (requires both tenant_id and service_id)
 NEW_TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/tenant-token \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \

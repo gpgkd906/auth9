@@ -95,6 +95,10 @@ curl -s -X PUT http://localhost:8080/api/v1/users/$USER_ID/password \
 
 ## 场景 2：Passkeys (WebAuthn) 子客户端 — 注册与认证
 
+> **注意**: Passkeys 端点（`/api/v1/users/me/passkeys/*`）要求使用 **Identity Token**（非 Tenant Access Token）。
+> 后端 handler 使用 `extract_identity_claims()` 只接受 Identity Token。
+> 请使用 `gen-admin-token.sh` 生成的 token（即 Identity Token）访问这些端点。
+
 ### 步骤
 
 1. **列出当前用户 Passkeys**
@@ -230,7 +234,9 @@ curl -s "http://localhost:8080/api/v1/users/me/tenants?service_id=nonexistent" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-**预期**: 返回空 `data` 数组或根据 service 约束过滤后的结果
+**预期**: 返回空 `data` 数组（不存在的 `service_id` 正确返回空列表，此 bug 已修复）
+
+> **注意**: `service_id` 参数期望的是 Service 对应的 `client_id` 值（如 `auth9-portal`），而非 Service 的 UUID。
 
 ---
 

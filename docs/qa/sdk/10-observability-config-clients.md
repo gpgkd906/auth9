@@ -30,10 +30,14 @@
 
 ---
 
-## 步骤 0：Gate Check — 获取 Admin Token 并验证 Build
+## 步骤 0：Gate Check — 获取 Token 并验证 Build
+
+> **注意**: 场景 1（audit-logs、analytics）需要 **Tenant Access Token**（非 Identity Token）。
+> `gen-admin-token.sh` 生成的是 Identity Token，用于 audit-logs/analytics 端点会返回 403。
+> 请使用 `gen_tenant_access_token.js` 获取 Tenant Access Token。
 
 ```bash
-TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js)
 echo $TOKEN | head -c 20
 ```
 

@@ -80,13 +80,19 @@ pub async fn get_my_tenants<S: HasServices>(
         .await?;
 
     if let Some(service_client_id) = &query.service_id {
-        if let Ok(service) = state
+        match state
             .client_service()
             .get_by_client_id(service_client_id)
             .await
         {
-            if let Some(service_tenant_id) = service.tenant_id {
-                tenants.retain(|t| t.tenant_id == service_tenant_id);
+            Ok(service) => {
+                if let Some(service_tenant_id) = service.tenant_id {
+                    tenants.retain(|t| t.tenant_id == service_tenant_id);
+                }
+            }
+            Err(_) => {
+                // Service not found — return empty list instead of unfiltered results
+                tenants.clear();
             }
         }
     }
