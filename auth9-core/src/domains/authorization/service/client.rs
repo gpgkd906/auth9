@@ -245,6 +245,16 @@ impl<
         Ok(service)
     }
 
+    /// Look up a Client record by its client_id string.
+    /// Unlike `get_by_client_id` (which returns the parent Service),
+    /// this returns the Client itself with its `public_client` flag.
+    pub async fn get_client_record(&self, client_id: &str) -> Result<Client> {
+        self.repo
+            .find_client_by_client_id(client_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Client '{}' not found", client_id)))
+    }
+
     pub async fn get_by_client_id(&self, client_id: &str) -> Result<Service> {
         let service = self
             .repo
@@ -930,6 +940,47 @@ mod tests {
         let service = create_test_service(mock);
 
         let result = service.get_by_client_id("nonexistent").await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_client_record_success() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("my-client"))
+            .returning(|_| {
+                Ok(Some(Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid::new_v4(),
+                    client_id: "my-client".to_string(),
+                    client_secret_hash: String::new(),
+                    name: Some("Test Client".to_string()),
+                    public_client: true,
+                    created_at: chrono::Utc::now(),
+                }))
+            });
+
+        let service = create_test_service(mock);
+
+        let result = service.get_client_record("my-client").await;
+        assert!(result.is_ok());
+        let client = result.unwrap();
+        assert_eq!(client.client_id, "my-client");
+        assert!(client.public_client);
+    }
+
+    #[tokio::test]
+    async fn test_get_client_record_not_found() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("nonexistent"))
+            .returning(|_| Ok(None));
+
+        let service = create_test_service(mock);
+
+        let result = service.get_client_record("nonexistent").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 

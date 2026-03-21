@@ -56,6 +56,34 @@ pub(crate) fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> boo
     computed == code_challenge
 }
 
+/// Enforce PKCE requirement for public clients.
+/// Public clients (SPAs, mobile, CLI) must use PKCE with S256 per OAuth 2.1.
+/// Confidential clients are not affected (PKCE remains optional).
+pub(crate) fn enforce_pkce_for_public_client(
+    is_public: bool,
+    code_challenge: &Option<String>,
+    code_challenge_method: &Option<String>,
+) -> Result<()> {
+    if !is_public {
+        return Ok(());
+    }
+    if code_challenge.is_none() {
+        return Err(AppError::BadRequest(
+            "Public clients must use PKCE (code_challenge required)".to_string(),
+        ));
+    }
+    match code_challenge_method.as_deref() {
+        Some("S256") => Ok(()),
+        Some(other) => Err(AppError::BadRequest(format!(
+            "Only S256 code challenge method is supported, got: {}",
+            other
+        ))),
+        None => Err(AppError::BadRequest(
+            "code_challenge_method is required and must be S256".to_string(),
+        )),
+    }
+}
+
 /// Validate that a redirect URI is allowed for the service
 pub fn validate_redirect_uri(allowed_uris: &[String], redirect_uri: &str) -> Result<()> {
     if allowed_uris.contains(&redirect_uri.to_string()) {
@@ -474,6 +502,50 @@ mod tests {
         let decoded: LoginChallengeData = serde_json::from_str(&json).unwrap();
         assert!(decoded.nonce.is_none());
         assert!(decoded.code_challenge.is_none());
+    }
+
+    // ==================== PKCE Enforcement Tests ====================
+
+    #[test]
+    fn test_enforce_pkce_public_client_no_challenge() {
+        let result = enforce_pkce_for_public_client(true, &None, &None);
+        assert!(matches!(result, Err(AppError::BadRequest(ref msg)) if msg.contains("code_challenge required")));
+    }
+
+    #[test]
+    fn test_enforce_pkce_public_client_with_s256() {
+        let result = enforce_pkce_for_public_client(
+            true,
+            &Some("challenge-value".to_string()),
+            &Some("S256".to_string()),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_enforce_pkce_public_client_with_plain_method() {
+        let result = enforce_pkce_for_public_client(
+            true,
+            &Some("challenge-value".to_string()),
+            &Some("plain".to_string()),
+        );
+        assert!(matches!(result, Err(AppError::BadRequest(ref msg)) if msg.contains("S256")));
+    }
+
+    #[test]
+    fn test_enforce_pkce_public_client_no_method() {
+        let result = enforce_pkce_for_public_client(
+            true,
+            &Some("challenge-value".to_string()),
+            &None,
+        );
+        assert!(matches!(result, Err(AppError::BadRequest(ref msg)) if msg.contains("S256")));
+    }
+
+    #[test]
+    fn test_enforce_pkce_confidential_client_no_challenge() {
+        let result = enforce_pkce_for_public_client(false, &None, &None);
+        assert!(result.is_ok());
     }
 
     #[test]

@@ -180,18 +180,20 @@ curl -s "http://localhost:8080/api/v1/services?client_id=auth9-demo" \
 
 1. 不带 PKCE 参数请求 demo client 授权（模拟攻击者）：
 ```bash
-curl -v "http://localhost:8080/api/v1/auth/authorize?\
+curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/auth/authorize?\
 response_type=code&\
 client_id=auth9-demo&\
 redirect_uri=http://localhost:8080/api/v1/auth/callback&\
 scope=openid+email+profile&\
-state=no-pkce-demo" 2>&1 | grep -i "location:"
+state=no-pkce-demo"
+# 预期: 400
 ```
-2. 完成登录后，观察 token exchange 是否被拒绝
+2. 观察 authorize 端点是否直接拒绝请求
 
 ### 预期结果
-- Auth9 OIDC 引擎对未提供 `code_challenge` 的 public client 请求返回错误
-- 或在 token exchange 阶段因缺少 `code_verifier` 而拒绝：返回 `400 Bad Request`，错误信息包含 PKCE 相关描述
+- Auth9 authorize 端点对未提供 `code_challenge` 的 public client 请求直接返回 `400 Bad Request`
+- 错误信息包含 "Public clients must use PKCE (code_challenge required)"
+- 请求在 authorize 阶段即被拒绝，无需进入 token exchange 阶段
 - 这证明 public client 的 PKCE 强制配置生效
 
 ---
@@ -204,4 +206,4 @@ state=no-pkce-demo" 2>&1 | grep -i "location:"
 | 2 | PKCE Cookie 存储与生命周期 | ☐ | | | |
 | 3 | Authorize 端点 PKCE 参数透传 | ☐ | | | |
 | 4 | 无 PKCE 参数向后兼容 | ☐ | | | |
-| 5 | Demo Client (Public) PKCE 强制 | ⏭️ 待实现 | | | **功能尚未实现**：`public_client` 字段存在但 PKCE 强制逻辑未编写，跳过此场景 |
+| 5 | Demo Client (Public) PKCE 强制 | ☐ | | | |

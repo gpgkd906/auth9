@@ -2,8 +2,9 @@
 
 use super::action_helpers::discover_connector_by_domain;
 use super::helpers::{
-    validate_redirect_uri, verify_pkce_s256, AuthorizationCodeData, CallbackState,
-    LoginChallengeData, AUTH_CODE_TTL_SECS, LOGIN_CHALLENGE_TTL_SECS,
+    enforce_pkce_for_public_client, validate_redirect_uri, verify_pkce_s256,
+    AuthorizationCodeData, CallbackState, LoginChallengeData, AUTH_CODE_TTL_SECS,
+    LOGIN_CHALLENGE_TTL_SECS,
 };
 use super::types::{
     AuthorizeCompleteRequest, AuthorizeCompleteResponse, AuthorizeRequest, CallbackRequest,
@@ -60,6 +61,17 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
         .client_service()
         .get_by_client_id(&params.client_id)
         .await?;
+
+    // Enforce PKCE for public clients (OAuth 2.1 / RFC 7636)
+    let client_record = state
+        .client_service()
+        .get_client_record(&params.client_id)
+        .await?;
+    enforce_pkce_for_public_client(
+        client_record.public_client,
+        &params.code_challenge,
+        &params.code_challenge_method,
+    )?;
 
     validate_redirect_uri(&service.redirect_uris, &params.redirect_uri)?;
 
@@ -390,6 +402,17 @@ pub async fn token<
             if code_data.redirect_uri != redirect_uri {
                 return Err(AppError::BadRequest(
                     "redirect_uri does not match authorization code".to_string(),
+                ));
+            }
+
+            // Defensive: public clients must have PKCE (enforced at authorize, belt-and-suspenders)
+            let client_record = state
+                .client_service()
+                .get_client_record(&client_id)
+                .await?;
+            if client_record.public_client && code_data.code_challenge.is_none() {
+                return Err(AppError::BadRequest(
+                    "Public clients must use PKCE".to_string(),
                 ));
             }
 
