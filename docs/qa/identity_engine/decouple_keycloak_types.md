@@ -1,3 +1,7 @@
+> **本文档已归档** — Keycloak 解耦已完成，Auth9 已完全迁移至 auth9-oidc。此文档仅供历史参考。
+
+---
+
 # 解耦旧身份引擎类型: IdentityEngine Trait 重构验证
 
 > **迁移已完成**: Keycloak 已被 Auth9 内置 OIDC 引擎完全替代。以下为历史迁移验证记录。

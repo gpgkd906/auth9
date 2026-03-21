@@ -1,6 +1,6 @@
-//! Keycloak Event Webhook Handler
+//! Identity Event Webhook Handler
 //!
-//! Receives login events from Keycloak via the p2-inc/keycloak-events SPI plugin.
+//! Receives login events from the identity backend via webhook.
 //! This enables real-time security monitoring and analytics for authentication events.
 
 use crate::cache::CacheOperations;
@@ -59,7 +59,7 @@ fn check_in_memory_dedup(key: &str, ttl_secs: i64) -> bool {
 /// (have `operationType`/`resourceType`, no `type`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KeycloakEvent {
+pub struct IdentityEvent {
     /// Event type for user events (e.g., "LOGIN", "LOGIN_ERROR", "LOGOUT")
     /// Optional because admin events use operationType/resourceType instead.
     #[serde(default, rename = "type", alias = "eventType")]
@@ -87,7 +87,7 @@ pub struct KeycloakEvent {
     pub time: i64,
     /// Additional event details
     #[serde(default)]
-    pub details: KeycloakEventDetails,
+    pub details: IdentityEventDetails,
 }
 
 /// Additional details from Keycloak events
@@ -97,7 +97,7 @@ pub struct KeycloakEvent {
 /// forwards these keys as-is via `ModelToRepresentation.toRepresentation()`.
 /// We accept both snake_case and camelCase via aliases for robustness.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct KeycloakEventDetails {
+pub struct IdentityEventDetails {
     /// Username attempting to login
     pub username: Option<String>,
     /// Email of the user
@@ -131,7 +131,7 @@ pub struct KeycloakEventDetails {
 /// - Some set `auth_method: "otp"` or `credential_type: "otp"/"totp"`
 /// - Others set extra fields like `selected_credential_id` or `auth_type`
 /// - Some only set `credential_type` in the `extra` map (not the typed field)
-fn is_mfa_context(details: &KeycloakEventDetails) -> bool {
+fn is_mfa_context(details: &IdentityEventDetails) -> bool {
     // Check typed fields
     if details.auth_method.as_deref() == Some("otp") {
         return true;
@@ -168,7 +168,7 @@ fn is_mfa_context(details: &KeycloakEventDetails) -> bool {
 fn map_event_type_with_details(
     kc_type: &str,
     error: Option<&str>,
-    details: &KeycloakEventDetails,
+    details: &IdentityEventDetails,
 ) -> Option<LoginEventType> {
     match kc_type {
         // Successful logins
@@ -232,13 +232,13 @@ fn map_event_type_with_details(
 /// Map Keycloak event type to Auth9 LoginEventType (backward-compatible wrapper for tests)
 #[allow(dead_code)]
 fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> {
-    map_event_type_with_details(kc_type, error, &KeycloakEventDetails::default())
+    map_event_type_with_details(kc_type, error, &IdentityEventDetails::default())
 }
 
 /// Derive failure reason from Keycloak error
 fn derive_failure_reason_with_details(
     error: Option<&str>,
-    details: &KeycloakEventDetails,
+    details: &IdentityEventDetails,
 ) -> Option<String> {
     error.map(|e| {
         match e {
@@ -332,7 +332,7 @@ async fn resolve_event_tenant_id<S: HasServices>(
 
 #[allow(dead_code)]
 fn derive_failure_reason(error: Option<&str>) -> Option<String> {
-    derive_failure_reason_with_details(error, &KeycloakEventDetails::default())
+    derive_failure_reason_with_details(error, &IdentityEventDetails::default())
 }
 
 /// Derive a location label from an IP address.
@@ -387,17 +387,17 @@ fn verify_signature(secret: &str, body: &[u8], signature: &str) -> bool {
 }
 
 /// Parse a raw Keycloak event payload.
-pub fn parse_keycloak_event(body: &[u8]) -> Result<KeycloakEvent, AppError> {
+pub fn parse_identity_event(body: &[u8]) -> Result<IdentityEvent, AppError> {
     serde_json::from_slice(body)
         .map_err(|err| AppError::BadRequest(format!("Invalid event payload: {}", err)))
 }
 
 /// Process a Keycloak event from webhook or stream.
-pub async fn process_keycloak_event<
+pub async fn process_identity_event<
     S: HasServices + HasAnalytics + HasSecurityAlerts + HasCache,
 >(
     state: &S,
-    event: KeycloakEvent,
+    event: IdentityEvent,
     headers: Option<&HeaderMap>,
 ) -> Result<StatusCode, AppError> {
     // Reject expired events (older than 5 minutes)
@@ -688,7 +688,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         debug!("Keycloak webhook signature verification skipped (no secret configured)");
     }
 
-    let event = match parse_keycloak_event(&body) {
+    let event = match parse_identity_event(&body) {
         Ok(e) => e,
         Err(err) => {
             let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
@@ -700,7 +700,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         }
     };
 
-    process_keycloak_event(&state, event, Some(&headers)).await
+    process_identity_event(&state, event, Some(&headers)).await
 }
 
 #[cfg(test)]
@@ -737,7 +737,7 @@ mod tests {
     #[test]
     fn test_map_event_type_mfa_via_credential_type() {
         // Keycloak 21+ sends credential_type instead of auth_method for TOTP failures
-        let details_otp = KeycloakEventDetails {
+        let details_otp = IdentityEventDetails {
             credential_type: Some("otp".to_string()),
             ..Default::default()
         };
@@ -750,7 +750,7 @@ mod tests {
             Some(LoginEventType::FailedMfa)
         );
 
-        let details_totp = KeycloakEventDetails {
+        let details_totp = IdentityEventDetails {
             credential_type: Some("totp".to_string()),
             ..Default::default()
         };
@@ -764,7 +764,7 @@ mod tests {
         );
 
         // auth_method=otp still works
-        let details_auth_method = KeycloakEventDetails {
+        let details_auth_method = IdentityEventDetails {
             auth_method: Some("otp".to_string()),
             ..Default::default()
         };
@@ -780,7 +780,7 @@ mod tests {
 
     #[test]
     fn test_derive_failure_reason_mfa_via_credential_type() {
-        let details_otp = KeycloakEventDetails {
+        let details_otp = IdentityEventDetails {
             credential_type: Some("otp".to_string()),
             ..Default::default()
         };
@@ -790,7 +790,7 @@ mod tests {
         );
 
         // Without credential_type, defaults to password
-        let details_none = KeycloakEventDetails::default();
+        let details_none = IdentityEventDetails::default();
         assert_eq!(
             derive_failure_reason_with_details(Some("invalid_user_credentials"), &details_none),
             Some("Invalid password".to_string())
@@ -899,7 +899,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_event_deserialization() {
+    fn test_identity_event_deserialization() {
         let json = r#"{
             "type": "LOGIN_ERROR",
             "realmId": "auth9",
@@ -916,7 +916,7 @@ mod tests {
             }
         }"#;
 
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
 
         assert_eq!(event.event_type, Some("LOGIN_ERROR".to_string()));
         assert_eq!(event.realm_id, Some("auth9".to_string()));
@@ -932,13 +932,13 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_event_minimal_deserialization() {
+    fn test_identity_event_minimal_deserialization() {
         let json = r#"{
             "type": "LOGIN",
             "time": 1704067200000
         }"#;
 
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
 
         assert_eq!(event.event_type, Some("LOGIN".to_string()));
         assert_eq!(event.realm_id, None);
@@ -955,7 +955,7 @@ mod tests {
             "time": 1704067200000
         }"#;
 
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
 
         assert_eq!(event.event_type, None);
         assert_eq!(event.operation_type, Some("CREATE".to_string()));
@@ -1076,19 +1076,19 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_keycloak_event_with_event_type_alias() {
+    fn test_identity_event_with_event_type_alias() {
         // Test eventType alias
         let json = r#"{
             "eventType": "LOGIN",
             "time": 1704067200000
         }"#;
 
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
         assert_eq!(event.event_type, Some("LOGIN".to_string()));
     }
 
     #[test]
-    fn test_keycloak_event_details_all_fields() {
+    fn test_identity_event_details_all_fields() {
         let json = r#"{
             "type": "LOGIN",
             "time": 0,
@@ -1103,7 +1103,7 @@ mod tests {
             }
         }"#;
 
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
         assert_eq!(event.details.username, Some("user1".to_string()));
         assert_eq!(event.details.email, Some("user1@test.com".to_string()));
         assert_eq!(event.details.auth_method, Some("password".to_string()));
@@ -1117,7 +1117,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_event_details_snake_case_keys() {
+    fn test_identity_event_details_snake_case_keys() {
         // Keycloak's event details use snake_case keys (from org.keycloak.events.Details)
         let json = r#"{
             "type": "LOGIN_ERROR",
@@ -1134,7 +1134,7 @@ mod tests {
             }
         }"#;
 
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
         assert_eq!(event.details.username, Some("user1".to_string()));
         assert_eq!(event.details.email, Some("user1@test.com".to_string()));
         assert_eq!(event.details.auth_method, Some("otp".to_string()));
@@ -1156,9 +1156,9 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_event_empty_details() {
+    fn test_identity_event_empty_details() {
         let json = r#"{"type": "LOGIN", "time": 0, "details": {}}"#;
-        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        let event: IdentityEvent = serde_json::from_str(json).unwrap();
         assert!(event.details.username.is_none());
         assert!(event.details.email.is_none());
     }

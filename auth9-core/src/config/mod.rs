@@ -466,11 +466,11 @@ impl Config {
             // dynamically loaded from the clients table into Redis on startup.
             // The env var serves as an additional seed for backward compatibility.
             if self.webhook_secret.is_none() {
-                anyhow::bail!("KEYCLOAK_WEBHOOK_SECRET is required in production");
+                anyhow::bail!("IDENTITY_WEBHOOK_SECRET (or KEYCLOAK_WEBHOOK_SECRET) is required in production");
             }
         } else if self.webhook_secret.is_none() {
             tracing::warn!(
-                "Webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET); \
+                "Webhook secret is not configured (IDENTITY_WEBHOOK_SECRET); \
                  webhook signature verification is disabled"
             );
         }
@@ -630,7 +630,9 @@ impl Config {
             },
             core_public_url: env::var("AUTH9_CORE_PUBLIC_URL").ok(),
             portal_url: env::var("AUTH9_PORTAL_URL").ok(),
-            webhook_secret: env::var("KEYCLOAK_WEBHOOK_SECRET").ok(),
+            webhook_secret: env::var("IDENTITY_WEBHOOK_SECRET")
+                .or_else(|_| env::var("KEYCLOAK_WEBHOOK_SECRET"))
+                .ok(),
             grpc_security: GrpcSecurityConfig {
                 auth_mode: env::var("GRPC_AUTH_MODE").unwrap_or_else(|_| "none".to_string()),
                 api_keys: env::var("GRPC_API_KEYS")
@@ -1601,7 +1603,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("KEYCLOAK_WEBHOOK_SECRET is required in production"));
+            .contains("IDENTITY_WEBHOOK_SECRET"));
     }
 
     #[test]

@@ -1,9 +1,9 @@
-//! Keycloak Event Webhook HTTP handler tests
+//! Identity Event Webhook HTTP handler tests
 //!
-//! Tests for the POST /api/v1/keycloak/events endpoint.
+//! Tests for the POST /api/v1/identity/events endpoint (and deprecated /api/v1/keycloak/events).
 
 use crate::support::http::TestAppState;
-use auth9_core::domains::integration::api::keycloak_event;
+use auth9_core::domains::integration::api::identity_event;
 use auth9_core::models::analytics::LoginEventType;
 use auth9_core::models::common::StringUuid;
 use auth9_core::models::service::{Client, Service};
@@ -22,23 +22,23 @@ use tower::ServiceExt;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Build a minimal router with only the keycloak events endpoint.
-/// This is needed because the keycloak events route is only in build_full_router,
+/// Build a minimal router with only the identity events endpoint.
+/// This is needed because the identity events route is only in build_full_router,
 /// which requires HasDbPool (unavailable in test state).
-fn build_keycloak_event_test_router(state: TestAppState) -> Router {
+fn build_identity_event_test_router(state: TestAppState) -> Router {
     Router::new()
         .route(
-            "/api/v1/keycloak/events",
-            post(keycloak_event::receive::<TestAppState>),
+            "/api/v1/identity/events",
+            post(identity_event::receive::<TestAppState>),
         )
         .with_state(state)
 }
 
-/// Helper: POST raw bytes to the keycloak events endpoint
-async fn post_keycloak_event(app: &Router, body: &[u8], headers: Vec<(&str, &str)>) -> StatusCode {
+/// Helper: POST raw bytes to the identity events endpoint
+async fn post_identity_event(app: &Router, body: &[u8], headers: Vec<(&str, &str)>) -> StatusCode {
     let mut req_builder = Request::builder()
         .method(Method::POST)
-        .uri("/api/v1/keycloak/events")
+        .uri("/api/v1/identity/events")
         .header("Content-Type", "application/json");
 
     for (key, value) in headers {
@@ -71,7 +71,7 @@ fn compute_signature(secret: &str, body: &[u8]) -> String {
 #[tokio::test]
 async fn test_receive_login_event_success() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -85,7 +85,7 @@ async fn test_receive_login_event_success() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     // Verify event was recorded
@@ -97,7 +97,7 @@ async fn test_receive_login_event_success() {
 #[tokio::test]
 async fn test_receive_login_error_event() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN_ERROR",
@@ -111,7 +111,7 @@ async fn test_receive_login_error_event() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -123,7 +123,7 @@ async fn test_receive_login_error_event() {
 #[tokio::test]
 async fn test_receive_mfa_failure_event() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN_ERROR",
@@ -136,7 +136,7 @@ async fn test_receive_mfa_failure_event() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -147,7 +147,7 @@ async fn test_receive_mfa_failure_event() {
 #[tokio::test]
 async fn test_receive_social_login_event() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "IDENTITY_PROVIDER_LOGIN",
@@ -160,7 +160,7 @@ async fn test_receive_social_login_event() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -171,7 +171,7 @@ async fn test_receive_social_login_event() {
 #[tokio::test]
 async fn test_receive_lockout_event() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "USER_DISABLED_BY_TEMPORARY_LOCKOUT",
@@ -181,7 +181,7 @@ async fn test_receive_lockout_event() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -192,7 +192,7 @@ async fn test_receive_lockout_event() {
 #[tokio::test]
 async fn test_receive_multi_tenant_event_without_explicit_context_keeps_tenant_empty() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let user_id = StringUuid::new_v4();
     let tenant_a = StringUuid::new_v4();
@@ -242,7 +242,7 @@ async fn test_receive_multi_tenant_event_without_explicit_context_keeps_tenant_e
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -253,7 +253,7 @@ async fn test_receive_multi_tenant_event_without_explicit_context_keeps_tenant_e
 #[tokio::test]
 async fn test_receive_multi_tenant_event_uses_tenant_scoped_client_match() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let user_id = StringUuid::new_v4();
     let tenant_a = StringUuid::new_v4();
@@ -318,7 +318,7 @@ async fn test_receive_multi_tenant_event_uses_tenant_scoped_client_match() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -333,7 +333,7 @@ async fn test_receive_multi_tenant_event_uses_tenant_scoped_client_match() {
 #[tokio::test]
 async fn test_receive_admin_event_skipped() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "operationType": "CREATE",
@@ -343,7 +343,7 @@ async fn test_receive_admin_event_skipped() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     // No events should be recorded for admin events
@@ -358,7 +358,7 @@ async fn test_receive_admin_event_skipped() {
 #[tokio::test]
 async fn test_receive_non_login_event_skipped() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGOUT",
@@ -368,7 +368,7 @@ async fn test_receive_non_login_event_skipped() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -382,11 +382,11 @@ async fn test_receive_non_login_event_skipped() {
 #[tokio::test]
 async fn test_receive_malformed_json() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state);
+    let app = build_identity_event_test_router(state);
 
     let body = b"not valid json at all{{{";
 
-    let status = post_keycloak_event(&app, body, vec![]).await;
+    let status = post_identity_event(&app, body, vec![]).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
@@ -403,7 +403,7 @@ async fn test_receive_with_valid_signature() {
     config.webhook_secret = Some(secret.to_string());
     state.config = std::sync::Arc::new(config);
 
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -414,7 +414,7 @@ async fn test_receive_with_valid_signature() {
     let body_bytes = serde_json::to_vec(&body).unwrap();
     let signature = compute_signature(secret, &body_bytes);
 
-    let status = post_keycloak_event(
+    let status = post_identity_event(
         &app,
         &body_bytes,
         vec![("x-keycloak-signature", &signature)],
@@ -433,7 +433,7 @@ async fn test_receive_with_invalid_signature() {
     config.webhook_secret = Some("real-secret".to_string());
     state.config = std::sync::Arc::new(config);
 
-    let app = build_keycloak_event_test_router(state);
+    let app = build_identity_event_test_router(state);
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -441,7 +441,7 @@ async fn test_receive_with_invalid_signature() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(
+    let status = post_identity_event(
         &app,
         &body_bytes,
         vec![(
@@ -460,7 +460,7 @@ async fn test_receive_missing_signature_when_required() {
     config.webhook_secret = Some("secret".to_string());
     state.config = std::sync::Arc::new(config);
 
-    let app = build_keycloak_event_test_router(state);
+    let app = build_identity_event_test_router(state);
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -469,7 +469,7 @@ async fn test_receive_missing_signature_when_required() {
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
     // No signature header
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
@@ -480,7 +480,7 @@ async fn test_receive_missing_signature_when_required() {
 #[tokio::test]
 async fn test_receive_email_from_username_fallback() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -492,7 +492,7 @@ async fn test_receive_email_from_username_fallback() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -508,7 +508,7 @@ async fn test_receive_email_from_username_fallback() {
 #[tokio::test]
 async fn test_receive_extracts_user_agent() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -518,7 +518,7 @@ async fn test_receive_extracts_user_agent() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(
+    let status = post_identity_event(
         &app,
         &body_bytes,
         vec![("user-agent", "Mozilla/5.0 Test Browser")],
@@ -537,7 +537,7 @@ async fn test_receive_extracts_user_agent() {
 #[tokio::test]
 async fn test_receive_prefers_forwarded_user_agent() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -547,7 +547,7 @@ async fn test_receive_prefers_forwarded_user_agent() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(
+    let status = post_identity_event(
         &app,
         &body_bytes,
         vec![
@@ -570,7 +570,7 @@ async fn test_receive_prefers_forwarded_user_agent() {
 #[tokio::test]
 async fn test_receive_ip_from_keycloak_payload() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -581,7 +581,7 @@ async fn test_receive_ip_from_keycloak_payload() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();
@@ -594,7 +594,7 @@ async fn test_receive_ip_from_keycloak_payload() {
 #[tokio::test]
 async fn test_receive_ip_fallback_from_headers() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     // No ipAddress in payload — should fall back to X-Forwarded-For
     let body = serde_json::json!({
@@ -605,7 +605,7 @@ async fn test_receive_ip_fallback_from_headers() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(
+    let status = post_identity_event(
         &app,
         &body_bytes,
         vec![("x-forwarded-for", "198.51.100.10")],
@@ -622,7 +622,7 @@ async fn test_receive_ip_fallback_from_headers() {
 #[tokio::test]
 async fn test_receive_private_ip_location_is_local_network() {
     let state = TestAppState::new("http://mock-keycloak");
-    let app = build_keycloak_event_test_router(state.clone());
+    let app = build_identity_event_test_router(state.clone());
 
     let body = serde_json::json!({
         "type": "LOGIN",
@@ -633,7 +633,7 @@ async fn test_receive_private_ip_location_is_local_network() {
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
-    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    let status = post_identity_event(&app, &body_bytes, vec![]).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     let events = state.login_event_repo.list(0, 10).await.unwrap();

@@ -421,10 +421,20 @@ grep -ri "keycloak" auth9-core/migrations/ | wc -l
 
 ## Implementation Log
 
-- **Date**: 2026-03-20
-- **Fulfilled**: Phase 1 (R1.1, R1.2, R1.3), Phase 2 (R2.1, R2.2, R2.3, R2.4, R2.5)
-- **Remaining**: Phase 3-8
-- **QA Status**: Pending (cargo test 620/620, npm test 1262/1262)
-- **QA Document**: docs/qa/integration/23-keycloak-cleanup-phase1-2.md
+### 2026-03-21 — Phase 3-5, 7-8
+
+- **Fulfilled**: Phase 3 (R3.1, R3.2, R3.3), Phase 4 (R4.1, R4.2, R4.3, R4.4), Phase 5 (R5.1, R5.3), Phase 7 (R7.1, R7.2, R7.3, R7.4), Phase 8 (R8.1, R8.2, R8.3)
+- **Deferred**: Phase 5 R5.2 (keycloak_client_id → backend_client_id, coupled to Phase 6), Phase 6 (DB schema DROP COLUMN)
+- **Remaining**: Phase 6 (requires Phase 3-5 stable in production)
+- **QA Status**: 5/5 passed (cargo test 2507/2507, npm test 1262/1262)
+- **QA Document**: docs/qa/integration/25-keycloak-cleanup-phase3-5.md
 - **Tickets**: None
-- **Notes**: Phase 1+2 纯重构，所有现有测试通过。Phase 3+ 待后续治理。
+- **Notes**: Phase 6 (DB DROP COLUMN) 需要 Phase 3-5 在生产环境稳定运行后执行。剩余 keycloak 源码引用主要为 DB 列名（COALESCE 回退）和内部注释。
+
+### 2026-03-20 — Phase 1-2
+
+- **Fulfilled**: Phase 1 (R1.1, R1.2, R1.3), Phase 2 (R2.1, R2.2, R2.3, R2.4, R2.5)
+- **QA Status**: Pending (cargo test 620/620, npm test 1262/1262)
+- **QA Document**: docs/qa/integration/24-keycloak-cleanup-phase1-2.md
+- **Tickets**: None
+- **Notes**: Phase 1+2 纯重构，所有现有测试通过。

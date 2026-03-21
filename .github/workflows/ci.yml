@@ -158,12 +158,3 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/${{ matrix.arch }}
 
-      - name: Build auth9-keycloak-theme image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./auth9-keycloak-theme
-          push: false
-          tags: auth9-keycloak-theme:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/${{ matrix.arch }}

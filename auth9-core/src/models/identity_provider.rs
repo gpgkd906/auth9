@@ -1,7 +1,6 @@
 //! Identity Provider domain models
 //!
-//! Note: IdP configuration is stored in Keycloak.
-//! These models map Keycloak's IdP structures for Auth9 Portal.
+//! Models for identity provider (IdP) configuration used by Auth9 Portal.
 
 use crate::identity_engine::IdentityProviderRepresentation;
 use serde::{Deserialize, Serialize};
@@ -53,10 +52,10 @@ pub struct IdentityProvider {
     pub config: HashMap<String, String>,
 }
 
-/// Keycloak IdP representation
+/// Backend IdP representation (camelCase serialization for legacy compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct KeycloakIdentityProvider {
+pub struct BackendIdentityProvider {
     pub alias: String,
     pub display_name: Option<String>,
     pub provider_id: String,
@@ -72,24 +71,24 @@ pub struct KeycloakIdentityProvider {
     pub config: HashMap<String, String>,
 }
 
-impl From<KeycloakIdentityProvider> for IdentityProvider {
-    fn from(kc: KeycloakIdentityProvider) -> Self {
+impl From<BackendIdentityProvider> for IdentityProvider {
+    fn from(backend: BackendIdentityProvider) -> Self {
         Self {
-            alias: kc.alias,
-            display_name: kc.display_name,
-            provider_id: kc.provider_id,
-            enabled: kc.enabled,
-            trust_email: kc.trust_email,
-            store_token: kc.store_token,
-            link_only: kc.link_only,
+            alias: backend.alias,
+            display_name: backend.display_name,
+            provider_id: backend.provider_id,
+            enabled: backend.enabled,
+            trust_email: backend.trust_email,
+            store_token: backend.store_token,
+            link_only: backend.link_only,
             first_login_policy: "auto_merge".to_string(),
-            first_broker_login_flow_alias: kc.first_broker_login_flow_alias,
-            config: kc.config,
+            first_broker_login_flow_alias: backend.first_broker_login_flow_alias,
+            config: backend.config,
         }
     }
 }
 
-impl From<IdentityProvider> for KeycloakIdentityProvider {
+impl From<IdentityProvider> for BackendIdentityProvider {
     fn from(idp: IdentityProvider) -> Self {
         Self {
             alias: idp.alias,
@@ -288,11 +287,11 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_idp_to_identity_provider() {
+    fn test_backend_idp_to_identity_provider() {
         let mut config = HashMap::new();
         config.insert("clientId".to_string(), "test-client".to_string());
 
-        let kc_idp = KeycloakIdentityProvider {
+        let backend_idp = BackendIdentityProvider {
             alias: "google".to_string(),
             display_name: Some("Google Login".to_string()),
             provider_id: "google".to_string(),
@@ -304,7 +303,7 @@ mod tests {
             config,
         };
 
-        let idp: IdentityProvider = kc_idp.into();
+        let idp: IdentityProvider = backend_idp.into();
         assert_eq!(idp.alias, "google");
         assert_eq!(idp.display_name, Some("Google Login".to_string()));
         assert!(idp.enabled);
@@ -423,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_idp_deserialization() {
+    fn test_backend_idp_deserialization() {
         let json = r#"{
             "alias": "github",
             "displayName": "GitHub",
@@ -433,7 +432,7 @@ mod tests {
             "config": {"clientId": "abc123"}
         }"#;
 
-        let idp: KeycloakIdentityProvider = serde_json::from_str(json).unwrap();
+        let idp: BackendIdentityProvider = serde_json::from_str(json).unwrap();
         assert_eq!(idp.alias, "github");
         assert!(idp.enabled);
         assert!(idp.trust_email);
@@ -441,14 +440,14 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_idp_deserialization_defaults() {
+    fn test_backend_idp_deserialization_defaults() {
         let json = r#"{
             "alias": "test",
             "providerId": "oidc",
             "enabled": false
         }"#;
 
-        let idp: KeycloakIdentityProvider = serde_json::from_str(json).unwrap();
+        let idp: BackendIdentityProvider = serde_json::from_str(json).unwrap();
         assert_eq!(idp.alias, "test");
         assert!(!idp.enabled);
         assert!(!idp.trust_email); // default

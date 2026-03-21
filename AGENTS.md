@@ -3,7 +3,6 @@
 ## Project Structure & Module Organization
 - `auth9-core/`: Rust backend (axum + tonic). Key code lives in `auth9-core/src/` with `api/`, `grpc/`, `service/`, `repository/`, `domain/`, `jwt/`, `cache/`, and `config/`.
 - `auth9-portal/`: React Router 7 + TypeScript + Vite admin UI.
-- `auth9-keycloak-theme/`: Keycloak theming and branding integration.
 - `docs/`: Architecture and design references.
 - `deploy/` and `docker-compose*.yml`: Deployment and local infra.
 - `scripts/`: Utility scripts for dev and ops.
@@ -33,7 +32,7 @@ Frontend:
 - `cd auth9-portal && npm run typecheck` — TypeScript check.
 
 Local infra:
-- `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d` — TiDB, Redis, Keycloak.
+- `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d` — TiDB, Redis.
 
 ## Coding Style & Naming Conventions
 - Rust: `cargo fmt` for formatting, `cargo clippy` for linting.
@@ -42,7 +41,7 @@ Local infra:
 
 ## Testing Guidelines
 - No external dependencies for Rust tests: no Docker, no real DB/Redis.
-- Use `mockall` for repository traits and `wiremock` for Keycloak HTTP.
+- Use `mockall` for repository traits and `wiremock` for HTTP mocking.
 Rust test locations:
 - Service tests: `auth9-core/src/service/*.rs` with `#[cfg(test)]`.
 - HTTP handler tests: `auth9-core/tests/api/http/*_http_test.rs`.
@@ -56,7 +55,7 @@ Rust test locations:
 
 ## Security & Configuration Notes
 - `auth9-core` requires `DATABASE_URL` and `JWT_SECRET`. Use `.env.example` files as starting points.
-- Keycloak is optional but used for OIDC/MFA; ensure local Keycloak is running when testing those flows.
+- OIDC/MFA is handled by the built-in auth9-oidc engine; no external identity provider is required.
 
 ## Authorization Model (Policy-First)
 - Central authorization lives in `auth9-core/src/policy/mod.rs`.

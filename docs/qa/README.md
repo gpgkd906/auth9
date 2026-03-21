@@ -209,6 +209,7 @@
 | [integration/22-config-keycloak-retirement.md](./integration/22-config-keycloak-retirement.md) | Phase 5 FR4 Config 重构 — KeycloakConfig 退役、字段提升、SAML 方法补全 | 5 |
 | [integration/23-migration-consolidation.md](./integration/23-migration-consolidation.md) | Migration 统一治理 — auth9-oidc migration 迁入 auth9-core 统一管理 | 4 |
 | [integration/24-keycloak-cleanup-phase1-2.md](./integration/24-keycloak-cleanup-phase1-2.md) | Keycloak 遗留清理 Phase 1+2 — 用户可见文案中性化、核心服务重命名验证 | 4 |
+| [integration/25-keycloak-cleanup-phase3-5.md](./integration/25-keycloak-cleanup-phase3-5.md) | Keycloak 遗留清理 Phase 3-5 — API 端点迁移、配置清理、模型重命名验证 | 5 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |

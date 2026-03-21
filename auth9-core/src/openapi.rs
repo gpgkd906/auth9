@@ -370,7 +370,7 @@ use utoipa::OpenApi;
         crate::domains::integration::api::action::get_triggers,
 
         // ── Integration: Identity Event ──────────────────────────────
-        crate::domains::integration::api::keycloak_event::receive,
+        crate::domains::integration::api::identity_event::receive,
 
         // ── Security & Observability: Audit ────────────────────────
         crate::domains::security_observability::api::audit::list,

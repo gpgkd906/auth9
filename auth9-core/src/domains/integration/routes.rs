@@ -9,10 +9,16 @@ pub fn public_routes<S>() -> Router<S>
 where
     S: IntegrationContext,
 {
-    Router::new().route(
-        "/api/v1/keycloak/events",
-        post(integration_api::keycloak_event::receive::<S>),
-    )
+    Router::new()
+        .route(
+            "/api/v1/identity/events",
+            post(integration_api::identity_event::receive::<S>),
+        )
+        // Deprecated alias — will be removed in a future version
+        .route(
+            "/api/v1/keycloak/events",
+            post(integration_api::identity_event::receive::<S>),
+        )
 }
 
 pub fn protected_routes<S>() -> Router<S>
