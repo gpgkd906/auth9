@@ -1,7 +1,7 @@
 //! WebAuthn/Passkey service
 //!
 //! Native WebAuthn registration and authentication using webauthn-rs.
-//! During migration period, also supports listing/deleting Keycloak credentials.
+//! During migration period, also supports listing/deleting identity engine credentials.
 
 use crate::cache::CacheOperations;
 use crate::error::{AppError, Result};
@@ -294,11 +294,11 @@ impl WebAuthnService {
 
     // ==================== Management ====================
 
-    /// List credentials for a user (native + Keycloak during migration)
+    /// List credentials for a user (native + identity engine during migration)
     pub async fn list_credentials(
         &self,
         user_id: &str,
-        keycloak_user_id: Option<&str>,
+        identity_subject: Option<&str>,
     ) -> Result<Vec<WebAuthnCredential>> {
         // Native credentials from TiDB
         let native_creds: Vec<WebAuthnCredential> = self
@@ -309,16 +309,16 @@ impl WebAuthnService {
             .map(WebAuthnCredential::from)
             .collect();
 
-        // Keycloak credentials (migration period)
+        // Identity engine credentials (migration period)
         let mut all_creds = native_creds;
-        if let (Some(identity_engine), Some(kc_user_id)) = (&self.identity_engine, keycloak_user_id)
+        if let (Some(identity_engine), Some(subject)) = (&self.identity_engine, identity_subject)
         {
-            if let Ok(kc_credentials) = identity_engine
+            if let Ok(engine_credentials) = identity_engine
                 .credential_store()
-                .list_webauthn_credentials(kc_user_id)
+                .list_webauthn_credentials(subject)
                 .await
             {
-                let kc_creds: Vec<WebAuthnCredential> = kc_credentials
+                let engine_creds: Vec<WebAuthnCredential> = engine_credentials
                     .into_iter()
                     .map(|c| WebAuthnCredential {
                         id: format!("kc_{}", c.id),
@@ -330,32 +330,32 @@ impl WebAuthnService {
                         }),
                     })
                     .collect();
-                all_creds.extend(kc_creds);
+                all_creds.extend(engine_creds);
             }
         }
 
         Ok(all_creds)
     }
 
-    /// Delete a credential (handles both native and Keycloak)
+    /// Delete a credential (handles both native and identity engine)
     pub async fn delete_credential(
         &self,
         user_id: &str,
         credential_id: &str,
-        keycloak_user_id: Option<&str>,
+        identity_subject: Option<&str>,
     ) -> Result<()> {
-        // Check if it's a Keycloak credential (prefixed with kc_)
-        if let Some(kc_id) = credential_id.strip_prefix("kc_") {
-            if let (Some(identity_engine), Some(kc_user_id)) =
-                (&self.identity_engine, keycloak_user_id)
+        // Check if it's an identity engine credential (prefixed with kc_)
+        if let Some(engine_id) = credential_id.strip_prefix("kc_") {
+            if let (Some(identity_engine), Some(subject)) =
+                (&self.identity_engine, identity_subject)
             {
                 return identity_engine
                     .credential_store()
-                    .delete_user_credential(kc_user_id, kc_id)
+                    .delete_user_credential(subject, engine_id)
                     .await;
             }
             return Err(AppError::BadRequest(
-                "Cannot delete Keycloak credential: Keycloak not configured".to_string(),
+                "Cannot delete identity engine credential: identity engine not configured".to_string(),
             ));
         }
 
@@ -554,11 +554,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_keycloak_credential_no_client() {
+    async fn test_delete_engine_credential_no_client() {
         let mock_repo = MockWebAuthnRepository::new();
         let service = create_test_service(mock_repo);
 
-        // Trying to delete a kc_ prefixed credential without Keycloak client
+        // Trying to delete a kc_ prefixed credential without identity engine client
         let result = service
             .delete_credential("user-1", "kc_some-kc-id", None)
             .await;
@@ -567,7 +567,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Keycloak not configured"));
+            .contains("identity engine not configured"));
     }
 
     #[tokio::test]
@@ -687,7 +687,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_credential_no_keycloak_user_id() {
+    async fn test_delete_credential_no_identity_subject() {
         let mock_repo = MockWebAuthnRepository::new();
 
         let service = WebAuthnService::new(
@@ -698,7 +698,7 @@ mod tests {
             300,
         );
 
-        // kc_ prefix but no keycloak_user_id passed
+        // kc_ prefix but no identity_subject passed
         let result = service
             .delete_credential("user-1", "kc_some-cred", None)
             .await;
@@ -706,7 +706,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Keycloak not configured"));
+            .contains("identity engine not configured"));
     }
 
     #[test]

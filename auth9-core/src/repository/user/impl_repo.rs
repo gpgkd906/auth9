@@ -16,12 +16,11 @@ impl UserRepository for UserRepositoryImpl {
 
         sqlx::query(
             r#"
-            INSERT INTO users (id, identity_subject, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, false, NOW(), NOW())
+            INSERT INTO users (id, identity_subject, email, display_name, avatar_url, mfa_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, false, NOW(), NOW())
             "#,
         )
         .bind(id)
-        .bind(identity_subject)
         .bind(identity_subject)
         .bind(&input.email)
         .bind(&input.display_name)
@@ -37,7 +36,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, COALESCE(identity_subject, keycloak_id) AS identity_subject,
+            SELECT id, identity_subject,
                    scim_external_id, scim_provisioned_by, email, display_name, avatar_url,
                    mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
@@ -54,7 +53,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, COALESCE(identity_subject, keycloak_id) AS identity_subject,
+            SELECT id, identity_subject,
                    scim_external_id, scim_provisioned_by, email, display_name, avatar_url,
                    mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
@@ -71,14 +70,13 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_identity_subject(&self, identity_subject: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, COALESCE(identity_subject, keycloak_id) AS identity_subject,
+            SELECT id, identity_subject,
                    scim_external_id, scim_provisioned_by, email, display_name, avatar_url,
                    mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
-            WHERE identity_subject = ? OR keycloak_id = ?
+            WHERE identity_subject = ?
             "#,
         )
-        .bind(identity_subject)
         .bind(identity_subject)
         .fetch_optional(&self.pool)
         .await?;
@@ -89,7 +87,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, COALESCE(identity_subject, keycloak_id) AS identity_subject,
+            SELECT id, identity_subject,
                    scim_external_id, scim_provisioned_by, email, display_name, avatar_url,
                    mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
@@ -116,7 +114,7 @@ impl UserRepository for UserRepositoryImpl {
         let pattern = format!("%{}%", query);
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, COALESCE(identity_subject, keycloak_id) AS identity_subject,
+            SELECT id, identity_subject,
                    scim_external_id, scim_provisioned_by, email, display_name, avatar_url,
                    mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
@@ -305,7 +303,7 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT u.id, COALESCE(u.identity_subject, u.keycloak_id) AS identity_subject,
+            SELECT u.id, u.identity_subject,
                    u.scim_external_id, u.scim_provisioned_by, u.email, u.display_name,
                    u.avatar_url, u.mfa_enabled, u.password_changed_at, u.locked_until,
                    u.created_at, u.updated_at
@@ -335,7 +333,7 @@ impl UserRepository for UserRepositoryImpl {
         let pattern = format!("%{}%", query);
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT u.id, COALESCE(u.identity_subject, u.keycloak_id) AS identity_subject,
+            SELECT u.id, u.identity_subject,
                    u.scim_external_id, u.scim_provisioned_by, u.email, u.display_name,
                    u.avatar_url, u.mfa_enabled, u.password_changed_at, u.locked_until,
                    u.created_at, u.updated_at
@@ -538,7 +536,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_scim_external_id(&self, scim_external_id: String) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, COALESCE(identity_subject, keycloak_id) AS identity_subject,
+            SELECT id, identity_subject,
                    scim_external_id, scim_provisioned_by, email, display_name, avatar_url,
                    mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users

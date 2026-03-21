@@ -1,8 +1,8 @@
-//! Database migration and Keycloak seeding module
+//! Database migration and data seeding module
 //!
 //! Provides functionality for:
 //! - Running database migrations
-//! - Seeding Keycloak with realm and default admin user
+//! - Seeding default admin user and tenant data
 //! - Seeding default services in database
 
 use crate::config::Config;
@@ -192,7 +192,7 @@ async fn apply_scim_mapping_migration_compat(
 
     if !column_exists(pool, "users", "scim_external_id").await? {
         sqlx::query(
-            "ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER keycloak_id",
+            "ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER identity_subject",
         )
         .execute(pool)
         .await
@@ -658,7 +658,7 @@ async fn seed_m2m_test_service(config: &Config) -> Result<()> {
 ///
 /// This function is safe to call multiple times (idempotent):
 /// - Tenants: INSERT IGNORE (slug UNIQUE constraint)
-/// - Users: INSERT ... ON DUPLICATE KEY UPDATE keycloak_id (handles Keycloak reset)
+/// - Users: INSERT ... ON DUPLICATE KEY UPDATE identity_subject (handles reset)
 /// - Tenant users: INSERT IGNORE (tenant_id, user_id UNIQUE constraint)
 /// - Tenant services: INSERT ... ON DUPLICATE KEY UPDATE enabled = TRUE
 async fn seed_initial_data(config: &Config) -> Result<()> {
@@ -671,11 +671,11 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .cloned()
         .unwrap_or_else(|| "admin@auth9.local".to_string());
     // Use a deterministic identity subject derived from the email
-    let keycloak_id = format!("seed-admin-{}", admin_email);
+    let identity_subject = format!("seed-admin-{}", admin_email);
 
     info!(
         "Seeding admin user: identity_subject={}, email={}",
-        keycloak_id, admin_email
+        identity_subject, admin_email
     );
 
     let pool: Pool<MySql> = MySqlPoolOptions::new()
@@ -727,11 +727,10 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     if let Some((existing_id,)) = existing_admin {
         // Update existing admin user's identity_subject and email
         sqlx::query(
-            r#"UPDATE users SET keycloak_id = ?, identity_subject = ?, email = ?, updated_at = NOW()
+            r#"UPDATE users SET identity_subject = ?, email = ?, updated_at = NOW()
             WHERE id = ?"#,
         )
-        .bind(&keycloak_id)
-        .bind(&keycloak_id)
+        .bind(&identity_subject)
         .bind(&admin_email)
         .bind(&existing_id)
         .execute(&pool)
@@ -740,19 +739,18 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
 
         info!(
             "Updated existing admin user identity_subject to {}",
-            keycloak_id
+            identity_subject
         );
     } else {
         // Insert new admin user
         let admin_user_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            r#"INSERT INTO users (id, keycloak_id, identity_subject, email, display_name, mfa_enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, FALSE, NOW(), NOW())
-            ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), identity_subject = VALUES(identity_subject), email = VALUES(email), mfa_enabled = FALSE"#,
+            r#"INSERT INTO users (id, identity_subject, email, display_name, mfa_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE identity_subject = VALUES(identity_subject), email = VALUES(email), mfa_enabled = FALSE"#,
         )
         .bind(&admin_user_id)
-        .bind(&keycloak_id)
-        .bind(&keycloak_id)
+        .bind(&identity_subject)
         .bind(&admin_email)
         .bind(SEED_ADMIN_DISPLAY_NAME)
         .execute(&pool)
@@ -761,7 +759,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
 
         info!(
             "Created new admin user with identity_subject {}",
-            keycloak_id
+            identity_subject
         );
     }
 
@@ -778,8 +776,8 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to get demo tenant ID")?;
 
-    let (actual_user_id,): (String,) = sqlx::query_as("SELECT id FROM users WHERE keycloak_id = ?")
-        .bind(&keycloak_id)
+    let (actual_user_id,): (String,) = sqlx::query_as("SELECT id FROM users WHERE identity_subject = ?")
+        .bind(&identity_subject)
         .fetch_one(&pool)
         .await
         .context("Failed to get admin user ID")?;
@@ -806,7 +804,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         match sqlx::query(
             "DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'",
         )
-        .bind(&keycloak_id)
+        .bind(&identity_subject)
         .execute(&pool)
         .await
         {
@@ -815,7 +813,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
                     "INSERT INTO credentials (id, user_id, credential_type, credential_data) VALUES (?, ?, 'password', ?)",
                 )
                 .bind(uuid::Uuid::new_v4().to_string())
-                .bind(&keycloak_id)
+                .bind(&identity_subject)
                 .bind(&cred_data)
                 .execute(&pool)
                 .await
@@ -962,7 +960,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
 
     info!(
         "Initial data seeded: tenants=[{}, {}], admin_user={}, email={}",
-        DEFAULT_PLATFORM_TENANT_SLUG, DEFAULT_DEMO_TENANT_SLUG, keycloak_id, admin_email
+        DEFAULT_PLATFORM_TENANT_SLUG, DEFAULT_DEMO_TENANT_SLUG, identity_subject, admin_email
     );
 
     Ok(())
@@ -1053,10 +1051,10 @@ async fn seed_rbac_for_service(
     Ok(())
 }
 
-/// Seed dev email config in database and sync to Keycloak when DEV_SMTP_HOST is set
+/// Seed dev email config in database when DEV_SMTP_HOST is set
 ///
 /// This configures the system to use Mailpit for email testing in dev environment.
-/// Also syncs SMTP settings directly to Keycloak realm so password reset emails work.
+/// Ensures SMTP settings are available for password reset emails.
 async fn seed_dev_email_config(config: &Config) -> Result<()> {
     let smtp_host = match std::env::var("DEV_SMTP_HOST") {
         Ok(host) => host,

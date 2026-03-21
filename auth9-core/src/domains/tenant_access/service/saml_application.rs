@@ -83,7 +83,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             &input.attribute_mappings,
         );
 
-        // Create in Keycloak
+        // Create in identity engine
         let kc_client_uuid = self
             .identity_engine
             .client_store()
@@ -104,7 +104,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             encrypt_assertions: input.encrypt_assertions,
             sp_certificate: input.sp_certificate,
             attribute_mappings: input.attribute_mappings,
-            keycloak_client_id: kc_client_uuid,
+            backend_client_id: kc_client_uuid,
             enabled: true,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -150,7 +150,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
 
         let existing = self.find_owned(tenant_id, app_id).await?;
 
-        // Rebuild Keycloak client with merged values
+        // Rebuild SAML client representation with merged values
         let name = input.name.as_ref().unwrap_or(&existing.name);
         let acs_url = input.acs_url.as_ref().unwrap_or(&existing.acs_url);
         let slo_url = input
@@ -197,12 +197,12 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
             sp_certificate,
             attribute_mappings,
         );
-        kc_client.id = Some(existing.keycloak_client_id.clone());
+        kc_client.id = Some(existing.backend_client_id.clone());
         kc_client.enabled = enabled;
 
         self.identity_engine
             .client_store()
-            .update_saml_client(&existing.keycloak_client_id, &kc_client)
+            .update_saml_client(&existing.backend_client_id, &kc_client)
             .await?;
 
         let updated = self.repo.update(app_id, &input).await?;
@@ -213,10 +213,10 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
     pub async fn delete(&self, tenant_id: StringUuid, app_id: StringUuid) -> Result<()> {
         let existing = self.find_owned(tenant_id, app_id).await?;
 
-        // Delete from Keycloak first
+        // Delete from identity engine first
         self.identity_engine
             .client_store()
-            .delete_saml_client(&existing.keycloak_client_id)
+            .delete_saml_client(&existing.backend_client_id)
             .await?;
 
         // Delete from database
@@ -289,7 +289,7 @@ impl<R: SamlApplicationRepository> SamlApplicationService<R> {
         })
     }
 
-    /// Find the active RSA signing certificate from Keycloak realm keys
+    /// Find the active RSA signing certificate from identity engine realm keys
     async fn find_active_signing_cert(&self) -> Result<String> {
         self.identity_engine
             .client_store()
@@ -382,7 +382,7 @@ fn build_saml_client_representation(
     );
     attributes.insert("saml.encrypt".to_string(), encrypt_assertions.to_string());
 
-    // NameID format — Keycloak uses short names
+    // NameID format — uses short names
     let kc_name_id = match name_id_format {
         NameIdFormat::Email => "email",
         NameIdFormat::Persistent => "persistent",
@@ -518,7 +518,7 @@ mod tests {
             encrypt_assertions: false,
             sp_certificate: None,
             attribute_mappings: vec![],
-            keycloak_client_id: "kc-uuid-123".to_string(),
+            backend_client_id: "kc-uuid-123".to_string(),
             enabled: true,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -701,9 +701,9 @@ mod tests {
             .with(eq(tenant_id), eq("https://sp.test.com"))
             .returning(move |tid, _| Ok(Some(make_test_app(tid))));
 
-        let keycloak = test_identity_engine();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let input = CreateSamlApplicationInput {
             name: "Duplicate SP".to_string(),
@@ -738,9 +738,9 @@ mod tests {
             .with(eq(app_id))
             .returning(|_| Ok(None));
 
-        let keycloak = test_identity_engine();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.get(tenant_id, app_id).await;
         assert!(result.is_err());
@@ -759,9 +759,9 @@ mod tests {
             .with(eq(app_id))
             .returning(move |_| Ok(Some(make_test_app(other_tenant))));
 
-        let keycloak = test_identity_engine();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.get(tenant_id, app_id).await;
         assert!(result.is_err());
@@ -777,9 +777,9 @@ mod tests {
             .with(eq(tenant_id))
             .returning(|_| Ok(vec![]));
 
-        let keycloak = test_identity_engine();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.list(tenant_id).await.unwrap();
         assert!(result.is_empty());
@@ -793,8 +793,8 @@ mod tests {
         mock.expect_find_by_tenant_and_entity_id()
             .returning(|_, _| Ok(None));
 
-        let keycloak = test_identity_engine();
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let identity_engine = test_identity_engine();
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let input = CreateSamlApplicationInput {
             name: "Encrypted SP".to_string(),
@@ -830,8 +830,8 @@ mod tests {
             .with(eq(app_id))
             .returning(move |_| Ok(Some(make_test_app(tenant_id))));
 
-        let keycloak = test_identity_engine();
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let identity_engine = test_identity_engine();
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let input = UpdateSamlApplicationInput {
             name: None,
@@ -938,9 +938,9 @@ QRuQujMkNHI=";
             .with(eq(tenant_id))
             .returning(move |tid| Ok(vec![make_test_app(tid)]));
 
-        let keycloak = test_identity_engine();
+        let identity_engine = test_identity_engine();
 
-        let service = SamlApplicationService::new(Arc::new(mock), keycloak);
+        let service = SamlApplicationService::new(Arc::new(mock), identity_engine);
 
         let result = service.list(tenant_id).await.unwrap();
         assert_eq!(result.len(), 1);

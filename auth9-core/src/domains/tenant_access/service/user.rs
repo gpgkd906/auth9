@@ -107,7 +107,7 @@ impl<
         Rbac: RbacRepository,
     > UserService<R, S, P, L, LE, SA, A, Rbac>
 {
-    /// Create a new UserService with repository bundle, keycloak client, and webhook publisher
+    /// Create a new UserService with repository bundle, identity engine, and webhook publisher
     pub fn new(
         repos: UserRepositoryBundle<R, S, P, L, LE, SA, A, Rbac>,
         webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
@@ -242,7 +242,7 @@ impl<
     /// Delete a user with cascade delete of all related data.
     ///
     /// When a database pool is available, all cascade operations run within a single
-    /// transaction. External operations (Keycloak delete, webhooks) run after commit.
+    /// transaction. External operations (identity engine delete, webhooks) run after commit.
     ///
     /// Cascade order (within transaction):
     /// 1. Delete user_tenant_roles for all tenant memberships
@@ -256,7 +256,7 @@ impl<
     /// 9. Delete users record
     ///
     /// After commit:
-    /// 10. Delete user from Keycloak (tolerant of NotFound)
+    /// 10. Delete user from identity engine (tolerant of NotFound)
     /// 11. Trigger user.deleted webhook event
     pub async fn delete(&self, id: StringUuid) -> Result<()> {
         let user = self.get(id).await?;

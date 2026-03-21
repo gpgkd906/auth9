@@ -13,14 +13,13 @@ impl SessionRepository for SessionRepositoryImpl {
 
         sqlx::query(
             r#"
-            INSERT INTO sessions (id, user_id, provider_session_id, keycloak_session_id, device_type, device_name,
+            INSERT INTO sessions (id, user_id, provider_session_id, device_type, device_name,
                                   ip_address, location, user_agent, last_active_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             "#,
         )
         .bind(id)
         .bind(input.user_id)
-        .bind(&input.provider_session_id)
         .bind(&input.provider_session_id)
         .bind(&input.device_type)
         .bind(&input.device_name)
@@ -38,7 +37,7 @@ impl SessionRepository for SessionRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Session>> {
         let session = sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, user_id, COALESCE(provider_session_id, keycloak_session_id) AS provider_session_id, device_type, device_name,
+            SELECT id, user_id, provider_session_id, device_type, device_name,
                    ip_address, location, user_agent, last_active_at, created_at, revoked_at
             FROM sessions
             WHERE id = ?
@@ -57,13 +56,12 @@ impl SessionRepository for SessionRepositoryImpl {
     ) -> Result<Option<Session>> {
         let session = sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, user_id, COALESCE(provider_session_id, keycloak_session_id) AS provider_session_id, device_type, device_name,
+            SELECT id, user_id, provider_session_id, device_type, device_name,
                    ip_address, location, user_agent, last_active_at, created_at, revoked_at
             FROM sessions
-            WHERE provider_session_id = ? OR keycloak_session_id = ?
+            WHERE provider_session_id = ?
             "#,
         )
-        .bind(provider_session_id)
         .bind(provider_session_id)
         .fetch_optional(&self.pool)
         .await?;
@@ -74,7 +72,7 @@ impl SessionRepository for SessionRepositoryImpl {
     async fn list_by_user(&self, user_id: StringUuid) -> Result<Vec<Session>> {
         let sessions = sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, user_id, COALESCE(provider_session_id, keycloak_session_id) AS provider_session_id, device_type, device_name,
+            SELECT id, user_id, provider_session_id, device_type, device_name,
                    ip_address, location, user_agent, last_active_at, created_at, revoked_at
             FROM sessions
             WHERE user_id = ?
@@ -91,7 +89,7 @@ impl SessionRepository for SessionRepositoryImpl {
     async fn list_active_by_user(&self, user_id: StringUuid) -> Result<Vec<Session>> {
         let sessions = sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, user_id, COALESCE(provider_session_id, keycloak_session_id) AS provider_session_id, device_type, device_name,
+            SELECT id, user_id, provider_session_id, device_type, device_name,
                    ip_address, location, user_agent, last_active_at, created_at, revoked_at
             FROM sessions
             WHERE user_id = ? AND revoked_at IS NULL
@@ -212,7 +210,7 @@ impl SessionRepository for SessionRepositoryImpl {
     async fn find_oldest_active_by_user(&self, user_id: StringUuid) -> Result<Option<Session>> {
         let session = sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, user_id, COALESCE(provider_session_id, keycloak_session_id) AS provider_session_id, device_type, device_name,
+            SELECT id, user_id, provider_session_id, device_type, device_name,
                    ip_address, location, user_agent, last_active_at, created_at, revoked_at
             FROM sessions
             WHERE user_id = ? AND revoked_at IS NULL

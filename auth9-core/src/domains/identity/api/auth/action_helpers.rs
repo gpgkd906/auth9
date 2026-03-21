@@ -81,7 +81,7 @@ pub(super) async fn discover_connector_by_domain(
     let row = sqlx::query(
         r#"
         SELECT c.tenant_id, t.slug as tenant_slug, c.alias as connector_alias,
-               COALESCE(c.provider_alias, c.keycloak_alias) AS provider_alias, c.provider_type
+               c.provider_alias, c.provider_type
         FROM enterprise_sso_domains d
         INNER JOIN enterprise_sso_connectors c ON c.id = d.connector_id
         INNER JOIN tenants t ON t.id = c.tenant_id

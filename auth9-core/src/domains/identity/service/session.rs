@@ -130,7 +130,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
             ));
         }
 
-        // Revoke in Keycloak if session ID exists
+        // Revoke in identity engine if session ID exists
         if let Some(provider_session_id) = &session.provider_session_id {
             // Ignore errors from the identity backend (session may already be expired)
             let _ = self
@@ -195,7 +195,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
 
     /// Force logout a user (admin action)
     pub async fn force_logout_user(&self, user_id: StringUuid) -> Result<u64> {
-        // Get user to get their Keycloak ID
+        // Get user to get their identity engine ID
         let user = self
             .user_repo
             .find_by_id(user_id)
@@ -208,7 +208,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
             .logout_user(&user.identity_subject)
             .await;
 
-        // Revoke all sessions in database regardless of Keycloak status
+        // Revoke all sessions in database regardless of identity engine status
         self.session_repo.revoke_all_by_user(user_id).await
     }
 
@@ -320,7 +320,7 @@ mod tests {
             .with(eq(user_id))
             .returning(|_| Ok(vec![]));
 
-        // Create a mock Keycloak client - we won't use it in this test
+        // Create a mock identity engine client - we won't use it in this test
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),

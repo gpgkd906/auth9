@@ -47,7 +47,7 @@ impl SamlApplicationRepository for SamlApplicationRepositoryImpl {
             INSERT INTO saml_applications (
                 id, tenant_id, name, entity_id, acs_url, slo_url,
                 name_id_format, sign_assertions, sign_responses, encrypt_assertions,
-                sp_certificate, attribute_mappings, keycloak_client_id, enabled,
+                sp_certificate, attribute_mappings, backend_client_id, enabled,
                 created_at, updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
@@ -65,7 +65,7 @@ impl SamlApplicationRepository for SamlApplicationRepositoryImpl {
         .bind(app.encrypt_assertions)
         .bind(&app.sp_certificate)
         .bind(&mappings_json)
-        .bind(&app.keycloak_client_id)
+        .bind(&app.backend_client_id)
         .bind(app.enabled)
         .execute(&self.pool)
         .await?;
@@ -80,7 +80,7 @@ impl SamlApplicationRepository for SamlApplicationRepositoryImpl {
             r#"
             SELECT id, tenant_id, name, entity_id, acs_url, slo_url,
                    name_id_format, sign_assertions, sign_responses, encrypt_assertions,
-                   sp_certificate, attribute_mappings, keycloak_client_id, enabled,
+                   sp_certificate, attribute_mappings, backend_client_id, enabled,
                    created_at, updated_at
             FROM saml_applications
             WHERE id = ?
@@ -102,7 +102,7 @@ impl SamlApplicationRepository for SamlApplicationRepositoryImpl {
             r#"
             SELECT id, tenant_id, name, entity_id, acs_url, slo_url,
                    name_id_format, sign_assertions, sign_responses, encrypt_assertions,
-                   sp_certificate, attribute_mappings, keycloak_client_id, enabled,
+                   sp_certificate, attribute_mappings, backend_client_id, enabled,
                    created_at, updated_at
             FROM saml_applications
             WHERE tenant_id = ? AND entity_id = ?
@@ -121,7 +121,7 @@ impl SamlApplicationRepository for SamlApplicationRepositoryImpl {
             r#"
             SELECT id, tenant_id, name, entity_id, acs_url, slo_url,
                    name_id_format, sign_assertions, sign_responses, encrypt_assertions,
-                   sp_certificate, attribute_mappings, keycloak_client_id, enabled,
+                   sp_certificate, attribute_mappings, backend_client_id, enabled,
                    created_at, updated_at
             FROM saml_applications
             WHERE tenant_id = ?

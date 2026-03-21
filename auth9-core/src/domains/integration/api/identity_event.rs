@@ -223,13 +223,13 @@ fn map_event_type_with_details(
         "CLIENT_LOGIN" | "CLIENT_LOGIN_ERROR" => None, // Service account logins
 
         _ => {
-            debug!("Ignoring unknown Keycloak event type: {}", kc_type);
+            debug!("Ignoring unknown identity event type: {}", kc_type);
             None
         }
     }
 }
 
-/// Map Keycloak event type to Auth9 LoginEventType (backward-compatible wrapper for tests)
+/// Map identity event type to Auth9 LoginEventType (backward-compatible wrapper for tests)
 #[allow(dead_code)]
 fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> {
     map_event_type_with_details(kc_type, error, &IdentityEventDetails::default())
@@ -278,7 +278,7 @@ async fn resolve_event_tenant_id<S: HasServices>(
             warn!(
                 user_id = %uid,
                 error = %err,
-                "Failed to resolve tenant memberships for Keycloak event"
+                "Failed to resolve tenant memberships for identity event"
             );
             return None;
         }
@@ -303,7 +303,7 @@ async fn resolve_event_tenant_id<S: HasServices>(
                         user_id = %uid,
                         client_id,
                         service_tenant_id = %service_tenant_id,
-                        "Keycloak event client resolved to tenant outside user memberships"
+                        "Identity event client resolved to tenant outside user memberships"
                     );
                     return None;
                 }
@@ -312,7 +312,7 @@ async fn resolve_event_tenant_id<S: HasServices>(
                 debug!(
                     client_id,
                     error = %err,
-                    "Failed to resolve client service for Keycloak event tenant inference"
+                    "Failed to resolve client service for identity event tenant inference"
                 );
             }
         }
@@ -325,7 +325,7 @@ async fn resolve_event_tenant_id<S: HasServices>(
     warn!(
         user_id = %uid,
         membership_count = tenant_memberships.len(),
-        "Ambiguous tenant context for multi-tenant Keycloak event; storing without tenant_id"
+        "Ambiguous tenant context for multi-tenant identity event; storing without tenant_id"
     );
     None
 }
@@ -406,7 +406,7 @@ pub async fn process_identity_event<
         let age_secs = (now_millis - event.time) / 1000;
         if age_secs > 300 {
             warn!(
-                "Rejecting expired Keycloak event: age={}s, type={:?}, user_id={:?}",
+                "Rejecting expired identity event: age={}s, type={:?}, user_id={:?}",
                 age_secs, event.event_type, event.user_id
             );
             return Err(AppError::BadRequest(format!(
@@ -443,7 +443,7 @@ pub async fn process_identity_event<
     // Skip admin events (operationType/resourceType)
     if event.event_type.is_none() {
         debug!(
-            "Skipping Keycloak admin event: operation={:?}, resource={:?}",
+            "Skipping admin event: operation={:?}, resource={:?}",
             event.operation_type, event.resource_type
         );
         return Ok(StatusCode::NO_CONTENT);
@@ -451,7 +451,7 @@ pub async fn process_identity_event<
 
     let event_type_str = event.event_type.as_deref().unwrap_or("");
     debug!(
-        "Received Keycloak event: type={}, user_id={:?}, error={:?}, details={:?}",
+        "Received identity event: type={}, user_id={:?}, error={:?}, details={:?}",
         event_type_str, event.user_id, event.error, event.details
     );
 
@@ -503,7 +503,7 @@ pub async fn process_identity_event<
             Ok(user) => Some(user.id),
             Err(_) => {
                 debug!(
-                    "Could not resolve Keycloak user_id {} to auth9 user; storing as-is",
+                    "Could not resolve identity user_id {} to auth9 user; storing as-is",
                     kc_user_id
                 );
                 uuid::Uuid::parse_str(kc_user_id).ok().map(StringUuid::from)
@@ -640,16 +640,16 @@ pub async fn process_identity_event<
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Receive Keycloak events webhook
+/// Receive identity events webhook
 ///
-/// POST /api/v1/keycloak/events
+/// POST /api/v1/identity/events
 ///
-/// This endpoint receives events from the Keycloak p2-inc/keycloak-events SPI plugin.
+/// This endpoint receives identity events (login, logout, register, etc.).
 /// It validates the HMAC signature (if configured), maps the event to our domain model,
 /// records it in the analytics system, and triggers security detection analysis.
 #[utoipa::path(
     post,
-    path = "/api/v1/keycloak/events",
+    path = "/api/v1/identity/events",
     tag = "Integration",
     request_body(content = String, content_type = "application/json"),
     responses(
@@ -664,28 +664,28 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
     // 1. Verify webhook signature if secret is configured
     let config = state.config();
     if let Some(ref secret) = config.webhook_secret {
-        // p2-inc/keycloak-events ext-event-http uses X-Keycloak-Signature header
+        // Check for webhook signature header (supports legacy x-keycloak-signature)
         let signature = headers
-            .get("x-keycloak-signature")
-            .or_else(|| headers.get("x-webhook-signature"))
+            .get("x-webhook-signature")
+            .or_else(|| headers.get("x-keycloak-signature"))
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
         if signature.is_empty() {
-            warn!("Keycloak webhook received without signature header");
+            warn!("Identity webhook received without signature header");
             return Err(AppError::Unauthorized(
                 "Missing webhook signature".to_string(),
             ));
         }
 
         if !verify_signature(secret, &body, signature) {
-            warn!("Keycloak webhook signature verification failed");
+            warn!("Identity webhook signature verification failed");
             return Err(AppError::Unauthorized(
                 "Invalid webhook signature".to_string(),
             ));
         }
     } else {
-        debug!("Keycloak webhook signature verification skipped (no secret configured)");
+        debug!("Identity webhook signature verification skipped (no secret configured)");
     }
 
     let event = match parse_identity_event(&body) {
@@ -693,7 +693,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         Err(err) => {
             let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
             error!(
-                "Failed to parse Keycloak event: {}. Body preview: {}",
+                "Failed to parse identity event: {}. Body preview: {}",
                 err, body_preview
             );
             return Err(err);
@@ -947,7 +947,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_admin_event_deserialization() {
+    fn test_admin_event_deserialization() {
         let json = r#"{
             "operationType": "CREATE",
             "resourceType": "USER",

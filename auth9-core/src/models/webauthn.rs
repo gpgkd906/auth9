@@ -1,14 +1,14 @@
 //! WebAuthn/Passkey domain models
 //!
 //! Native WebAuthn credentials are stored in TiDB.
-//! Keycloak credentials are supported during migration period.
+//! Identity engine credentials are supported during migration period.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 
-/// WebAuthn credential info from Keycloak
+/// WebAuthn credential info from identity engine
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WebAuthnCredential {
     pub id: String,
@@ -52,10 +52,10 @@ impl From<StoredPasskey> for WebAuthnCredential {
     }
 }
 
-/// Keycloak credential representation
+/// Identity engine credential representation
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct KeycloakCredential {
+pub struct IdentityEngineCredential {
     pub id: String,
     #[serde(rename = "type")]
     pub credential_type: String,
@@ -65,8 +65,8 @@ pub struct KeycloakCredential {
     pub credential_data: Option<String>,
 }
 
-impl From<KeycloakCredential> for WebAuthnCredential {
-    fn from(cred: KeycloakCredential) -> Self {
+impl From<IdentityEngineCredential> for WebAuthnCredential {
+    fn from(cred: IdentityEngineCredential) -> Self {
         let created_at = cred
             .created_date
             .map(|ts| DateTime::from_timestamp_millis(ts).unwrap_or_else(Utc::now));
@@ -100,8 +100,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_webauthn_credential_from_keycloak() {
-        let kc_cred = KeycloakCredential {
+    fn test_webauthn_credential_from_identity_engine() {
+        let kc_cred = IdentityEngineCredential {
             id: "cred-123".to_string(),
             credential_type: "webauthn".to_string(),
             user_label: Some("My YubiKey".to_string()),
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_credential_deserialization() {
+    fn test_identity_engine_credential_deserialization() {
         let json = r#"{
             "id": "cred-456",
             "type": "webauthn",
@@ -149,17 +149,17 @@ mod tests {
             "createdDate": 1700000000000
         }"#;
 
-        let cred: KeycloakCredential = serde_json::from_str(json).unwrap();
+        let cred: IdentityEngineCredential = serde_json::from_str(json).unwrap();
         assert_eq!(cred.id, "cred-456");
         assert_eq!(cred.credential_type, "webauthn");
         assert_eq!(cred.user_label, Some("TouchID".to_string()));
     }
 
     #[test]
-    fn test_keycloak_credential_minimal() {
+    fn test_identity_engine_credential_minimal() {
         let json = r#"{"id": "cred-789", "type": "password"}"#;
 
-        let cred: KeycloakCredential = serde_json::from_str(json).unwrap();
+        let cred: IdentityEngineCredential = serde_json::from_str(json).unwrap();
         assert_eq!(cred.id, "cred-789");
         assert!(cred.user_label.is_none());
         assert!(cred.created_date.is_none());

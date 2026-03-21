@@ -21,7 +21,7 @@ use utoipa::OpenApi;
         (name = "Tenant Access", description = "Tenants, users, invitations, organizations, and SSO connectors"),
         (name = "Authorization", description = "Services, RBAC roles, permissions, and tenant-service associations"),
         (name = "Platform", description = "System settings, email configuration, branding, and email templates"),
-        (name = "Integration", description = "Webhooks, actions, and Keycloak event ingestion"),
+        (name = "Integration", description = "Webhooks, actions, and identity event ingestion"),
         (name = "Security & Observability", description = "Audit logs, analytics, and security alerts"),
     ),
     security(

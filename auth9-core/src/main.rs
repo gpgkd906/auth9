@@ -4,7 +4,7 @@
 //!   serve   - Start the API server (default)
 //!   init    - Run migrations and seed default data
 //!   migrate - Run database migrations only
-//!   seed    - Seed Keycloak with default data only
+//!   seed    - Seed default data only
 //!   reset   - Reset database (drop all tables)
 //!   openapi - Export OpenAPI spec to stdout (JSON)
 
@@ -29,7 +29,7 @@ enum Commands {
     Init,
     /// Run database migrations only
     Migrate,
-    /// Seed Keycloak with default data only
+    /// Seed default data only
     Seed,
     /// Reset database (drop all tables)
     Reset,

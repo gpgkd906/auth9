@@ -424,7 +424,7 @@ pub async fn accept<S: HasInvitations>(
                 temporary: false,
             }];
 
-            let keycloak_id = state
+            let identity_subject = state
                 .identity_engine()
                 .user_store()
                 .create_user(&IdentityUserCreateInput {
@@ -441,7 +441,7 @@ pub async fn accept<S: HasInvitations>(
             state
                 .user_service()
                 .create(
-                    &keycloak_id,
+                    &identity_subject,
                     CreateUserInput {
                         email: invitation.email.clone(),
                         display_name: request.display_name.clone(),

@@ -124,8 +124,8 @@ where
             return self.user_to_scim(&existing, ctx).await;
         }
 
-        // Create in Keycloak first (if available)
-        let keycloak_id = if let Some(identity_engine) = &self.identity_engine {
+        // Create in identity engine first (if available)
+        let identity_subject = if let Some(identity_engine) = &self.identity_engine {
             let create_input = IdentityUserCreateInput {
                 username: email.clone(),
                 email: email.clone(),
@@ -169,7 +169,7 @@ where
             avatar_url: fields.avatar_url.clone(),
         };
 
-        let user = self.user_repo.create(&keycloak_id, &input).await?;
+        let user = self.user_repo.create(&identity_subject, &input).await?;
 
         // Set SCIM fields
         self.user_repo

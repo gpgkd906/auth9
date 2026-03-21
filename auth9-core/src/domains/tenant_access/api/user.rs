@@ -315,7 +315,7 @@ pub async fn get<S: HasServices>(
     Ok(Json(SuccessResponse::new(user)))
 }
 
-/// Create user input (includes optional password for Keycloak)
+/// Create user input (includes optional password for identity engine)
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateUserRequest {
     #[serde(flatten)]
@@ -411,7 +411,7 @@ pub async fn create<S: HasServices + HasBranding>(
             .await?;
     }
 
-    // Validate input before calling Keycloak (catches invalid emails early)
+    // Validate input before calling identity engine (catches invalid emails early)
     input.user.validate()?;
 
     // Validate password against tenant password policy if provided
@@ -439,7 +439,7 @@ pub async fn create<S: HasServices + HasBranding>(
         }]
     });
 
-    let keycloak_id = state
+    let identity_subject = state
         .identity_engine()
         .user_store()
         .create_user(&IdentityUserCreateInput {
@@ -453,24 +453,24 @@ pub async fn create<S: HasServices + HasBranding>(
         })
         .await?;
 
-    let user = match state.user_service().create(&keycloak_id, input.user).await {
+    let user = match state.user_service().create(&identity_subject, input.user).await {
         Ok(user) => user,
         Err(e) => {
             tracing::warn!(
-                keycloak_id = %keycloak_id,
+                identity_subject = %identity_subject,
                 error = %e,
-                "DB user creation failed, compensating by deleting Keycloak user"
+                "DB user creation failed, compensating by deleting identity engine user"
             );
             if let Err(cleanup_err) = state
                 .identity_engine()
                 .user_store()
-                .delete_user(&keycloak_id)
+                .delete_user(&identity_subject)
                 .await
             {
                 tracing::error!(
-                    keycloak_id = %keycloak_id,
+                    identity_subject = %identity_subject,
                     error = %cleanup_err,
-                    "Failed to delete orphaned Keycloak user during compensation"
+                    "Failed to delete orphaned identity engine user during compensation"
                 );
             }
             return Err(e);
@@ -595,7 +595,7 @@ pub async fn update<S: HasServices>(
     }
 
     let id = StringUuid::from(id);
-    // Validate input before sending to Keycloak (prevent invalid data reaching external service)
+    // Validate input before sending to identity engine (prevent invalid data reaching external service)
     input
         .validate()
         .map_err(|e| AppError::Validation(e.to_string()))?;

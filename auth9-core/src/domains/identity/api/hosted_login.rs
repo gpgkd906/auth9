@@ -1,7 +1,7 @@
 //! Hosted Login API handlers
 //!
 //! Unified authentication endpoints under `/api/v1/hosted-login/` that route
-//! through the `IdentityEngine` trait for backend switching (`keycloak` / `auth9_oidc`).
+//! through the `IdentityEngine` trait for backend switching.
 //! These endpoints are designed for direct form submission from Auth9-hosted pages,
 //! returning JSON responses instead of OIDC redirects.
 

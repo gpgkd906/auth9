@@ -1,7 +1,7 @@
 //! Identity Provider service
 //!
 //! Manages social login and enterprise SSO identity providers.
-//! Auth9 owns linked_identities as primary data — no Keycloak federated identity API calls.
+//! Auth9 owns linked_identities as primary data — no external federated identity API calls.
 
 use crate::error::{AppError, Result};
 use crate::identity_engine::{FederationBroker, IdentityProviderRepresentation};
@@ -98,7 +98,7 @@ impl<L: LinkedIdentityRepository> IdentityProviderService<L> {
         // Get existing provider
         let existing = self.federation_broker.get_identity_provider(alias).await?;
 
-        // Merge updates (preserve extra Keycloak fields like internalId for round-trip)
+        // Merge updates (preserve extra fields like internalId for round-trip)
         let updated = IdentityProviderRepresentation {
             alias: existing.alias,
             display_name: input.display_name.or(existing.display_name),
@@ -250,8 +250,8 @@ mod tests {
             .with(eq(user_id))
             .returning(|_| Ok(vec![]));
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let identities = service.get_user_identities(user_id).await.unwrap();
         assert!(identities.is_empty());
@@ -282,8 +282,8 @@ mod tests {
                 ])
             });
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let identities = service.get_user_identities(user_id).await.unwrap();
         assert_eq!(identities.len(), 2);
@@ -302,8 +302,8 @@ mod tests {
             .with(eq(identity_id))
             .returning(|_| Ok(None));
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.unlink_identity(user_id, identity_id).await;
         assert!(result.is_err());
@@ -330,8 +330,8 @@ mod tests {
                 }))
             });
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.unlink_identity(user_id, identity_id).await;
         assert!(result.is_err());
@@ -362,8 +362,8 @@ mod tests {
             .with(eq(identity_id))
             .returning(|_| Ok(()));
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.unlink_identity(user_id, identity_id).await;
         assert!(result.is_ok());
@@ -373,8 +373,8 @@ mod tests {
     async fn test_get_templates() {
         let linked_mock = MockLinkedIdentityRepository::new();
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let templates = service.get_templates();
         assert!(!templates.is_empty());
@@ -421,8 +421,8 @@ mod tests {
             })
         });
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let input = CreateLinkedIdentityInput {
             user_id,
@@ -457,8 +457,8 @@ mod tests {
                 }))
             });
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.find_linked_identity("github", "gh-456").await;
         assert!(result.is_ok());
@@ -476,8 +476,8 @@ mod tests {
             .with(eq("github"), eq("nonexistent"))
             .returning(|_, _| Ok(None));
 
-        let keycloak = create_test_federation_broker();
-        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+        let federation_broker = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), federation_broker);
 
         let result = service.find_linked_identity("github", "nonexistent").await;
         assert!(result.is_ok());

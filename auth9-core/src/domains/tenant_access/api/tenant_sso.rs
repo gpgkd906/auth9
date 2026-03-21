@@ -76,7 +76,7 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
     let alias = input.alias.trim().to_lowercase();
     let provider_alias = format!("{}--{}", tenant.slug, alias);
 
-    // Both OIDC and SAML connectors are handled natively by Auth9 (no Keycloak IDP needed)
+    // Both OIDC and SAML connectors are handled natively by Auth9
 
     let connector_id = StringUuid::new_v4();
     let insert_result = insert_connector(
@@ -149,7 +149,7 @@ pub async fn update_connector<S: HasServices + HasDbPool>(
     let priority = input.priority.unwrap_or(before.priority);
     let display_name = input.display_name.or(before.display_name.clone());
 
-    // Both OIDC and SAML connectors are handled natively by Auth9 (no Keycloak IDP needed)
+    // Both OIDC and SAML connectors are handled natively by Auth9
 
     let mut tx = state.db_pool().begin().await?;
     sqlx::query(
@@ -226,7 +226,7 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
     let before =
         get_connector_by_id(state.db_pool(), tenant_id, StringUuid::from(connector_id)).await?;
 
-    // Both OIDC and SAML connectors are handled natively by Auth9 (no Keycloak IDP needed)
+    // Both OIDC and SAML connectors are handled natively by Auth9
 
     let mut tx = state.db_pool().begin().await?;
     sqlx::query("DELETE FROM scim_group_role_mappings WHERE connector_id = ?")
@@ -431,7 +431,7 @@ pub async fn list_connectors_by_tenant(
     let connector_rows = sqlx::query(
         r#"
         SELECT id, tenant_id, alias, display_name, provider_type, enabled, priority,
-               COALESCE(provider_alias, keycloak_alias) AS provider_alias, config, created_at, updated_at
+               provider_alias, config, created_at, updated_at
         FROM enterprise_sso_connectors
         WHERE tenant_id = ?
         ORDER BY priority ASC, created_at ASC
@@ -517,8 +517,8 @@ async fn insert_connector(
     sqlx::query(
         r#"
         INSERT INTO enterprise_sso_connectors
-            (id, tenant_id, alias, display_name, provider_type, enabled, priority, provider_alias, keycloak_alias, config, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            (id, tenant_id, alias, display_name, provider_type, enabled, priority, provider_alias, config, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         "#,
     )
     .bind(connector_id.to_string())
@@ -528,7 +528,6 @@ async fn insert_connector(
     .bind(provider_type)
     .bind(enabled)
     .bind(priority)
-    .bind(provider_alias)
     .bind(provider_alias)
     .bind(serde_json::to_string(config).map_err(|e| AppError::Internal(e.into()))?)
     .execute(tx.as_mut())
@@ -601,7 +600,7 @@ fn normalize_config(
                 .or_insert(cert);
         }
     }
-    // Trim all config values to prevent Keycloak "Empty Space not allowed" errors
+    // Trim all config values to prevent empty space errors
     for value in config.values_mut() {
         let trimmed = value.trim().to_string();
         *value = trimmed;

@@ -34,12 +34,10 @@ impl Default for PasswordResetToken {
 
 /// Password policy configuration for a tenant
 ///
-/// Defaults must match the Keycloak realm password policy configured in
-/// `seeder.rs::configure_realm_security` to avoid Keycloak rejecting
-/// passwords that pass auth9 validation.
+/// Defaults define sensible password policy constraints for the tenant.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct PasswordPolicy {
-    /// Minimum password length (default: 12, matches Keycloak realm `length(12)`)
+    /// Minimum password length (default: 12)
     #[serde(default = "default_min_length")]
     pub min_length: u32,
     /// Require at least one uppercase letter
@@ -51,13 +49,13 @@ pub struct PasswordPolicy {
     /// Require at least one number
     #[serde(default = "default_true")]
     pub require_numbers: bool,
-    /// Require at least one symbol (matches Keycloak realm `specialChars(1)`)
+    /// Require at least one symbol
     #[serde(default = "default_true")]
     pub require_symbols: bool,
     /// Maximum password age in days (0 = no expiry)
     #[serde(default)]
     pub max_age_days: u32,
-    /// Number of previous passwords to remember (0 = disabled, matches Keycloak `passwordHistory(5)`)
+    /// Number of previous passwords to remember (0 = disabled)
     #[serde(default = "default_history_count")]
     pub history_count: u32,
     /// Number of failed attempts before lockout (0 = disabled)

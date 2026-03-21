@@ -491,7 +491,7 @@ impl<
     /// Check if this is a login from a new device
     ///
     /// Uses a composite fingerprint of (user_agent, ip_address) to identify devices.
-    /// This handles the Keycloak webhook scenario where user_agent is the server's UA
+    /// This handles the identity webhook scenario where user_agent is the server's UA
     /// (same for all events) but ip_address is the actual user's IP.
     async fn check_new_device(
         &self,
@@ -1354,7 +1354,7 @@ mod tests {
             .returning(|_, _| Ok(0));
 
         // Return existing login with same user_agent but different IP
-        // (simulates Keycloak webhook scenario where UA is always the server's)
+        // (simulates identity webhook scenario where UA is always the server's)
         login_mock.expect_list_by_user().returning(move |_, _, _| {
             Ok(vec![LoginEvent {
                 id: 2,
@@ -1363,7 +1363,7 @@ mod tests {
                 tenant_id: None,
                 event_type: LoginEventType::Success,
                 ip_address: Some("10.0.0.1".to_string()), // Different IP
-                user_agent: Some("Keycloak/24.0".to_string()), // Same server UA
+                user_agent: Some("identity/24.0".to_string()), // Same server UA
                 device_type: None,
                 location: None,
                 session_id: None,
@@ -1403,7 +1403,7 @@ mod tests {
             tenant_id: None,
             event_type: LoginEventType::Success,
             ip_address: Some("192.168.1.100".to_string()), // New IP
-            user_agent: Some("Keycloak/24.0".to_string()), // Same server UA
+            user_agent: Some("identity/24.0".to_string()), // Same server UA
             device_type: None,
             location: None,
             session_id: None,

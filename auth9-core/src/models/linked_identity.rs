@@ -96,10 +96,10 @@ pub struct PendingMergeData {
     pub user_agent: Option<String>,
 }
 
-/// Keycloak federated identity representation
+/// Provider federated identity representation
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct KeycloakFederatedIdentity {
+pub struct ProviderFederatedIdentity {
     pub identity_provider: String,
     pub user_id: String,
     pub user_name: Option<String>,
@@ -195,27 +195,27 @@ mod tests {
     }
 
     #[test]
-    fn test_keycloak_federated_identity_deserialization() {
+    fn test_provider_federated_identity_deserialization() {
         let json = r#"{
             "identityProvider": "google",
             "userId": "12345",
             "userName": "john@gmail.com"
         }"#;
 
-        let identity: KeycloakFederatedIdentity = serde_json::from_str(json).unwrap();
+        let identity: ProviderFederatedIdentity = serde_json::from_str(json).unwrap();
         assert_eq!(identity.identity_provider, "google");
         assert_eq!(identity.user_id, "12345");
         assert_eq!(identity.user_name, Some("john@gmail.com".to_string()));
     }
 
     #[test]
-    fn test_keycloak_federated_identity_minimal() {
+    fn test_provider_federated_identity_minimal() {
         let json = r#"{
             "identityProvider": "github",
             "userId": "67890"
         }"#;
 
-        let identity: KeycloakFederatedIdentity = serde_json::from_str(json).unwrap();
+        let identity: ProviderFederatedIdentity = serde_json::from_str(json).unwrap();
         assert_eq!(identity.identity_provider, "github");
         assert!(identity.user_name.is_none());
     }

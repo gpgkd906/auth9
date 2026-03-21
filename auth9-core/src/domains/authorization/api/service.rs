@@ -37,7 +37,7 @@ use validator::Validate;
 // Helper functions (testable without AppState)
 // ============================================================================
 
-/// Build Keycloak attributes from logout URIs
+/// Build OIDC client attributes from logout URIs
 pub fn build_logout_attributes(logout_uris: &[String]) -> Option<HashMap<String, String>> {
     if logout_uris.is_empty() {
         None
@@ -309,12 +309,12 @@ pub async fn create<S: HasServices>(
     input.client_id = uuid::Uuid::new_v4().to_string();
     input.validate()?;
     require_service_access(state.config(), &auth, input.tenant_id)?;
-    let keycloak_client = build_oidc_client_from_create_input(&input);
+    let oidc_client = build_oidc_client_from_create_input(&input);
 
     let client_uuid = state
         .identity_engine()
         .client_store()
-        .create_oidc_client(&keycloak_client)
+        .create_oidc_client(&oidc_client)
         .await?;
     let client_secret = state
         .identity_engine()
@@ -369,10 +369,10 @@ pub async fn update<S: HasServices>(
     )?;
     let merged = merge_service_update(&before, &input);
 
-    // Update all associated Keycloak clients with new service settings
-    let keycloak_clients = state.client_service().list_clients(id).await?;
-    for client in keycloak_clients {
-        let keycloak_client = build_oidc_client_for_update(&client.client_id, &merged);
+    // Update all associated identity engine clients with new service settings
+    let oidc_clients = state.client_service().list_clients(id).await?;
+    for client in oidc_clients {
+        let oidc_client = build_oidc_client_for_update(&client.client_id, &merged);
         if let Ok(kc_uuid) = state
             .identity_engine()
             .client_store()
@@ -382,7 +382,7 @@ pub async fn update<S: HasServices>(
             let _ = state
                 .identity_engine()
                 .client_store()
-                .update_oidc_client(&kc_uuid, &keycloak_client)
+                .update_oidc_client(&kc_uuid, &oidc_client)
                 .await;
         }
     }
@@ -448,15 +448,15 @@ pub async fn create_client<S: HasServices>(
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
 
-    // Create new Keycloak client
-    // We need to generate a client_id logic or let Keycloak do it?
+    // Create new identity engine client
+    // We need to generate a client_id logic or let identity engine do it?
     // User said "clientId and clientSecret auto generated".
-    // Keycloak usually can generate. Or we generate UUID.
+    // identity engine usually can generate. Or we generate UUID.
     // Let's generate a UUID based client_id.
     let new_client_id = Uuid::new_v4().to_string();
 
-    // Setup Keycloak Client with Service defaults
-    // ... logic to create keycloak client ...
+    // Setup identity engine Client with Service defaults
+    // ... logic to create identity engine client ...
     let logout_uris = service.logout_uris.clone();
     let attributes = if logout_uris.is_empty() {
         None
@@ -469,7 +469,7 @@ pub async fn create_client<S: HasServices>(
         Some(attrs)
     };
 
-    let keycloak_client = OidcClientRepresentation {
+    let oidc_client = OidcClientRepresentation {
         id: None,
         client_id: new_client_id.clone(),
         name: Some(format!(
@@ -496,7 +496,7 @@ pub async fn create_client<S: HasServices>(
     let kc_uuid = state
         .identity_engine()
         .client_store()
-        .create_oidc_client(&keycloak_client)
+        .create_oidc_client(&oidc_client)
         .await?;
     let client_secret = state
         .identity_engine()
@@ -546,7 +546,7 @@ pub async fn delete_client<S: HasServices>(
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
 
-    // Also delete from Keycloak
+    // Also delete from identity engine
     if let Ok(kc_uuid) = state
         .identity_engine()
         .client_store()
@@ -600,10 +600,10 @@ pub async fn delete<S: HasServices>(
         &auth,
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
-    // Also delete all Keycloak clients associated with this service
+    // Also delete all identity engine clients associated with this service
     // If we assume a name prefix or just delete clients in DB...
-    // The clients in DB have `client_id` which maps to Keycloak.
-    // Ideally we should iterate clients and delete them from Keycloak first.
+    // The clients in DB have `client_id` which maps to identity engine.
+    // Ideally we should iterate clients and delete them from identity engine first.
     let clients = state.client_service().list_clients(id).await?;
     for client in clients {
         if let Ok(kc_uuid) = state
@@ -790,7 +790,7 @@ pub async fn integration_info<S: HasServices>(
 
     let db_clients = state.client_service().list_clients(id).await?;
 
-    // Enrich each client with Keycloak data (public_client flag, secret)
+    // Enrich each client with identity engine data (public_client flag, secret)
     let mut clients = Vec::new();
     for c in &db_clients {
         let kc_result = state
@@ -804,7 +804,7 @@ pub async fn integration_info<S: HasServices>(
                 if kc_client.public_client {
                     (true, None)
                 } else {
-                    // Confidential — fetch secret from Keycloak
+                    // Confidential — fetch secret from identity engine
                     let secret = match kc_client.id {
                         Some(ref kc_uuid) => {
                             match state
@@ -817,9 +817,9 @@ pub async fn integration_info<S: HasServices>(
                                 Err(e) => {
                                     tracing::warn!(
                                         client_id = %c.client_id,
-                                        keycloak_uuid = %kc_uuid,
+                                        backend_uuid = %kc_uuid,
                                         error = %e,
-                                        "Failed to fetch client secret from Keycloak, attempting to regenerate"
+                                        "Failed to fetch client secret from identity engine, attempting to regenerate"
                                     );
                                     // Secret may not exist yet — try regenerating
                                     match state
@@ -844,7 +844,7 @@ pub async fn integration_info<S: HasServices>(
                         None => {
                             tracing::warn!(
                                 client_id = %c.client_id,
-                                "Client missing UUID in Keycloak response"
+                                "Client missing UUID in identity engine response"
                             );
                             None
                         }
@@ -853,7 +853,7 @@ pub async fn integration_info<S: HasServices>(
                 }
             }
             Err(_) => {
-                // Client not in Keycloak — use the public_client flag from database
+                // Client not in identity engine — use the public_client flag from database
                 (
                     c.public_client,
                     if !c.public_client && !c.client_secret_hash.is_empty() {
@@ -923,14 +923,14 @@ pub async fn regenerate_client_secret<S: HasServices>(
         service.tenant_id.as_ref().map(|t| t.0),
     )?;
 
-    // Regenerate in Keycloak first (if it exists there)
+    // Regenerate in identity engine first (if it exists there)
     let new_secret = if let Ok(kc_uuid) = state
         .identity_engine()
         .client_store()
         .get_client_uuid_by_client_id(&client_id)
         .await
     {
-        // Use Keycloak's regenerated secret
+        // Use identity engine's regenerated secret
         state
             .identity_engine()
             .client_store()
@@ -944,9 +944,9 @@ pub async fn regenerate_client_secret<S: HasServices>(
             .await?
     };
 
-    // If Keycloak was used, we need to sync the hash to our DB
+    // If identity engine was used, we need to sync the hash to our DB
     // ClientService.regenerate_client_secret already updates the hash if used
-    // But if Keycloak generated, we need manual DB update
+    // But if identity engine generated, we need manual DB update
     if state
         .identity_engine()
         .client_store()
@@ -1182,7 +1182,7 @@ mod tests {
     fn test_config() -> Config {
         let mut config = Config::for_tests();
         config.jwt.issuer = "http://localhost:8080".to_string();
-        // ssl_required and realm fields removed (Keycloak retired)
+        // ssl_required and realm fields removed (identity engine retired)
         config.password_reset.hmac_key = "test-key".to_string();
         config
     }
