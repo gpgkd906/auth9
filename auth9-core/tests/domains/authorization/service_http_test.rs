@@ -3,7 +3,7 @@
 //! Tests for the service and client HTTP endpoints using mock repositories.
 
 use crate::support::create_test_service;
-use crate::support::create_test_tenant_access_token;
+use crate::support::{create_test_tenant_access_token, create_test_tenant_access_token_for_tenant};
 use crate::support::http::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
@@ -97,7 +97,7 @@ async fn test_list_services_with_tenant_filter() {
     state.service_repo.add_service(svc3).await;
 
     let app = build_test_router(state);
-    let token = create_test_tenant_access_token();
+    let token = create_test_tenant_access_token_for_tenant(tenant1);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) = get_json_with_auth(
         &app,

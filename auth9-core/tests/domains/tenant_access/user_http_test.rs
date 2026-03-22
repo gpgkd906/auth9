@@ -526,7 +526,7 @@ async fn test_list_users_by_tenant() {
     state.user_repo.add_tenant_user(tu2).await;
 
     let app = build_test_router(state);
-    let token = create_test_tenant_access_token();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<User>>>) = get_json_with_auth(
         &app,

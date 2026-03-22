@@ -17,7 +17,7 @@ import {
 } from "~/components/ui/dialog";
 import { redirect } from "react-router";
 import { webhookApi, tenantApi, type Webhook, type CreateWebhookInput } from "~/services/api";
-import { getAccessToken, getAccessTokenWithUpdate } from "~/services/session.server";
+import { getAccessTokenWithUpdate } from "~/services/session.server";
 import {
   ArrowLeftIcon,
   PlusIcon,

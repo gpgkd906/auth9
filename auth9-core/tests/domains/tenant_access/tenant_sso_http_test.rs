@@ -12,7 +12,7 @@ use crate::support::http::{
 };
 use crate::support::{
     create_test_identity_token_for_user, create_test_jwt_manager, create_test_tenant,
-    create_test_tenant_access_token,
+    create_test_tenant_access_token_for_tenant,
 };
 use axum::http::StatusCode;
 use serde_json::{json, Value};
@@ -360,8 +360,10 @@ async fn test_platform_admin_can_access_any_tenant_sso() {
     let state = TestAppState::new("http://localhost:8081");
     let tenant_id = Uuid::new_v4();
 
-    // Platform admin tenant access token (uses admin@auth9.local)
-    let token = create_test_tenant_access_token();
+    // Platform admin with a TenantAccess token scoped to the target tenant.
+    // Cross-tenant access via TenantAccess tokens is no longer allowed;
+    // the token must be scoped to the same tenant being accessed.
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
     let app = build_test_router(state);
 

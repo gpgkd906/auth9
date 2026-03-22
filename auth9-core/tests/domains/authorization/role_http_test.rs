@@ -7,7 +7,8 @@ use crate::support::http::{
     put_json_with_auth, TestAppState,
 };
 use crate::support::{
-    create_test_permission, create_test_role, create_test_service, create_test_tenant_access_token,
+    create_test_permission, create_test_role, create_test_service,
+    create_test_tenant_access_token, create_test_tenant_access_token_for_tenant,
 };
 use auth9_core::http_support::{MessageResponse, SuccessResponse};
 use auth9_core::models::rbac::{Permission, Role, UserRolesInTenant};
@@ -534,10 +535,10 @@ async fn test_remove_permission_from_role() {
 #[tokio::test]
 async fn test_assign_roles_to_user() {
     let state = TestAppState::new("http://localhost:8081");
-    let token = create_test_tenant_access_token(); // Platform admin can assign roles
 
     let service_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id); // Scoped to tenant
     let role1 = create_test_role(None, service_id);
     let role2 = create_test_role(None, service_id);
     let role1_id = role1.id.0;
@@ -589,7 +590,7 @@ async fn test_get_user_roles() {
         .await;
 
     let app = build_test_router(state);
-    let token = create_test_tenant_access_token();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
     let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) =
         get_json_with_auth(
@@ -609,11 +610,12 @@ async fn test_get_user_roles() {
 #[tokio::test]
 async fn test_get_user_roles_empty() {
     let state = TestAppState::new("http://localhost:8081");
-    let app = build_test_router(state);
-    let token = create_test_tenant_access_token();
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
+
+    let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) =
         get_json_with_auth(
@@ -638,11 +640,11 @@ async fn test_get_user_assigned_roles() {
     let role = create_test_role(None, service_id);
     state.rbac_repo.add_role(role).await;
 
-    let app = build_test_router(state);
-    let token = create_test_tenant_access_token();
-
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
+
+    let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) = get_json_with_auth(
         &app,
@@ -661,17 +663,17 @@ async fn test_get_user_assigned_roles() {
 #[tokio::test]
 async fn test_unassign_role_from_user() {
     let state = TestAppState::new("http://localhost:8081");
-    let token = create_test_tenant_access_token(); // Platform admin can unassign roles
 
     let service_id = Uuid::new_v4();
     let role = create_test_role(None, service_id);
     let role_id = role.id;
     state.rbac_repo.add_role(role).await;
 
-    let app = build_test_router(state);
-
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id); // Scoped to tenant
+
+    let app = build_test_router(state);
 
     // Note: The actual unassignment logic depends on the repository finding a tenant_user_id
     // In tests, the TestRbacRepository returns a new UUID for find_tenant_user_id
