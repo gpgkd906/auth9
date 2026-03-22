@@ -133,7 +133,7 @@ fi
 mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" "$MYSQL_DB" <<SQL
 DELETE FROM tenant_users WHERE user_id IN ('$MEMBER_USER_ID','$TENANT_ADMIN_USER_ID');
 DELETE FROM users WHERE id IN ('$MEMBER_USER_ID','$TENANT_ADMIN_USER_ID');
-INSERT INTO users (id,keycloak_id,email,display_name,mfa_enabled)
+INSERT INTO users (id,identity_subject,email,display_name,mfa_enabled)
 VALUES
   ('$MEMBER_USER_ID','kc-member-111','member@test.local','Member User',0),
   ('$TENANT_ADMIN_USER_ID','kc-tenant-admin-333','tenantadmin@test.local','Tenant Admin',0);

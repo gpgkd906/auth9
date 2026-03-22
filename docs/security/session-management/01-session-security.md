@@ -60,6 +60,13 @@ curl -I -c - http://localhost:3000/login
 # Set-Cookie: session=xxx; HttpOnly; Secure; SameSite=Strict; Path=/
 ```
 
+### 常见误报排查
+
+| 现象 | 原因 | 结论 |
+|------|------|------|
+| Docker dev 环境中 `Secure` 标志为 false | `SECURE_COOKIES=false` 是 Docker dev 环境的设计行为，因为本地使用 HTTP 而非 HTTPS。代码逻辑：当 `SECURE_COOKIES` 未设置时，默认跟随 `NODE_ENV=production`。Docker dev 显式设置为 false 以允许 HTTP 开发 | **非安全缺陷** — 生产部署必须设置 `SECURE_COOKIES=true` 或使用 HTTPS |
+| 无法获取有效登录凭证完成测试 | Docker dev 环境需要先执行 `./scripts/reset-docker.sh` 初始化种子数据（用户、租户等） | 测试前必须执行环境重建脚本，登录凭证见种子数据 |
+
 > **Auth9 Cookie 安全要求**
 >
 > 浏览器中的 Auth9 Cookie：

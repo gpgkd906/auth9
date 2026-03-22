@@ -97,8 +97,8 @@ fi
 mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" "$MYSQL_DB" <<SQL
 DELETE FROM tenant_users WHERE user_id = '$GRPC_USER_ID';
 DELETE FROM users WHERE id = '$GRPC_USER_ID';
-INSERT INTO users (id,keycloak_id,email,display_name,mfa_enabled)
-VALUES ('$GRPC_USER_ID','kc-grpc-member-555','grpc.member@test.local','gRPC Member',0);
+INSERT INTO users (id,identity_subject,email,display_name,mfa_enabled)
+VALUES ('$GRPC_USER_ID','grpc-member-555','grpc.member@test.local','gRPC Member',0);
 INSERT INTO tenant_users (id,tenant_id,user_id,role_in_tenant)
 VALUES ('$GRPC_USER_TU_ID','$DEMO_TENANT_ID','$GRPC_USER_ID','member');
 SQL
