@@ -59,6 +59,15 @@ WHERE user_id = '{target_user_id}' AND revoked_at IS NULL;
 
 ## 场景 2：refresh 后 token 会话可追踪且可被强退立即失效
 
+> **⚠️ 前置条件**: 本场景需要通过完整 OIDC 登录流程获取 `refresh_token`。
+> 无法通过 `grant_type=password` 获取（auth9 不支持此 grant type）。
+> **推荐方法**: 使用 Playwright 自动化完成 OIDC 登录，或从浏览器 DevTools 的 Network 面板中
+> 捕获 `/api/v1/auth/token` 响应中的 `refresh_token`。
+> 也可从数据库 `sessions` 表查询（需先通过 Portal UI 登录一次）：
+> ```sql
+> SELECT refresh_token FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1;
+> ```
+
 ### 初始状态
 - 用户已通过 OIDC 登录，拥有 `{refresh_token}`
 - 管理员 Token：`{admin_token}`
@@ -106,6 +115,11 @@ WHERE user_id = '{user_id}' AND revoked_at IS NULL;
 ---
 
 ## 场景 3：OIDC callback 重定向 URL 不应包含 access_token/id_token
+
+> **⚠️ 前置条件**: 本场景需要有效的 OIDC `code` 和 `state` 参数。
+> 这些参数只能通过完整的 OIDC authorize 流程获取（浏览器重定向到 auth9-oidc 登录页面后回调）。
+> **推荐方法**: 使用 Playwright 自动化完成 OIDC 流程，在回调时拦截 302 重定向并检查 Location header。
+> 直接 curl 调用 `/api/v1/auth/authorize` 不可行（需要浏览器交互完成 IdP 登录）。
 
 ### 初始状态
 - 已完成 `/api/v1/auth/authorize` 并获取有效 `code/state`

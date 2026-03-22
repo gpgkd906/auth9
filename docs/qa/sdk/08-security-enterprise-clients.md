@@ -31,8 +31,9 @@
 - 已有至少一个租户（用于 tenant-scoped 端点）
 
 > **⚠️ 重要: API 字段命名规范**
-> auth9 API 使用 **snake_case** 命名（如 `display_name`、`provider_id`、`service_id`），不使用 camelCase。
-> 请求和响应的 JSON 字段均为 snake_case。
+> auth9 API 的顶层字段使用 **snake_case** 命名（如 `display_name`、`provider_id`、`service_id`）。
+> 但 Identity Provider 的 `config` 对象内部使用 **camelCase**（如 `clientId`、`clientSecret`），
+> 需与 IdP Template 定义的 `required_config` 字段名完全匹配。
 
 ---
 
@@ -78,7 +79,7 @@ curl -s http://localhost:8080/api/v1/identity-providers/templates \
 curl -s -X POST http://localhost:8080/api/v1/identity-providers \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"alias":"sdk-test-google","display_name":"SDK Test Google","provider_id":"google","config":{"client_id":"test-client-id","client_secret":"test-client-secret"}}' | jq .  # pragma: allowlist secret
+  -d '{"alias":"sdk-test-google","display_name":"SDK Test Google","provider_id":"google","config":{"clientId":"test-client-id","clientSecret":"test-client-secret"}}' | jq .  # pragma: allowlist secret
 ```
 
 **预期**: 返回 `data.alias` = "sdk-test-google"，`data.provider_id` = "google"，`data.enabled` = true
@@ -182,25 +183,29 @@ curl -s -X DELETE http://localhost:8080/api/v1/tenants/$TENANT_ID/webhooks/$WH_I
 curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/policies \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"SDK Test Policy","rules":[{"effect":"allow","subjects":{"role":"admin"},"resources":{"type":"document"},"actions":["read","write"]}]}' | jq .
+  -d '{"change_note":"SDK Test Policy","policy":{"rules":[{"id":"allow-admin-docs","effect":"allow","actions":["read","write"],"resource_types":["document"],"priority":10,"condition":{"var":"subject.roles","op":"contains","value":"admin"}}]}}' | jq .
 ```
 
-**预期**: 返回 `data.id` 非空，`data.name` = "SDK Test Policy"，`data.status` = "draft"
+**预期**: 返回新建的 draft 版本，包含 `data.version_id` 和 `data.status` = "draft"
+
+> **注意**: ABAC 策略使用版本化模型。请求体结构为 `{ change_note, policy: { rules: [...] } }`，
+> 其中每条 rule 必须包含 `id`（字符串标识）和 `effect`（"allow"/"deny"）。
+> 不支持顶层的 `name` / `subjects` / `resources` 字段。
 
 2. **列出策略**
 
 ```bash
 curl -s http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/policies \
-  -H "Authorization: Bearer $TOKEN" | jq '.data | length'
+  -H "Authorization: Bearer $TOKEN" | jq '.data.policy_set'
 ```
 
-**预期**: 返回数量 >= 1
+**预期**: 返回策略集对象（包含 `policy_set` 和 `versions` 字段），而非数组
 
 3. **发布策略**
 
 ```bash
 POLICY_VID=$(curl -s http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/policies \
-  -H "Authorization: Bearer $TOKEN" | jq -r '.data[0].version_id // .data[0].versionId')
+  -H "Authorization: Bearer $TOKEN" | jq -r '.data.versions[0].version_id')
 
 curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/policies/$POLICY_VID/publish \
   -H "Authorization: Bearer $TOKEN" | jq '.data.status'
@@ -214,10 +219,10 @@ curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/policies/$P
 curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/abac/simulate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"subject":{"role":"admin"},"resource":{"type":"document"},"action":"read"}' | jq '.data'
+  -d '{"simulation":{"action":"read","resource_type":"document","subject":{"roles":["admin"]},"resource":{}}}' | jq '.data'
 ```
 
-**预期**: 返回包含 `allowed` 字段的对象
+**预期**: 返回包含 `allowed` 字段的对象。注意：必须先发布策略，否则需在请求体中同时提供 `policy` 字段
 
 ---
 

@@ -15,7 +15,7 @@
 
 - `GET /api/v1/tenants/{tenant_id}/security/malicious-ip-blacklist`
 - `PUT /api/v1/tenants/{tenant_id}/security/malicious-ip-blacklist`
-- `POST /api/v1/keycloak/events`
+- `POST /api/v1/identity/events`（旧路径 `/api/v1/keycloak/events` 已移除）
 
 ---
 
@@ -189,7 +189,7 @@ GROUP BY u.id, u.identity_subject, u.email;
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"{tenant_a_user_id}","ipAddress":"203.0.113.10","error":"invalid_user_credentials","time":'$(date +%s000)',"details":{"username":"tenant-a@example.com","email":"tenant-a@example.com"}}'
 SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')
-curl -s -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "X-Keycloak-Signature: sha256=$SIG" \
   -d "$BODY"
@@ -251,7 +251,7 @@ echo "$SECRET"
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"{tenant_user_id}","ipAddress":"203.0.113.10","error":"invalid_user_credentials","time":'$(date +%s000)',"details":{"username":"priority@example.com","email":"priority@example.com"}}'
 SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')
-curl -s -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "X-Keycloak-Signature: sha256=$SIG" \
   -d "$BODY"

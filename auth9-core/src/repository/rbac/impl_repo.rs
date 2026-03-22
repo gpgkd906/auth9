@@ -297,6 +297,36 @@ impl RbacRepository for RbacRepositoryImpl {
             .ok_or_else(|| AppError::NotFound("User not in tenant".to_string()))?
             .0;
 
+        // Use replace semantics scoped by service: delete existing roles for
+        // the same service(s) as the incoming roles, then insert the new set.
+        // This ensures the DB matches the UI's "save selected roles" intent.
+        if !input.role_ids.is_empty() {
+            let role_id_params: Vec<String> =
+                input.role_ids.iter().map(|_| "?".to_string()).collect();
+            let placeholders = role_id_params.join(", ");
+
+            // Delete existing roles for this user in the same service(s)
+            let delete_sql = format!(
+                r#"
+                DELETE FROM user_tenant_roles
+                WHERE tenant_user_id = ?
+                  AND role_id IN (
+                    SELECT r.id FROM roles r
+                    WHERE r.service_id IN (
+                      SELECT DISTINCT r2.service_id FROM roles r2
+                      WHERE r2.id IN ({placeholders})
+                    )
+                  )
+                "#,
+            );
+            let mut delete_query = sqlx::query(&delete_sql).bind(tenant_user_id);
+            for role_id in &input.role_ids {
+                delete_query = delete_query.bind(StringUuid::from(*role_id));
+            }
+            delete_query.execute(&self.pool).await?;
+        }
+
+        // Insert the new role assignments
         for role_id in &input.role_ids {
             let id = StringUuid::new_v4();
             let role_id = StringUuid::from(*role_id);

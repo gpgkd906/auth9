@@ -356,8 +356,8 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | gRPC Token Exchange | ☐ | | | |
-| 2 | gRPC Validate/Introspect | ☐ | | | |
-| 3 | gRPC GetUserRoles | ☐ | | | |
-| 4 | Client Credentials 缓存 | ☐ | | | |
-| 5 | Client Credentials 错误 | ☐ | | | |
+| 1 | gRPC Token Exchange | ✅ PASS | 2026-03-22 | QA | JWT有效, 含roles/permissions |
+| 2 | gRPC Validate/Introspect | ✅ PASS | 2026-03-22 | QA | valid=true, active=true |
+| 3 | gRPC GetUserRoles | ✅ PASS | 2026-03-22 | QA | roles/permissions返回正确 |
+| 4 | Client Credentials 缓存 | ✅ PASS | 2026-03-22 | QA | 缓存机制正常 |
+| 5 | Client Credentials 错误 | ✅ PASS | 2026-03-22 | QA | 401/404/连接错误正确处理 |

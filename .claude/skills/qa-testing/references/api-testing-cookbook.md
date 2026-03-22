@@ -83,7 +83,7 @@ Expected output for admin user:
 
 ### Key Facts
 
-- **Endpoint**: `POST http://localhost:8080/api/v1/keycloak/events`
+- **Endpoint**: `POST http://localhost:8080/api/v1/identity/events`
 - **Webhook secret**: `dev-webhook-secret-change-in-production` (from `docker-compose.yml` env `KEYCLOAK_WEBHOOK_SECRET`)
 - **Signature header**: `x-keycloak-signature: sha256=<hex>`
 - **HMAC algorithm**: HMAC-SHA256
@@ -96,7 +96,7 @@ BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-
 SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
-curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "x-keycloak-signature: sha256=$SIGNATURE" \
   -d "$BODY"
@@ -109,7 +109,7 @@ BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-
 SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
-curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "x-keycloak-signature: sha256=$SIGNATURE" \
   -d "$BODY"
@@ -122,7 +122,7 @@ BODY='{"type":"LOGIN","realmId":"auth9","userId":"00000000-0000-0000-0000-000000
 SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
-curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "x-keycloak-signature: sha256=$SIGNATURE" \
   -d "$BODY"

@@ -32,12 +32,28 @@
 
 ## 步骤 0：Gate Check — 获取 Token 并验证 Build
 
-> **注意**: 场景 1（audit-logs、analytics）需要 **Tenant Access Token**（非 Identity Token）。
-> `gen-admin-token.sh` 生成的是 Identity Token，用于 audit-logs/analytics 端点会返回 403。
-> 请使用 `gen_tenant_access_token.js` 获取 Tenant Access Token。
+> **⚠️ 重要: 大部分端点需要 Platform Admin Token**
+>
+> 以下端点需要 **Platform Admin** 权限（403 "Platform admin required"）：
+> - `/api/v1/audit-logs` — 审计日志
+> - `/api/v1/security/alerts` — 安全告警
+> - `/api/v1/system/email*` — 邮件设置
+> - `/api/v1/system/email-templates*` — 邮件模板
+> - `/api/v1/system/security/malicious-ip-blacklist` — 平台级 IP 黑名单
+> - `/api/v1/system/branding`（PUT）— 品牌设置写入
+>
+> 以下端点**不需要** Platform Admin（Tenant Access Token 或无认证即可）：
+> - `/api/v1/analytics/login-stats` — 登录统计
+> - `/api/v1/analytics/daily-trend` — 每日趋势
+> - `/api/v1/public/branding` — 公开品牌（无需认证）
+>
+> **Token 选择**: 使用 `gen-test-tokens.js tenant-owner` 生成 Tenant Access Token（具有 owner/admin 角色）。
+> 该 Token 通过 DB 平台管理员检查（admin@auth9.local 在 auth9-platform 有 admin 角色），
+> 且不会被 "Identity token is only allowed for tenant selection and exchange" 中间件拦截。
+> 注意：`gen-test-tokens.js platform-admin` 生成的是 Identity Token，部分端点（如 audit-logs）会拒绝 Identity Token。
 
 ```bash
-TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js)
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner)
 echo $TOKEN | head -c 20
 ```
 
