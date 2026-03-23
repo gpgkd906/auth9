@@ -127,6 +127,7 @@ pub struct CreateLoginEventInput {
 pub enum SecurityAlertType {
     BruteForce,
     SlowBruteForce,
+    PasswordSpray,
     NewDevice,
     ImpossibleTravel,
     SuspiciousIp,
@@ -139,6 +140,7 @@ impl std::str::FromStr for SecurityAlertType {
         match s.to_lowercase().as_str() {
             "brute_force" => Ok(SecurityAlertType::BruteForce),
             "slow_brute_force" => Ok(SecurityAlertType::SlowBruteForce),
+            "password_spray" => Ok(SecurityAlertType::PasswordSpray),
             "new_device" => Ok(SecurityAlertType::NewDevice),
             "impossible_travel" => Ok(SecurityAlertType::ImpossibleTravel),
             "suspicious_ip" => Ok(SecurityAlertType::SuspiciousIp),
@@ -152,6 +154,7 @@ impl std::fmt::Display for SecurityAlertType {
         match self {
             SecurityAlertType::BruteForce => write!(f, "brute_force"),
             SecurityAlertType::SlowBruteForce => write!(f, "slow_brute_force"),
+            SecurityAlertType::PasswordSpray => write!(f, "password_spray"),
             SecurityAlertType::NewDevice => write!(f, "new_device"),
             SecurityAlertType::ImpossibleTravel => write!(f, "impossible_travel"),
             SecurityAlertType::SuspiciousIp => write!(f, "suspicious_ip"),
@@ -1022,6 +1025,7 @@ mod tests {
     fn test_security_alert_type_encode_by_ref() {
         for alert_type in [
             SecurityAlertType::BruteForce,
+            SecurityAlertType::PasswordSpray,
             SecurityAlertType::NewDevice,
             SecurityAlertType::ImpossibleTravel,
             SecurityAlertType::SuspiciousIp,

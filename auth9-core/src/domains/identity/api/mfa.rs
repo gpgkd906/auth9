@@ -7,12 +7,20 @@ use crate::cache::CacheOperations;
 use crate::domains::identity::service::totp::TotpEnrollmentResponse;
 use crate::error::{AppError, Result};
 use crate::http_support::SuccessResponse;
+use crate::models::common::StringUuid;
 use crate::state::{HasCache, HasMfa, HasServices, HasSessionManagement, HasWebAuthn};
 use axum::{extract::State, Json};
 use axum_extra::headers::{authorization::Bearer, Authorization};
 use axum_extra::TypedHeader;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+/// Parse JWT sub claim (user UUID string) into StringUuid for user lookups.
+fn parse_user_id(user_id: &str) -> Result<StringUuid> {
+    let uuid = uuid::Uuid::parse_str(user_id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID in token".to_string()))?;
+    Ok(StringUuid::from(uuid))
+}
 
 // ==================== Types ====================
 
@@ -87,12 +95,15 @@ pub async fn mfa_status<S: HasMfa + HasWebAuthn + HasServices>(
         .remaining_count(user_id)
         .await?;
 
-    let email_otp_enabled = state
-        .user_service()
-        .get_by_identity_subject(user_id)
-        .await
-        .map(|u| u.email_otp_enabled)
-        .unwrap_or(false);
+    let email_otp_enabled = match parse_user_id(user_id) {
+        Ok(uid) => state
+            .user_service()
+            .get(uid)
+            .await
+            .map(|u| u.email_otp_enabled)
+            .unwrap_or(false),
+        Err(_) => false,
+    };
 
     Ok(Json(SuccessResponse::new(MfaStatusResponse {
         totp_enabled,
@@ -133,16 +144,21 @@ pub async fn totp_enroll_verify<S: HasMfa + HasServices>(
         .await?;
 
     // Update mfa_enabled on user
-    if let Ok(user) = state.user_service().get_by_identity_subject(user_id).await {
-        let _ = state.user_service().set_mfa_enabled(user.id, true).await;
+    if let Ok(uid) = parse_user_id(user_id) {
+        if let Ok(user) = state.user_service().get(uid).await {
+            let _ = state.user_service().set_mfa_enabled(user.id, true).await;
+        }
     }
 
-    let email_otp_enabled = state
-        .user_service()
-        .get_by_identity_subject(user_id)
-        .await
-        .map(|u| u.email_otp_enabled)
-        .unwrap_or(false);
+    let email_otp_enabled = match parse_user_id(user_id) {
+        Ok(uid) => state
+            .user_service()
+            .get(uid)
+            .await
+            .map(|u| u.email_otp_enabled)
+            .unwrap_or(false),
+        Err(_) => false,
+    };
 
     Ok(Json(SuccessResponse::new(MfaStatusResponse {
         totp_enabled: true,
@@ -168,8 +184,10 @@ pub async fn totp_remove<S: HasMfa + HasServices + HasWebAuthn>(
         .list_credentials(user_id, None)
         .await?;
     if webauthn_creds.is_empty() {
-        if let Ok(user) = state.user_service().get_by_identity_subject(user_id).await {
-            let _ = state.user_service().set_mfa_enabled(user.id, false).await;
+        if let Ok(uid) = parse_user_id(user_id) {
+            if let Ok(user) = state.user_service().get(uid).await {
+                let _ = state.user_service().set_mfa_enabled(user.id, false).await;
+            }
         }
     }
 
@@ -216,7 +234,8 @@ pub async fn email_otp_enable<S: HasMfa + HasWebAuthn + HasServices>(
     let claims = HasServices::jwt_manager(&state).verify_identity_token(bearer.token())?;
     let user_id = &claims.sub;
 
-    let user = state.user_service().get_by_identity_subject(user_id).await?;
+    let uid = parse_user_id(user_id)?;
+    let user = state.user_service().get(uid).await?;
     state.user_service().set_email_otp_enabled(user.id, true).await?;
 
     let totp_enabled = state.totp_service().has_totp(user_id).await?;
@@ -239,7 +258,8 @@ pub async fn email_otp_disable<S: HasMfa + HasWebAuthn + HasServices>(
     let claims = HasServices::jwt_manager(&state).verify_identity_token(bearer.token())?;
     let user_id = &claims.sub;
 
-    let user = state.user_service().get_by_identity_subject(user_id).await?;
+    let uid = parse_user_id(user_id)?;
+    let user = state.user_service().get(uid).await?;
     state.user_service().set_email_otp_enabled(user.id, false).await?;
 
     let totp_enabled = state.totp_service().has_totp(user_id).await?;

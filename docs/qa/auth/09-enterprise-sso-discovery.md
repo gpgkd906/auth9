@@ -51,6 +51,8 @@
 - 该租户存在已启用连接器 `{connector_alias}`，绑定域名 `{corp_domain}`
 - 测试邮箱 `qa-user@{corp_domain}`
 
+> **重要**: 默认 Docker 环境 (`./scripts/reset-docker.sh`) **不会自动创建 SSO 连接器**。测试前必须手动创建连接器和域名绑定，或使用种子脚本注入数据。如果 `enterprise_sso_connectors` 和 `enterprise_sso_domains` 表为空，则此场景无法测试，应跳过并标记为 SKIP 而非 FAIL。
+
 ### 目的
 验证 discovery 能命中域名并返回可跳转的 `authorize_url`
 

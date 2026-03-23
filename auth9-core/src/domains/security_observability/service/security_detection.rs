@@ -310,18 +310,17 @@ impl<
             let input = CreateSecurityAlertInput {
                 user_id: None,
                 tenant_id,
-                alert_type: SecurityAlertType::SuspiciousIp,
+                alert_type: SecurityAlertType::PasswordSpray,
                 severity: AlertSeverity::Critical,
                 details: Some(serde_json::json!({
                     "ip_address": ip_address,
                     "unique_accounts_targeted": unique_accounts,
                     "window_minutes": self.config.password_spray_window_mins,
-                    "detection_reason": "password_spray",
                 })),
             };
 
             let alert = self.security_alert_repo.create(&input).await?;
-            metrics::counter!("auth9_security_alerts_total", "type" => "suspicious_ip", "severity" => "critical").increment(1);
+            metrics::counter!("auth9_security_alerts_total", "type" => "password_spray", "severity" => "critical").increment(1);
             return Ok(Some(alert));
         }
 
@@ -1246,7 +1245,7 @@ mod tests {
 
         let alerts = service.analyze_login_event(&event).await.unwrap();
         assert_eq!(alerts.len(), 1);
-        assert_eq!(alerts[0].alert_type, SecurityAlertType::SuspiciousIp);
+        assert_eq!(alerts[0].alert_type, SecurityAlertType::PasswordSpray);
         assert_eq!(alerts[0].severity, AlertSeverity::Critical);
     }
 

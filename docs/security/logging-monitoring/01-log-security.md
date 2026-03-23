@@ -110,7 +110,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 # 检查审计日志
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/audit-logs?resource_type=user&limit=5"
-# 预期: 包含 user.created 记录，含 actor_id, resource_id, ip_address
+# 预期: 包含 user.create 记录，含 actor_id, resource_id, ip_address
 # 注意: ip_address 通过以下优先级获取:
 #   1. X-Forwarded-For 头（反向代理场景）
 #   2. X-Real-IP 头（反向代理场景）
@@ -130,14 +130,14 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 
 # 验证覆盖完整性 - 以下操作都应有审计记录
 OPERATIONS=(
-  "user.created" "user.updated" "user.deleted"
-  "role.created" "role.updated" "role.deleted"
-  "role.assigned" "role.unassigned"
-  "tenant.created" "tenant.updated" "tenant.deleted"
-  "service.created" "service.updated" "service.deleted"
-  "password.changed" "password.reset"
-  "settings.updated"
-  "invitation.created" "invitation.accepted"
+  "user.create" "user.update" "user.delete"
+  "role.create" "role.update" "role.delete"
+  "role.assign" "role.unassign"
+  "tenant.create" "tenant.update" "tenant.delete"
+  "service.create" "service.update" "service.delete"
+  "password.change" "password.reset"
+  "system.email.update" "system.branding.update"
+  "invitation.create" "invitation.accept"
 )
 for op in "${OPERATIONS[@]}"; do
   echo -n "$op: "
@@ -282,7 +282,7 @@ done
 # 检查密码喷洒告警
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   "http://localhost:8080/api/v1/security/alerts?type=password_spray&limit=5"
-# 预期: CRITICAL 级别告警
+# 预期: CRITICAL 级别告警 (alert_type: "password_spray")
 
 # 新设备检测测试
 send_webhook_event "{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"198.51.100.88\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\",\"user_agent\":\"NewDevice/1.0 (Unknown OS)\"}}"
