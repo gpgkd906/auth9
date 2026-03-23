@@ -145,7 +145,7 @@ describe("Reset Password Page", () => {
     render(<RoutesStub initialEntries={["/reset-password"]} />);
 
     await waitFor(() => {
-      const loginLink = screen.getByRole("link", { name: /back to login/i });
+      const loginLink = screen.getByRole("link", { name: /back to sign in/i });
       expect(loginLink).toBeInTheDocument();
       expect(loginLink).toHaveAttribute("href", "/login");
     });

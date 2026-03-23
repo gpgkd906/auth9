@@ -79,7 +79,7 @@ describe("Forgot Password Page", () => {
 
     render(<RoutesStub initialEntries={["/forgot-password"]} />);
 
-    const loginLink = screen.getByRole("link", { name: /back to login/i });
+    const loginLink = screen.getByRole("link", { name: /back to sign in/i });
     expect(loginLink).toBeInTheDocument();
     expect(loginLink).toHaveAttribute("href", "/login");
   });
@@ -289,7 +289,7 @@ describe("Forgot Password Page", () => {
     });
 
     // Verify the "Back to login" button/link exists in the success state
-    const backToLoginLink = screen.getByRole("link", { name: /back to login/i });
+    const backToLoginLink = screen.getByRole("link", { name: /back to sign in/i });
     expect(backToLoginLink).toBeInTheDocument();
     expect(backToLoginLink).toHaveAttribute("href", "/login");
   });

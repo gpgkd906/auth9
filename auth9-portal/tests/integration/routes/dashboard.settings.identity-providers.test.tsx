@@ -7,6 +7,7 @@ import IdentityProvidersPage, {
   action,
 } from "~/routes/dashboard.settings.identity-providers";
 import { I18nProvider } from "~/i18n";
+import { ConfirmProvider } from "~/hooks/useConfirm";
 import { identityProviderApi } from "~/services/api";
 
 // Mock the API
@@ -50,7 +51,9 @@ describe("Identity Providers Page", () => {
   function WrappedPage() {
     return (
       <I18nProvider locale="en-US">
-        <IdentityProvidersPage />
+        <ConfirmProvider>
+          <IdentityProvidersPage />
+        </ConfirmProvider>
       </I18nProvider>
     );
   }
@@ -440,11 +443,13 @@ describe("Identity Providers Page", () => {
       expect(screen.getByText("Google")).toBeInTheDocument();
     });
 
-    // Submit the delete form to trigger action
-    const deleteButtons = screen.getAllByRole("button").filter(
-      (btn) => btn.getAttribute("type") === "submit"
-    );
+    // Click delete button and confirm
+    const deleteButtons = screen.getAllByRole("button", { name: /delete provider/i });
     await user.click(deleteButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByTestId("confirm-dialog-action")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("confirm-dialog-action"));
 
     await waitFor(() => {
       expect(screen.getByText("Something went wrong")).toBeInTheDocument();
@@ -470,11 +475,13 @@ describe("Identity Providers Page", () => {
       expect(screen.getByText("Google")).toBeInTheDocument();
     });
 
-    // Submit delete form to trigger action
-    const deleteButtons = screen.getAllByRole("button").filter(
-      (btn) => btn.getAttribute("type") === "submit"
-    );
+    // Click delete button and confirm
+    const deleteButtons = screen.getAllByRole("button", { name: /delete provider/i });
     await user.click(deleteButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByTestId("confirm-dialog-action")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("confirm-dialog-action"));
 
     await waitFor(() => {
       expect(screen.getByText("Identity provider created")).toBeInTheDocument();
@@ -1326,7 +1333,7 @@ describe("Identity Providers Page", () => {
   // ============================================================================
 
   describe("delete provider", () => {
-    it("submits delete form when clicking trash button", async () => {
+    it("shows confirmation dialog when clicking trash button and submits on confirm", async () => {
       vi.mocked(identityProviderApi.delete).mockResolvedValue({});
 
       const RoutesStub = createRoutesStub([
@@ -1347,13 +1354,20 @@ describe("Identity Providers Page", () => {
         expect(screen.getByText("Google")).toBeInTheDocument();
       });
 
-      // Delete buttons are the type="submit" buttons
-      const deleteButtons = screen.getAllByRole("button").filter(
-        (btn) => btn.getAttribute("type") === "submit"
-      );
+      // Delete buttons have aria-label "Delete provider"
+      const deleteButtons = screen.getAllByRole("button", { name: /delete provider/i });
       expect(deleteButtons.length).toBe(2); // One per provider
 
       await user.click(deleteButtons[0]);
+
+      // Confirmation dialog should appear
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-dialog-title")).toBeInTheDocument();
+      });
+
+      // Click the confirm button
+      const confirmButton = screen.getByTestId("confirm-dialog-action");
+      await user.click(confirmButton);
 
       await waitFor(() => {
         expect(identityProviderApi.delete).toHaveBeenCalled();

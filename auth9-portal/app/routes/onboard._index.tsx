@@ -171,13 +171,23 @@ export default function OnboardIndex() {
           </Button>
         </Form>
 
-        <div className="mt-4 text-center">
-          <Link
-            to="/logout"
-            className="text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
-          >
-            {t("onboarding.signOut")}
-          </Link>
+        <div className="mt-4 text-center space-y-2">
+          <div>
+            <Link
+              to="/onboard/invitation"
+              className="text-sm text-[var(--accent-blue)] hover:underline transition-colors"
+            >
+              {t("onboarding.waitingForInvitation")}
+            </Link>
+          </div>
+          <div>
+            <Link
+              to="/logout"
+              className="text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+            >
+              {t("onboarding.signOut")}
+            </Link>
+          </div>
         </div>
       </CardContent>
     </Card>

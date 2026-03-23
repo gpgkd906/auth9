@@ -621,6 +621,8 @@ export default {
       addFirst: "添加第一个提供商",
       editAria: "编辑提供商",
       deleteAria: "删除提供商",
+      deleteConfirmTitle: "删除身份提供商",
+      deleteConfirmDescription: "确定要删除此身份提供商吗？此操作不可撤销。",
       dialogCreateTitle: "添加身份提供商",
       dialogEditTitle: "编辑身份提供商",
       dialogCreateDescription: "选择提供商类型并完成配置。",
@@ -1508,6 +1510,7 @@ export default {
     emailDomainHint: "使用该邮箱域名的用户将被自动验证",
     creating: "创建中...",
     create: "创建组织",
+    waitingForInvitation: "我在等待一个邀请",
   },
   tenantSelect: {
     metaTitle: "选择租户 - Auth9",

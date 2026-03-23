@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil2Icon, PlusIcon, TrashIcon } from "@radix-ui/react-icons";
+import { useConfirm } from "~/hooks/useConfirm";
 import { SettingsHeroCard } from "~/components/settings/settings-card-header";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
@@ -128,6 +129,7 @@ export default function IdentityProvidersPage() {
   const [editingProvider, setEditingProvider] = useState<IdentityProvider | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [formData, setFormData] = useState({ alias: "", displayName: "", enabled: true, config: {} as Record<string, string> });
+  const confirm = useConfirm();
   const isSubmitting = navigation.state === "submitting";
   const wasSubmitting = useRef(false);
 
@@ -222,13 +224,25 @@ export default function IdentityProvidersPage() {
                       <Button variant="ghost" size="sm" aria-label={t("settings.identityProvidersPage.editAria")} onClick={() => openEditDialog(provider)}>
                         <Pencil2Icon className="h-4 w-4" />
                       </Button>
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="delete" />
-                        <input type="hidden" name="alias" value={provider.alias} />
-                        <Button type="submit" variant="ghost" size="sm" aria-label={t("settings.identityProvidersPage.deleteAria")} className="text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 hover:text-[var(--accent-red)]" disabled={isSubmitting}>
-                          <TrashIcon className="h-4 w-4" />
-                        </Button>
-                      </Form>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={t("settings.identityProvidersPage.deleteAria")}
+                        className="text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 hover:text-[var(--accent-red)]"
+                        disabled={isSubmitting}
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: t("settings.identityProvidersPage.deleteConfirmTitle"),
+                            description: t("settings.identityProvidersPage.deleteConfirmDescription"),
+                            variant: "destructive",
+                          });
+                          if (confirmed) {
+                            submit({ intent: "delete", alias: provider.alias }, { method: "post" });
+                          }
+                        }}
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 );

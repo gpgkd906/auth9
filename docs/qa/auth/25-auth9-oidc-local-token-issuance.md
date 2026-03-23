@@ -17,6 +17,11 @@ curl -sf http://localhost:8080/health && echo "OK"
 # IDENTITY_BACKEND=auth9_oidc 需要在 docker-compose 环境变量中设置
 ```
 
+> **重要**: 如果测试用户 `admin@auth9.local` 已启用 MFA（TOTP），密码登录将返回 `mfa_required` 响应而非 identity token。测试前请确认：
+> 1. 使用 **未启用 MFA** 的测试用户（如 `test@auth9.local`），或
+> 2. 执行 `./scripts/reset-docker.sh` 重置环境（会禁用 MFA），或
+> 3. 通过数据库手动禁用 MFA：`UPDATE users SET mfa_enabled = 0 WHERE email = 'admin@auth9.local';`
+
 ### 步骤 1 - 发起 authorize 请求
 
 ```bash

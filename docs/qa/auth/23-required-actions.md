@@ -217,11 +217,14 @@ WHERE id = '<ACTION_ID>';
 
 ### 步骤 0（Gate Check）
 - Auth9 Core 和 Portal 服务均运行中
-- 用户 `qa-user@example.com` 存在 pending action
+- **测试用户必须拥有密码凭证**（通过 `reset-docker.sh` 创建，或使用 `admin@auth9.local`）
+- 用户存在 pending action
 
 ### 初始状态
-- 系统中存在用户 `qa-user@example.com`
+- 系统中存在有密码凭证的测试用户（如 `admin@auth9.local` / `SecurePass123!`）
 - 该用户有一个 `update_password` 类型的 pending action
+
+> **注意**: `qa-user@example.com` 默认通过 OIDC 创建，**没有密码凭证**，无法用于密码登录场景。请使用 `admin@auth9.local` 或在 `reset-docker.sh` 中为 qa-user 设置密码。
 
 ### 目的
 验证密码登录成功后，如果用户有 pending actions，自动跳转到 action 页面而非 tenant select

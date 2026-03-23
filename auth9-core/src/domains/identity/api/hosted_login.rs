@@ -237,39 +237,8 @@ pub async fn password_login<
         return Ok(axum::Json(response).into_response());
     }
 
-    // No MFA — proceed with session creation and token issuance
-    let session = state
-        .session_service()
-        .create_session(user.id, None, ip_address.clone(), user_agent.clone())
-        .await?;
-
-    let _ = write_audit_log_generic(
-        &state,
-        &headers,
-        "hosted_login.password",
-        "user",
-        Some(*user.id),
-        None,
-        None,
-    )
-    .await;
-
-    // Check for pending required actions
-    let pending_actions = match state
-        .required_actions_service()
-        .check_post_login_actions(&user.identity_subject)
-        .await
-    {
-        Ok(actions) => actions,
-        Err(e) => {
-            tracing::warn!(error = %e, "Failed to check pending actions, proceeding without");
-            Vec::new()
-        }
-    };
-
-    // Execute post-login action triggers synchronously so that custom claims
-    // set by actions are included in the identity token.  Actions that fail
-    // in strict-mode will block the login flow and return an error.
+    // Execute post-login action triggers BEFORE session creation so that
+    // strict-mode failures block login without leaving orphan sessions.
     let custom_claims = {
         use crate::models::action::{
             ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
@@ -310,6 +279,36 @@ pub async fn password_login<
             }
         }
         merged_claims
+    };
+
+    // Actions passed — now create session and token
+    let session = state
+        .session_service()
+        .create_session(user.id, None, ip_address.clone(), user_agent.clone())
+        .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "hosted_login.password",
+        "user",
+        Some(*user.id),
+        None,
+        None,
+    )
+    .await;
+
+    // Check for pending required actions
+    let pending_actions = match state
+        .required_actions_service()
+        .check_post_login_actions(&user.identity_subject)
+        .await
+    {
+        Ok(actions) => actions,
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to check pending actions, proceeding without");
+            Vec::new()
+        }
     };
 
     // Create identity token, including custom claims from post-login actions

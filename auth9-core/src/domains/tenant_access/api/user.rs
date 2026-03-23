@@ -15,7 +15,7 @@ use crate::policy::{
     enforce, enforce_with_state, is_platform_admin_with_db, PolicyAction, PolicyInput,
     ResourceScope,
 };
-use crate::state::{HasBranding, HasServices};
+use crate::state::{HasBranding, HasRequiredActions, HasServices};
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -890,7 +890,7 @@ pub async fn get_tenants<S: HasServices>(
         (status = 200, description = "Success")
     )
 )]
-pub async fn enable_mfa<S: HasServices>(
+pub async fn enable_mfa<S: HasServices + HasRequiredActions>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
@@ -938,6 +938,18 @@ pub async fn enable_mfa<S: HasServices>(
         .update_user(&user.identity_subject, &update)
         .await?;
     let updated = state.user_service().set_mfa_enabled(id, true).await?;
+
+    // Create CONFIGURE_TOTP pending action so the user is redirected to
+    // TOTP setup on next login (the update_user() call above is a no-op
+    // in the auth9-oidc adapter, so we must create the action explicitly).
+    if let Err(e) = state
+        .required_actions_service()
+        .create_action(&user.identity_subject, "CONFIGURE_TOTP", None)
+        .await
+    {
+        tracing::warn!(error = %e, "Failed to create CONFIGURE_TOTP action, MFA enabled but setup may not be prompted");
+    }
+
     let _ = write_audit_log_generic(
         &state,
         &headers,

@@ -681,12 +681,14 @@ impl IdentityVerificationStore for Auth9OidcVerificationStore {
     async fn set_email_verified(&self, user_id: &str, verified: bool) -> Result<()> {
         let email_verified_at = if verified { "NOW()" } else { "NULL" };
         let query = format!(
-            "UPDATE user_verification_status SET email_verified = ?, email_verified_at = {} WHERE user_id = ?",
+            "INSERT INTO user_verification_status (user_id, email_verified, email_verified_at) \
+             VALUES (?, ?, {}) \
+             ON DUPLICATE KEY UPDATE email_verified = VALUES(email_verified), email_verified_at = VALUES(email_verified_at)",
             email_verified_at
         );
         sqlx::query(&query)
-            .bind(verified as i8)
             .bind(user_id)
+            .bind(verified as i8)
             .execute(&self.pool)
             .await
             .map_err(|e| {
