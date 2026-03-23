@@ -121,20 +121,10 @@ impl RequiredActionService {
 
     /// Check if the user's password credential has `temporary: true`.
     async fn is_password_temporary(&self, user_id: &str) -> Result<bool> {
-        // Query the credential store for the password credential
-        // The auth9-oidc engine stores password data as JSON with a "temporary" field
-        let credentials = self
-            .identity_engine
+        self.identity_engine
             .credential_store()
-            .list_user_credentials(user_id)
-            .await?;
-
-        // If we can't determine, assume not temporary
-        // The actual temporary flag check requires reading credential_data JSON,
-        // which is only available in the auth9-oidc adapter.
-        // For now, the explicit pending_actions table is the primary mechanism.
-        let _ = credentials;
-        Ok(false)
+            .is_password_temporary(user_id)
+            .await
     }
 }
 

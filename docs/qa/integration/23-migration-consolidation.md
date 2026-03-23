@@ -176,11 +176,11 @@ docker-compose logs auth9-oidc 2>&1 | grep -E "(database|migration|table)"
 
 ## 清单
 
-- [ ] 场景 1: 全新环境启动后所有表就绪
-- [ ] 场景 2: Migration 版本跟踪完整
-- [ ] 场景 3: 重复启动幂等
-- [ ] 场景 4: auth9-oidc 启动不再自行建表
+- [x] 场景 1: 全新环境启动后所有表就绪
+- [x] 场景 2: Migration 版本跟踪完整
+- [x] 场景 3: 重复启动幂等
+- [x] 场景 4: auth9-oidc 启动不再自行建表
 
-**测试日期**:
-**测试人员**:
+**测试日期**: 2026-03-23
+**测试人员**: opencode
 **备注**:

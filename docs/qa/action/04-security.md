@@ -18,14 +18,21 @@
 > **重要**: Post-login Action 仅在 `authorization_code` grant 流程中触发（即通过浏览器 Portal 登录）。
 > `client_credentials` grant (M2M token) 不会触发 post-login Action，这是设计如此。
 >
-> 因此，所有安全测试 Action 必须创建在 **Portal 所使用的服务**（如 `Auth9 Admin Portal`）上，
-> 然后通过浏览器登录来触发执行。不能通过 M2M API 调用来测试 post-login Action。
+> 安全测试 Action 必须创建在**租户拥有的 Service** 上（如 `Auth9 Demo Service`），
+> **不能**创建在平台级 Service（如 `Auth9 Admin Portal`，其 `tenant_id=NULL`）上。
+> `list_by_tenant_trigger` 通过 `services.tenant_id` 匹配租户，`tenant_id=NULL` 的 Service 上的 Action
+> 在登录时不会被触发（这是正常行为，不是 bug）。
+>
+> 验证可用的租户 Service：
+> ```sql
+> SELECT id, name, tenant_id FROM services WHERE tenant_id IS NOT NULL;
+> ```
 
 ### 故障排除
 
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
-| Action 创建成功但不触发 | Action 创建在非 Portal 服务上 | 将 Action 关联到 Portal 使用的服务 |
+| Action 创建成功但不触发 | Action 所在 Service 的 `tenant_id=NULL`（平台级 Service） | 将 Action 创建在有 `tenant_id` 的租户 Service 上 |
 | M2M token 不含 custom claims | client_credentials 不触发 Action | 使用浏览器 Portal 登录触发 |
 | Action 在其他服务上未触发 | 只有 authorization_code grant 触发 | 仅通过 Portal 登录测试 |
 

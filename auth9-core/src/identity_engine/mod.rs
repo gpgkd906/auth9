@@ -80,6 +80,8 @@ pub trait IdentityCredentialStore: Send + Sync {
         user_id: &str,
     ) -> Result<Vec<IdentityCredentialRepresentation>>;
     async fn delete_user_credential(&self, user_id: &str, credential_id: &str) -> Result<()>;
+    /// Check if the user's password credential is marked as temporary.
+    async fn is_password_temporary(&self, user_id: &str) -> Result<bool>;
 }
 
 /// Federation and broker management operations for an identity backend.

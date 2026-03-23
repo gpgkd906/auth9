@@ -134,3 +134,13 @@
   - Deny: `--accent-red` 文字 + `--accent-red-light` 背景。
 - **匹配规则**: 列表展示匹配的规则 ID，使用 `font-mono` 等宽字体，12px。
 - **空结果**: 灰色文字 "No matching rules"，`--text-tertiary` 色。
+
+---
+
+## 常见问题排查
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| `/dashboard/roles` 返回 500 错误 | Session token 过期或 auth9-core API 返回错误 | 运行 `./scripts/reset-docker.sh` 重置环境后重新登录 |
+| Roles 页面加载缓慢或超时 | Roles 页面 loader 需对每个 service 并发请求 roles + permissions，服务数量多时 API 调用量大 | 确认 auth9-core 服务正常运行，检查网络延迟 |
+| Tab 内容为空但无错误 | 当前租户下无 service 或 service 无 roles/permissions 配置 | 确认数据库中存在 services 及其关联的 roles |

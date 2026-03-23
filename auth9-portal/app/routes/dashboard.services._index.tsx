@@ -210,7 +210,8 @@ export default function ServicesPage() {
                     </p>
                     <p className="mt-1 text-xs text-[var(--text-tertiary)]">{t("services.serviceId", { id: service.id })}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[var(--accent-blue)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent-blue)] capitalize">
+                  <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-blue)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent-blue)] capitalize">
+                    <span className={`h-1.5 w-1.5 rounded-full ${service.status === "active" ? "bg-[var(--accent-green)]" : "bg-[var(--accent-blue)]"}`} />
                     {getServiceStatusLabel(service.status, i18n.resolvedLanguage || "zh-CN")}
                   </span>
                 </div>

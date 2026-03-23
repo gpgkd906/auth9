@@ -347,6 +347,10 @@ mod tests {
         async fn delete_user_credential(&self, _user_id: &str, _credential_id: &str) -> Result<()> {
             Ok(())
         }
+
+        async fn is_password_temporary(&self, _user_id: &str) -> Result<bool> {
+            Ok(false)
+        }
     }
 
     #[async_trait]

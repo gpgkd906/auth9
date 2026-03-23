@@ -131,3 +131,13 @@
 - **成功/错误色**: 保持不变（`--accent-green` / `--accent-red`），但 light 背景切换为 dark 变体（`rgba(52, 199, 89, 0.2)` / `rgba(255, 59, 48, 0.2)`）。
 - **分隔线**: `rgba(255, 255, 255, 0.05)`（`--glass-border-subtle`）。
 - **过渡**: 主题切换时 `0.3s` 平滑过渡，无闪烁。
+
+---
+
+## 常见问题排查
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| `/dashboard/account` 返回 401 并重定向到登录页 | Session token 过期或环境未正确初始化 | 运行 `./scripts/reset-docker.sh` 重置环境后重新登录 |
+| `/dashboard/account` 显示 401 但其他子页面（如 `/security`）可正常访问 | Account Profile 的 loader 调用 `userApi.getMe()` 失败，其他子页面可能使用不同的 API 调用 | 确认 auth9-core 服务正常运行（`curl http://localhost:8080/health`），然后重新登录 |
+| 所有 Account 子页面均不可访问 | Session cookie 无效或 auth9-core 未运行 | 检查 Docker 服务状态，确保 auth9-core 和 Redis 正常运行 |

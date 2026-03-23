@@ -144,6 +144,7 @@ Last 24h: 10
 | `/services/{id}/actions`、`/test`、`/logs`、`/stats` 返回 403，随后误报“没有日志/没有统计” | 使用了 Identity Token，没有先做 tenant token exchange | 先执行「步骤 0」，确认 Bearer token 含 `tenant_id`，再重跑场景 |
 | `action_executions` 为 0，但 `curl` / SDK 调用本身就失败了 | 只检查数据库，忽略了 HTTP 响应不是 2xx | 先确认 create/test 请求成功，再校验日志和统计 |
 | 统计结果混入历史数据 | 复用了旧 Action | 使用本场景新建的 action，或先删除旧数据 |
+| `/test` 成功但 `action_executions` 为空，日志出现 `Column 'tenant_id' cannot be null` | Action 的 `tenant_id` 为 NULL 且测试 context 中未提供有效 tenant.id | 确保 context 中 `tenant.id` 是有效 UUID；或确认数据库已执行 `20260323000002` 迁移使 `tenant_id` 可为 NULL |
 
 ---
 
@@ -253,6 +254,10 @@ testConcurrency().catch(console.error);
 
 ## 场景 10：AI Agent 集成模式
 
+> **重要**: `generateAccessControlScript()` 生成的脚本必须是**纯 JavaScript**。
+> Action Engine 使用 V8 引擎，不支持 TypeScript 语法（如 `as string[]`）。
+> 使用 TypeScript 类型断言会导致 `SyntaxError: Unexpected identifier 'as'`。
+
 ### 测试代码（模拟 AI Agent 自动配置）
 ```typescript
 import { Auth9Client } from '@auth9/core';
@@ -320,10 +325,12 @@ async function aiAgentConfigureService() {
 }
 
 function generateAccessControlScript(serviceName: string): string {
+  // IMPORTANT: Action Engine runs V8 (pure JavaScript only).
+  // Do NOT use TypeScript syntax (e.g. `as string[]`) in generated scripts.
   return `
 // Auto-generated access control for ${serviceName}
 const allowedRoles = ["admin", "developer"];
-const userRoles = (context.claims?.roles as string[]) || [];
+const userRoles = (context.claims && context.claims.roles) || [];
 
 const hasAccess = allowedRoles.some(role => userRoles.includes(role));
 
@@ -333,7 +340,7 @@ if (!hasAccess) {
 
 context.claims = context.claims || {};
 context.claims.service_access = context.claims.service_access || [];
-(context.claims.service_access as string[]).push("${serviceName}");
+context.claims.service_access.push("${serviceName}");
 
 context;
   `.trim();

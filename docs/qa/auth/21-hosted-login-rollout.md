@@ -4,6 +4,8 @@
 **前置条件**: Docker 环境运行中，Portal 和 auth9-core 可访问
 **关联 FR**: Hosted Login 灰度上线与回滚
 
+> **⚠️ 实装状態**: 场景 2-5 描述的 `LOGIN_MODE` 环境变量切换功能（`oidc` / `percentage` 模式）**尚未实装**。当前 Portal 仅支持 hosted 模式（场景 1）。场景 2-5 应标记为 **SKIP（未实装）** 而非 FAIL。
+
 ---
 
 ## 场景 1: 默认模式 (hosted) — Auth9 登录表单渲染

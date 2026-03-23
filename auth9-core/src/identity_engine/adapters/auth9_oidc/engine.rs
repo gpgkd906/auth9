@@ -522,6 +522,27 @@ impl IdentityCredentialStore for Auth9OidcCredentialStore {
         }
         Ok(())
     }
+
+    async fn is_password_temporary(&self, user_id: &str) -> Result<bool> {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT credential_data FROM credentials WHERE user_id = ? AND credential_type = 'password' AND is_active = 1 LIMIT 1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to check password temporary status: {}", e)))?;
+
+        if let Some(row) = row {
+            let data: String = row
+                .try_get("credential_data")
+                .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+                return Ok(parsed.get("temporary").and_then(|v| v.as_bool()).unwrap_or(false));
+            }
+        }
+        Ok(false)
+    }
 }
 
 struct Auth9OidcActionStore {

@@ -38,7 +38,19 @@ WHERE tu.user_id = (SELECT id FROM users WHERE email = 'test@example.com');
 ```
 
 ### 测试 Action 准备
-使用 API 或 Portal 创建以下 Actions：
+
+> **关键**: Actions 必须创建在**租户拥有的 Service** 上（如 `Auth9 Demo Service`），
+> **不能**创建在平台级 Service（如 `Auth9 Admin Portal`，其 `tenant_id=NULL`）上。
+> `list_by_tenant_trigger` 查询通过 `services.tenant_id` 匹配，
+> 平台级 Service 的 `tenant_id=NULL` 在 SQL 中无法匹配任何租户，导致 Action 静默跳过。
+>
+> 验证 Service 归属：
+> ```sql
+> SELECT id, name, tenant_id FROM services WHERE tenant_id IS NOT NULL;
+> -- 选择一个有 tenant_id 的 Service 来创建 Actions
+> ```
+
+使用 API 或 Portal 在**租户 Service** 上创建以下 Actions：
 
 1. **Simple Claims Action** (post-login)
 ```typescript
@@ -212,6 +224,7 @@ WHERE user_id = '{test_user_id}'
 | Action 失败但登录成功 | Error Action 的 `strict_mode` 为 `false`（默认值） | 编辑 Action，将 `strict_mode` 设为 `true` |
 | Action 未执行 | Error Action 未启用或未绑定到正确的 service/trigger | 检查 Action 的 `enabled` 状态和 `trigger_id` 为 `post-login` |
 | 登录正常但无执行日志 | Action 绑定的 service_id 与当前登录的 service 不匹配 | 确认 Action 属于登录使用的 Service |
+| Action 创建成功但登录不触发，日志无 action 相关输出 | Action 所在的 Service 的 `tenant_id=NULL`（平台级 Service） | 将 Action 创建在有 `tenant_id` 的租户 Service 上（如 `Auth9 Demo Service`） |
 
 ---
 
