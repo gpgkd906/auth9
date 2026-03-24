@@ -133,8 +133,15 @@
 
 ### 预期视觉效果
 - **返回按钮**: 所有子页面顶部统一使用 ArrowLeftIcon，`variant="ghost"`，链接至 `/dashboard/tenants/:tenantId`（Tenant Detail 页）。概览页的返回按钮链接至 `/dashboard/tenants`（租户列表页），因为它是 Tenant Detail 的根页面。
+- **返回按钮样式**: 仅图标按钮（`variant="ghost" size="icon"`），不含文字标签，使用 `aria-label` 提供无障碍描述。
 - **页面标题**: 24px `font-weight: 600`，紧跟在返回按钮下方，间距 `mb-6`（24px）。
 - **内容区**: 与主 Dashboard 页面共享侧边栏，内容区宽度一致。
 - **面包屑**: 可选。若有面包屑则使用 "/" 分隔，当前页面 `--text-primary`，父级 `--accent-blue` 可点击。
 - **加载状态**: 页面切换时无白屏闪烁（React Router 7 的 loader 先加载数据）。
 - **主题持续**: 子页面之间切换不触发主题重置。
+
+### 排错指南
+
+| 现象 | 原因 | 解决方案 |
+|------|------|----------|
+| Playwright snapshot 显示返回按钮为 `link "Back to tenants"` | 这是 `aria-label` 的文字，非可见文字。icon-only 按钮使用 `aria-label` 提供无障碍描述，Playwright accessibility snapshot 会将其显示为元素标签 | 验证按钮是否为 icon-only 时，应检查 DOM 结构（`Button variant="ghost" size="icon"` + 仅含 `ArrowLeftIcon`），而非 snapshot 中的文字标签 |

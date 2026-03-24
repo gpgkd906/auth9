@@ -272,9 +272,11 @@ export default function InvitationsPage() {
       <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-            <Link to={`/dashboard/tenants/${tenant.id}`} className="text-[var(--text-secondary)] hover:text-[var(--text-secondary)] transition-colors" aria-label={t("tenants.actions.backToList")}>
-              <ArrowLeftIcon className="h-5 w-5" />
-            </Link>
+            <Button variant="ghost" size="icon" asChild>
+              <Link to={`/dashboard/tenants/${tenant.id}`} aria-label={t("tenants.actions.backToList")}>
+                <ArrowLeftIcon className="h-4 w-4" />
+              </Link>
+            </Button>
             <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("tenants.invitations.title")}</h1>
           </div>
           <p className="text-sm text-[var(--text-secondary)] ml-8">{t("tenants.invitations.description", { tenantName: tenant.name })}</p>
@@ -390,7 +392,7 @@ export default function InvitationsPage() {
                 </div>
                 <h3 className="text-[17px] font-semibold text-[var(--text-primary)]">{t("tenants.invitations.noInvitations")}</h3>
                 <p className="mt-2 max-w-md text-[13px] text-[var(--text-secondary)]">
-                  {t("tenants.invitations.listDescription", { total: 0, page: 1, totalPages: 1 })}
+                  {t("tenants.invitations.noInvitationsDescription")}
                 </p>
                 <Button className="mt-5" onClick={() => setIsCreateOpen(true)}>
                   <PlusIcon className="mr-2 h-4 w-4" />

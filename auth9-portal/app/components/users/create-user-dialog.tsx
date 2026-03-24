@@ -73,7 +73,7 @@ export function CreateUserDialog({
       }}
     >
       <DialogContent
-        className="max-w-lg"
+        className="max-w-md"
         aria-modal="true"
         onCloseAutoFocus={(event) => {
           if (restoreFocusRef?.current) {

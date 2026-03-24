@@ -832,6 +832,7 @@ export default {
       revoke: "Revoke",
       delete: "Delete",
       noInvitations: "No invitations found. Click \"Invite User\" to send an invitation.",
+      noInvitationsDescription: "Send invitations to add users to this tenant. Invited users will receive an email with a link to join.",
       deleteTitle: "Delete Invitation",
       deleteDescription: "Are you sure you want to delete this invitation?",
       revokeTitle: "Revoke Invitation",

@@ -831,6 +831,7 @@ export default {
       revoke: "撤销",
       delete: "删除",
       noInvitations: "未找到邀请。点击“邀请用户”发送邀请。",
+      noInvitationsDescription: "发送邀请以将用户添加到此租户。受邀用户将收到一封包含加入链接的邮件。",
       deleteTitle: "删除邀请",
       deleteDescription: "确定要删除此邀请吗？",
       revokeTitle: "撤销邀请",
