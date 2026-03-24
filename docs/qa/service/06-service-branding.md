@@ -60,7 +60,7 @@ Auth9 支持两级品牌配置：
 
 ### 预期数据状态
 ```sql
-SELECT id, service_id, config FROM service_brandings
+SELECT id, service_id, config FROM service_branding
 WHERE service_id = '{service_id}';
 -- 可能为空（使用系统默认）或存在自定义配置
 ```
@@ -131,7 +131,7 @@ curl -X PUT http://localhost:8080/api/v1/services/{service_id}/branding \
 SELECT service_id,
        JSON_EXTRACT(config, '$.primary_color') as primary_color,
        JSON_EXTRACT(config, '$.company_name') as company_name
-FROM service_brandings
+FROM service_branding
 WHERE service_id = '{service_id}';
 -- 预期: primary_color = "#E74C3C", company_name = "Service Custom Brand"
 ```
@@ -207,7 +207,7 @@ curl -X DELETE http://localhost:8080/api/v1/services/{service_id}/branding \
 
 ### 预期数据状态
 ```sql
-SELECT COUNT(*) FROM service_brandings
+SELECT COUNT(*) FROM service_branding
 WHERE service_id = '{service_id}';
 -- 预期: COUNT = 0
 

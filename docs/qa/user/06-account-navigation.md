@@ -49,17 +49,18 @@
 2. 确认页面结构：
    - 页面标题 "Account"
    - 副标题 "Manage your personal account settings"
-   - 左侧子导航包含 5 个项目
+   - 左侧子导航包含 6 个项目
 3. 依次点击每个导航项：
    - 「Profile」→ `/dashboard/account`
    - 「Security」→ `/dashboard/account/security`
+   - 「MFA」→ `/dashboard/account/mfa`
    - 「Passkeys」→ `/dashboard/account/passkeys`
    - 「Sessions」→ `/dashboard/account/sessions`
    - 「Linked Identities」→ `/dashboard/account/identities`
 4. 确认当前激活的导航项高亮显示（蓝色背景白色文字）
 
 ### 预期结果
-- 所有 5 个导航项均可点击并正确跳转
+- 所有 6 个导航项均可点击并正确跳转
 - 当前页面对应的导航项呈高亮状态
 - 每个子页面在 Account 布局内正确渲染（右侧内容区域）
 - 浏览器标题显示 "Account - Auth9"

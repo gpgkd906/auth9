@@ -167,21 +167,21 @@ WHERE entity_id = 'https://bad-mapping.example.com';
 # 使用租户 B 的 tenant_id 尝试获取属于租户 A 的 app_id
 curl -s "http://localhost:8080/api/v1/tenants/{tenant_b_id}/saml-apps/{app_id}" \
   -H "Authorization: Bearer $TOKEN_B" | jq .
-# 预期: 403 Forbidden
+# 预期: 404 Not Found（app 不属于 tenant_b，从 tenant_b 视角不存在）
 ```
 
 **4b. 用租户 A 的路径但租户 B 的 Token**:
 ```bash
 curl -s "http://localhost:8080/api/v1/tenants/{tenant_a_id}/saml-apps/{app_id}" \
   -H "Authorization: Bearer $TOKEN_B" | jq .
-# 预期: 403 Forbidden（policy enforcement）
+# 预期: 403 Forbidden（tenant access policy 拦截，token 无权访问 tenant_a）
 ```
 
 ### 预期结果
-- **跨租户路径 + 正确 Token**（路径 tenant_b + TOKEN_B → 查 app 不属于 B）返回 **403**（policy 层拦截）
-- **越权 Token**（路径 tenant_a + TOKEN_B → policy 拒绝）返回 **403**（policy enforcement 先于数据查询）
+- **跨租户路径 + 正确 Token**（路径 tenant_b + TOKEN_B → 查 app 不属于 B）返回 **404**（app 在 tenant_b 下不存在）
+- **越权 Token**（路径 tenant_a + TOKEN_B → policy 拒绝）返回 **403**（tenant access policy 先于数据查询）
 
-> **安全设计说明**: 所有跨租户请求统一返回 403，而非根据数据是否存在返回 404。这是有意的安全设计——policy 层在数据查询之前拦截所有跨租户访问，防止攻击者通过 404 vs 403 的差异探测其他租户中是否存在特定资源（信息泄露防护）。
+> **安全设计说明**: 场景 4a 返回 404 而非 403 是正确的安全行为——从请求租户的视角，该资源不存在。返回 403 反而会泄露"该资源在其他租户中存在"的信息。场景 4b 返回 403 是因为 token 本身无权访问目标租户，policy 层在数据查询前即拦截。
 
 ---
 

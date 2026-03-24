@@ -60,6 +60,8 @@ echo $TOKEN | head -c 20
 
 ## 场景 1：Tenants CRUD 全流程
 
+> **⚠️ 重要**: Tenant Access Token 具有租户作用域。创建新租户后，GET/PUT/DELETE 该新租户时，如果 token 是为其他租户签发的，即使是平台管理员也会返回 403（`"Cannot access another tenant with a tenant-scoped token"`）。这是安全设计：TenantAccess token 始终限于签发时的租户上下文。测试 GET 新租户时，需使用场景中同一步骤创建+获取的方式（见步骤 2），或使用 Identity Token 代替。
+
 ### 步骤
 
 1. **创建租户**
@@ -174,11 +176,13 @@ curl -s -X DELETE http://localhost:8080/api/v1/users/$USER_ID \
 
 1. **创建服务**
 
+> **⚠️ 注意**: API 字段使用 **snake_case**（如 `redirect_uris`），非 camelCase。`client_id` 由服务端自动生成，无需提供。`redirect_uris` 为必填字段。
+
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/services \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"SDK Test Service","clientId":"sdk-test-svc","redirectUris":["https://sdk-test.auth9.dev/callback"]}' | jq .
+  -d '{"name":"SDK Test Service","redirect_uris":["https://sdk-test.auth9.dev/callback"]}' | jq .
 ```
 
 **预期**: 返回 `data.id` 非空，`data.name` = "SDK Test Service"
@@ -189,7 +193,7 @@ curl -s -X POST http://localhost:8080/api/v1/services \
 SVC_ID=$(curl -s -X POST http://localhost:8080/api/v1/services \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"SDK Integration Test","clientId":"sdk-int-test","redirectUris":["https://sdk-int.auth9.dev/callback"]}' | jq -r '.data.id')
+  -d '{"name":"SDK Integration Test","redirect_uris":["https://sdk-int.auth9.dev/callback"]}' | jq -r '.data.id')
 
 curl -s http://localhost:8080/api/v1/services/$SVC_ID/integration \
   -H "Authorization: Bearer $TOKEN" | jq .
@@ -212,13 +216,15 @@ curl -s -X DELETE http://localhost:8080/api/v1/services/$SVC_ID \
 
 ### 步骤
 
+> **⚠️ 注意**: API 字段使用 **snake_case**（如 `service_id`），非 camelCase。
+
 1. **创建权限**
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/permissions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"serviceId":"'$SVC_ID'","code":"sdk:test:read","name":"SDK Test Read"}' | jq .
+  -d '{"service_id":"'$SVC_ID'","code":"sdk:test:read","name":"SDK Test Read"}' | jq .
 ```
 
 **预期**: 返回 `data.id` 非空，`data.code` = "sdk:test:read"
@@ -229,7 +235,7 @@ curl -s -X POST http://localhost:8080/api/v1/permissions \
 curl -s -X POST http://localhost:8080/api/v1/roles \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"serviceId":"'$SVC_ID'","name":"SDK Test Role"}' | jq .
+  -d '{"service_id":"'$SVC_ID'","name":"SDK Test Role"}' | jq .
 ```
 
 **预期**: 返回 `data.id` 非空，`data.name` = "SDK Test Role"
@@ -251,6 +257,8 @@ curl -s http://localhost:8080/api/v1/services/$SVC_ID/roles \
 
 1. **创建邀请**
 
+> **⚠️ 注意**: `role_ids` 至少需要 1 个角色 ID（验证规则要求 `min = 1`）。先从场景 4 获取 `$ROLE_ID`。
+
 ```bash
 TENANT_ID=$(curl -s http://localhost:8080/api/v1/tenants \
   -H "Authorization: Bearer $TOKEN" | jq -r '.data[0].id')
@@ -258,7 +266,7 @@ TENANT_ID=$(curl -s http://localhost:8080/api/v1/tenants \
 curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/invitations \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"email":"sdk-invite@auth9.dev","roleIds":[]}' | jq .
+  -d '{"email":"sdk-invite@auth9.dev","role_ids":["'$ROLE_ID'"]}' | jq .
 ```
 
 **预期**: 返回 `data.id` 非空，`data.status` = "pending"

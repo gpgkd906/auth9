@@ -41,18 +41,17 @@
 - **必须通过 API 创建** Service 和 Client（非 DB seed 数据）
 - 已获取有效的 Admin Access Token
 
-> **⚠️ 重要 — DB Seed Client 的 Secret 占位符行为（非 Bug）**
+> **⚠️ 重要 — Integration API 的 client_secret 占位符行为（非 Bug）**
 >
-> DB 迁移种子数据（如 M2M 测试 client）仅写入数据库，**不会**同步到 Auth9 内置 OIDC 引擎的内存缓存。
-> 因此使用种子数据测试时，`client_secret` 将返回占位符：
+> Integration API 的 `client_secret` 字段 **始终** 返回占位符：
 >
 > ```
 > "(set — use the secret configured at creation)"
 > ```
 >
-> **这是预期行为，不是 Bug**：数据库仅存储 secret 的 bcrypt 哈希，无法还原明文。只有通过 API 创建的 client 才会在 OIDC 引擎中缓存明文 secret，从而在 Integration 端点返回真实值。
+> **这是安全设计，不是 Bug**：client secret 仅在创建时一次性返回明文，之后数据库仅存储 bcrypt 哈希，无法还原。这与 AWS Secret Access Key 的行为一致——创建后不可再次查看。
 >
-> 要测试真实 secret 返回，**必须**通过 `POST /api/v1/services` 或 `POST /api/v1/services/{id}/clients` 创建 client。
+> 如需重新获取 secret，使用 `POST /api/v1/services/{service_id}/clients/{client_id}/regenerate-secret` 重新生成。
 
 ### 目的
 验证 Integration API 返回完整的集成信息，包含真实的 client_secret
@@ -64,8 +63,9 @@
    curl -s -X POST http://localhost:8080/api/v1/services \
      -H "Authorization: Bearer {access_token}" \
      -H "Content-Type: application/json" \
-     -d '{"name": "Integration Test Service", "client_id": "integration-test"}' | jq .
+     -d '{"name": "Integration Test Service", "redirect_uris": ["https://example.com/callback"]}' | jq .
    ```
+   > **注意**: `redirect_uris` 为必填字段。`client_id` 由服务端自动生成，无需提供。
 3. 调用 Integration API：
    ```bash
    curl -s http://localhost:8080/api/v1/services/{service_id}/integration \
@@ -78,7 +78,9 @@
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
 | `client_secret` 返回占位符 | 使用了 DB seed 数据 | 通过 API 创建 Service |
+| API 创建后仍返回占位符 | OIDC 引擎缓存未同步 | 重启 auth9-core 后重试 |
 | OIDC 引擎中无对应 client | Service 未通过 API 创建 | 通过 API 创建 Service |
+| 422 验证错误 | 缺少 `redirect_uris` 字段 | 请求体必须包含 `redirect_uris` 数组 |
 | 401 未授权 | Token 过期或无效 | 重新获取 Token |
 
 ### 预期结果
@@ -86,7 +88,7 @@
 - `data.service` 包含正确的 `id`、`name`、`base_url`
 - `data.clients[0].client_id` 非空
 - `data.clients[0].public_client` 为 `false`
-- `data.clients[0].client_secret` 非空（真实 secret，非哈希）
+- `data.clients[0].client_secret` 为占位符字符串 `"(set — use the secret configured at creation)"`（安全设计：secret 仅在创建时一次性返回）
 - `data.endpoints.authorize` 包含 `/api/v1/auth/authorize`（auth9-core OIDC 端点）
 - `data.endpoints.token` 包含 `/api/v1/auth/token`（auth9-core OIDC 代理端点）
 - `data.endpoints.openid_configuration` 以 `/.well-known/openid-configuration` 结尾

@@ -243,6 +243,9 @@ curl -i "http://localhost:8080/api/v1/tenants/{tenant_b}" \
 |------|------|------|
 | 第 3 步返回 200 而非 403 | 使用了平台管理员账号（平台管理员可跨租户访问） | 使用非平台管理员用户重新测试 |
 | 两个请求都返回 403 | token 已过期或签名无效 | 确认 token exchange 正常并获取新 token |
+| 无法获取非管理员 Identity Token | Identity Token 只能通过浏览器 OIDC 流程获取，无 API 方式 | 使用 Playwright 自动化浏览器登录获取，或通过 `gen-test-tokens.js` 生成指定用户的 token |
+
+> **已知限制**: 本场景需要非平台管理员用户的 Identity Token，但 `gen-admin-token.sh` 只能生成 `admin@auth9.local`（平台管理员）的 token。如需测试，可使用 `gen-test-tokens.js` 工具为指定用户生成 token，或通过 Playwright 自动化浏览器 OIDC 登录流程获取 Identity Token。
 
 ---
 
