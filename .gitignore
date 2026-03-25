@@ -26,6 +26,7 @@ target/
 build/
 dist/
 node_modules/
+__pycache__/
 
 # Smart build cache (content hashes for reset-docker.sh)
 .build-cache/
