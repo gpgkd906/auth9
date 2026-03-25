@@ -1,6 +1,6 @@
 //! Server initialization and routing
 
-use crate::cache::CacheManager;
+use crate::cache::{CacheManager, CacheOperations};
 use crate::config::Config;
 use crate::crypto::EncryptionKey;
 use crate::domains;
@@ -271,6 +271,10 @@ impl HasServices for AppState {
 
     fn breached_password_service(&self) -> Option<&BreachedPasswordService> {
         Some(&self.breached_password_service)
+    }
+
+    fn maybe_cache(&self) -> Option<&dyn CacheOperations> {
+        Some(&self.cache_manager)
     }
 }
 

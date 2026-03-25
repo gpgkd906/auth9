@@ -93,22 +93,33 @@ pub async fn require_auth_middleware(
         .verify_tenant_access_token_any_audience(token)
     {
         // Validate audience dynamically via cache (Redis SET of registered client_ids)
-        let audience_valid = if let Some(ref cache) = auth_state.cache {
-            cache.is_valid_audience(&claims.aud).await.unwrap_or(false)
+        // Fail-closed: if cache is unavailable or errors, reject with 503.
+        if let Some(ref cache) = auth_state.cache {
+            match cache.is_valid_audience(&claims.aud).await {
+                Ok(true) => {
+                    session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
+                    Some("tenant_access")
+                }
+                Ok(false) => {
+                    tracing::debug!(
+                        aud = %claims.aud,
+                        "Tenant access token rejected: audience not in registered client set"
+                    );
+                    None
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Audience validation failed (Redis error), rejecting request (fail-closed)");
+                    return service_unavailable_response(
+                        "Authentication service temporarily unavailable",
+                    );
+                }
+            }
         } else {
-            // No cache available (e.g., tests) — accept any valid token
-            true
-        };
-
-        if audience_valid {
-            session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
-            Some("tenant_access")
-        } else {
-            tracing::debug!(
-                aud = %claims.aud,
-                "Tenant access token rejected: audience not in registered client set"
+            // No cache available — fail-closed: reject with 503
+            tracing::error!("No cache configured for audience validation, rejecting request (fail-closed)");
+            return service_unavailable_response(
+                "Authentication service temporarily unavailable",
             );
-            None
         }
     } else {
         None
@@ -578,5 +589,181 @@ mod tests {
         // Non-allowed paths
         assert!(!is_identity_token_path_allowed("/api/v1/users", &get));
         assert!(!is_identity_token_path_allowed("/api/v1/roles", &get));
+    }
+
+    #[tokio::test]
+    async fn test_tenant_access_token_no_cache_fails_closed() {
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let tenant_id = uuid::Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+        let valid_token = jwt_manager
+            .create_tenant_access_token(
+                user_id,
+                "test@example.com",
+                tenant_id,
+                "my-client",
+                vec![],
+                vec![],
+            )
+            .unwrap();
+
+        // No cache configured — should fail-closed
+        let auth_state = AuthMiddlewareState::new(jwt_manager);
+
+        let app = Router::new()
+            .route("/api/v1/test", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/api/v1/test")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        // Fail-closed: no cache means audience cannot be validated → 503
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_tenant_access_token_with_valid_audience_succeeds() {
+        use crate::cache::MockCacheOperations;
+
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let tenant_id = uuid::Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+        let valid_token = jwt_manager
+            .create_tenant_access_token(
+                user_id,
+                "test@example.com",
+                tenant_id,
+                "my-client",
+                vec![],
+                vec![],
+            )
+            .unwrap();
+
+        let mut mock_cache = MockCacheOperations::new();
+        mock_cache
+            .expect_is_valid_audience()
+            .withf(|aud| aud == "my-client")
+            .returning(|_| Ok(true));
+        mock_cache
+            .expect_is_token_blacklisted()
+            .returning(|_| Ok(false));
+
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
+
+        let app = Router::new()
+            .route("/api/v1/test", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/api/v1/test")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_tenant_access_token_with_invalid_audience_rejected() {
+        use crate::cache::MockCacheOperations;
+
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let tenant_id = uuid::Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+        let valid_token = jwt_manager
+            .create_tenant_access_token(
+                user_id,
+                "test@example.com",
+                tenant_id,
+                "unknown-client",
+                vec![],
+                vec![],
+            )
+            .unwrap();
+
+        let mut mock_cache = MockCacheOperations::new();
+        mock_cache
+            .expect_is_valid_audience()
+            .returning(|_| Ok(false));
+
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
+
+        let app = Router::new()
+            .route("/api/v1/test", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/api/v1/test")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_tenant_access_token_audience_cache_error_returns_503() {
+        use crate::cache::MockCacheOperations;
+
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let tenant_id = uuid::Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+        let valid_token = jwt_manager
+            .create_tenant_access_token(
+                user_id,
+                "test@example.com",
+                tenant_id,
+                "my-client",
+                vec![],
+                vec![],
+            )
+            .unwrap();
+
+        let mut mock_cache = MockCacheOperations::new();
+        mock_cache
+            .expect_is_valid_audience()
+            .returning(|_| Err(anyhow::anyhow!("Redis connection refused").into()));
+
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
+
+        let app = Router::new()
+            .route("/api/v1/test", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/api/v1/test")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        // Fail-closed: Redis error → 503
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

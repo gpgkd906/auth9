@@ -19,7 +19,7 @@ use crate::support::{
 use crate::support::{
     TestScimGroupMappingRepository, TestScimLogRepository, TestScimTokenRepository,
 };
-use auth9_core::cache::NoOpCacheManager;
+use auth9_core::cache::{CacheOperations, NoOpCacheManager};
 use auth9_core::config::{
     Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, RateLimitConfig,
     RedisConfig, ServerConfig,
@@ -577,6 +577,10 @@ impl HasServices for TestAppState {
 
     fn maybe_db_pool(&self) -> Option<&sqlx::MySqlPool> {
         Some(&self.db_pool)
+    }
+
+    fn maybe_cache(&self) -> Option<&dyn CacheOperations> {
+        Some(&self.cache_manager)
     }
 }
 

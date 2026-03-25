@@ -143,6 +143,12 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     ) -> Option<&crate::domains::identity::service::BreachedPasswordService> {
         None
     }
+
+    /// Optional cache access for extractors that need audience validation.
+    /// Production AppState overrides this to return the real cache manager.
+    fn maybe_cache(&self) -> Option<&dyn CacheOperations> {
+        None
+    }
 }
 
 /// Trait for states that provide system settings and email services

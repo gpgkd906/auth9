@@ -135,21 +135,34 @@ pub enum AuthError {
     InvalidToken(String),
     /// Token has expired
     TokenExpired,
+    /// Cache/backing service unavailable (fail-closed)
+    ServiceUnavailable,
 }
 
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            AuthError::MissingToken => (StatusCode::UNAUTHORIZED, "Missing authorization token"),
-            AuthError::InvalidHeader(_) => {
-                (StatusCode::UNAUTHORIZED, "Invalid authorization header")
+        let (status, error, message) = match self {
+            AuthError::MissingToken => {
+                (StatusCode::UNAUTHORIZED, "unauthorized", "Missing authorization token")
             }
-            AuthError::InvalidToken(_) => (StatusCode::UNAUTHORIZED, "Invalid token"),
-            AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Token has expired"),
+            AuthError::InvalidHeader(_) => {
+                (StatusCode::UNAUTHORIZED, "unauthorized", "Invalid authorization header")
+            }
+            AuthError::InvalidToken(_) => {
+                (StatusCode::UNAUTHORIZED, "unauthorized", "Invalid token")
+            }
+            AuthError::TokenExpired => {
+                (StatusCode::UNAUTHORIZED, "unauthorized", "Token has expired")
+            }
+            AuthError::ServiceUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                "Authentication service temporarily unavailable",
+            ),
         };
 
         let body = serde_json::json!({
-            "error": "unauthorized",
+            "error": error,
             "message": message
         });
 
@@ -211,9 +224,21 @@ where
             return AuthUser::from_identity_claims(claims);
         }
 
-        // Try to validate as tenant access token (audience checked dynamically via Redis)
+        // Try to validate as tenant access token (audience validated via cache)
         if let Ok(claims) = jwt_manager.verify_tenant_access_token_any_audience(token) {
-            return AuthUser::from_tenant_access_claims(claims);
+            // Audience validation: fail-closed if cache unavailable or audience invalid
+            match state.maybe_cache() {
+                Some(cache) => match cache.is_valid_audience(&claims.aud).await {
+                    Ok(true) => return AuthUser::from_tenant_access_claims(claims),
+                    Ok(false) => {
+                        return Err(AuthError::InvalidToken(
+                            "Token audience not recognized".to_string(),
+                        ));
+                    }
+                    Err(_) => return Err(AuthError::ServiceUnavailable),
+                },
+                None => return Err(AuthError::ServiceUnavailable),
+            }
         }
 
         Err(AuthError::InvalidToken(
@@ -437,6 +462,13 @@ mod tests {
             let response = error.into_response();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
+    }
+
+    #[test]
+    fn test_auth_error_service_unavailable_returns_503() {
+        let error = AuthError::ServiceUnavailable;
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[test]

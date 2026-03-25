@@ -90,7 +90,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (27 个文档, 127 个场景)
+### 认证流程 (28 个文档, 132 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 4 |
@@ -126,6 +126,7 @@
 | [auth/31-email-otp-user-toggle.md](./auth/31-email-otp-user-toggle.md) | 用户级 Email OTP 开关（MFA 页面卡片、启用/停用、登录双重检查、认证保护） | 5 |
 | [auth/32-breached-password-detection.md](./auth/32-breached-password-detection.md) | 泄露密码检测 HIBP（注册/修改/重置拦截、k-Anonymity、Fail-open 降级、HIBP_ENABLED 开关） | 5 |
 | [auth/adaptive_mfa.md](./auth/adaptive_mfa.md) | Adaptive MFA 风险驱动策略（策略 GET/PUT、可信设备列表、持久化验证、认证保护） | 5 |
+| [auth/008_auth_boundary_consolidation.md](./auth/008_auth_boundary_consolidation.md) | Auth Boundary Consolidation（AuthUser audience 动态校验、Redis fail-closed 503、token_type 访问控制） | 5 |
 
 ### 系统设置 (6 个文档, 30 个场景)
 | 文档 | 描述 | 场景数 |
