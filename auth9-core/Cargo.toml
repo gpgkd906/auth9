@@ -96,7 +96,7 @@ webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation",
 webauthn-rs-proto = "0.5"
 
 # GeoIP
-maxminddb = "0.24"
+maxminddb = "0.27"
 
 # LDAP
 ldap3 = { version = "0.11", default-features = false, features = ["tls-rustls"] }
