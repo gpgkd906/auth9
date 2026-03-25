@@ -130,13 +130,16 @@
 | [settings/02-email-provider.md](./settings/02-email-provider.md) | 邮件服务商配置 | 5 |
 | [settings/03-email-templates.md](./settings/03-email-templates.md) | 邮件模板管理 | 5 |
 | [settings/04-security-malicious-ip-blacklist.md](./settings/04-security-malicious-ip-blacklist.md) | 平台级恶意 IP 黑名单配置、校验与 suspicious_ip 告警联动 | 5 |
+| [settings/captcha_bot_protection.md](./settings/captcha_bot_protection.md) | Bot 防护 CAPTCHA 集成（配置端点、Always/Adaptive 模式、前端组件） | 5 |
 
-### 身份提供商 (3 个文档, 15 个场景)
+### 身份提供商 (5 个文档, 24 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [identity-provider/01-crud.md](./identity-provider/01-crud.md) | 创建、更新、删除身份提供商 | 5 |
 | [identity-provider/02-toggle-validation.md](./identity-provider/02-toggle-validation.md) | 启用/禁用、验证、登录集成 | 5 |
-| [identity-provider/03-tenant-enterprise-sso-connectors.md](./identity-provider/03-tenant-enterprise-sso-connectors.md) | 租户级企业 SSO 连接器管理（SAML/OIDC） | 5 |
+| [identity-provider/03-tenant-enterprise-sso-connectors.md](./identity-provider/03-tenant-enterprise-sso-connectors.md) | 租户级企业 SSO 连接器管理（SAML/OIDC/LDAP） | 5 |
+| [identity-provider/04-enterprise-ldap-connectors.md](./identity-provider/04-enterprise-ldap-connectors.md) | LDAP/AD 连接器创建、配置校验、连接测试、AD 默认值、级联删除 | 5 |
+| [identity-provider/05-ldap-group-role-mappings.md](./identity-provider/05-ldap-group-role-mappings.md) | LDAP 组角色映射 CRUD、唯一约束、类型校验 | 4 |
 
 ### Passkeys (3 个文档, 15 个场景) 🆕
 | 文档 | 描述 | 场景数 |
@@ -443,6 +446,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-25 | 5.29.0 | **FR-002 LDAP/AD 企业 SSO 连接器**：新增 `identity-provider/04-enterprise-ldap-connectors.md`（5 场景）、`identity-provider/05-ldap-group-role-mappings.md`（4 场景），覆盖 LDAP 连接器 CRUD、config 校验、连接测试、AD 默认值、级联删除、组角色映射唯一约束；更新 `03-tenant-enterprise-sso-connectors.md` 背景说明；身份提供商 5 文档 24 场景；共 127 文档 597 场景 |
 | 2026-03-19 | 5.26.0 | **Phase 5 FR5 基础设施清理**：新增 integration/qa-infrastructure-keycloak-cleanup（Docker Compose/K8s/Portal/脚本 Keycloak 残留移除）共 5 场景；集成测试 23 文档 106 场景；共 125 文档 588 场景 |
 | 2026-03-19 | 5.25.0 | **Phase 5 FR2 解耦 Keycloak 类型**：新增 identity_engine/decouple_keycloak_types（编译、Clippy、trait 中性化、中性类型定义、SmtpServerConfig 迁移）共 5 场景；纯重构验证；共 124 文档 583 场景 |
 | 2026-03-18 | 5.24.0 | **Phase 4 FR4 Federated Identity Linking**：新增 auth/28（社交登录身份关联、Unlink/Re-link、first_login_policy 策略、confirm-link 过期）共 5 场景；共 123 文档 578 场景 |

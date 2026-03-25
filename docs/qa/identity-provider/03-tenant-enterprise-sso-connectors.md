@@ -9,7 +9,9 @@
 
 ## 背景说明
 
-新增租户级企业 SSO 管理能力，管理员可在租户维度配置 SAML/OIDC 连接器。
+新增租户级企业 SSO 管理能力，管理员可在租户维度配置 SAML/OIDC/LDAP 连接器。
+
+> LDAP 连接器专属测试参见 `identity-provider/04-enterprise-ldap-connectors.md` 和 `identity-provider/05-ldap-group-role-mappings.md`
 
 端点：
 - `GET /api/v1/tenants/{tenant_id}/sso/connectors`

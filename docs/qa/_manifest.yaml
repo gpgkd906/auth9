@@ -916,3 +916,19 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-17
+  - id: identity-provider/04-enterprise-ldap-connectors
+    path: docs/qa/identity-provider/04-enterprise-ldap-connectors.md
+    module: identity-provider
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-03-25
+  - id: identity-provider/05-ldap-group-role-mappings
+    path: docs/qa/identity-provider/05-ldap-group-role-mappings.md
+    module: identity-provider
+    scenarios: 4
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-03-25
