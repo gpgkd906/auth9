@@ -177,6 +177,7 @@
 | [action/10-security-boundary.md](./action/10-security-boundary.md) | 安全边界（内存、隔离、注入） | 4 |
 | [action/11-security-attack-defense.md](./action/11-security-attack-defense.md) | 攻击防护（命令注入、提权、伪造、脚本注入） | 4 |
 | [action/12-api-sdk-advanced.md](./action/12-api-sdk-advanced.md) | API/SDK 进阶（日志、统计、错误、并发、AI Agent） | 5 |
+| [action/13-claims-injection-hardening.md](./action/13-claims-injection-hardening.md) | Claims 注入加固（denylist、命名空间、跨租户隔离） | 4 |
 
 ### SDK (@auth9/core + @auth9/node) (10 个文档, 50 个场景)
 | 文档 | 描述 | 场景数 |

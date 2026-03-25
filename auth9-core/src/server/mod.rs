@@ -869,7 +869,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         analytics_service,
         webhook_service,
         security_detection_service,
-        action_service,
+        action_service: action_service.clone(),
         // SCIM provisioning
         scim_service,
         scim_token_service,
@@ -957,6 +957,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         config.is_production(),
     )
     .with_audit_repo(audit_repo.clone())
+    .with_action_executor(action_service.clone() as std::sync::Arc<dyn crate::grpc::token_exchange::ActionExecutor>)
     .with_rate_limiter(crate::grpc::token_exchange::GrpcRateLimiter::new(
         config.grpc_security.exchange_rate_limit_requests,
         config.grpc_security.exchange_rate_limit_window_secs,

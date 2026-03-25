@@ -98,6 +98,14 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+  - id: action/13-claims-injection-hardening
+    path: docs/qa/action/13-claims-injection-hardening.md
+    module: action
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-25
   - id: analytics/01-overview
     path: docs/qa/analytics/01-overview.md
     module: analytics

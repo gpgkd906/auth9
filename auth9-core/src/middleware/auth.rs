@@ -293,6 +293,7 @@ mod tests {
             tenant_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8".to_string(),
             roles: vec!["admin".to_string(), "user".to_string()],
             permissions: vec!["read".to_string(), "write".to_string()],
+            extra: None,
             iat: 1000000,
             exp: 1003600,
         };

@@ -1,9 +1,13 @@
 //! Tenant token exchange and userinfo endpoints.
 
-use super::helpers::extract_identity_claims_from_headers;
+use super::helpers::{extract_client_ip, extract_identity_claims_from_headers};
 use super::types::{TenantTokenExchangeRequest, TokenResponse};
 use crate::error::{AppError, Result};
 use crate::http_support::{write_audit_log_generic, SuccessResponse};
+use crate::jwt::claims::sanitize_action_claims;
+use crate::models::action::{
+    ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
+};
 use crate::models::common::StringUuid;
 use crate::state::HasServices;
 use axum::{
@@ -12,6 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::Utc;
 
 #[utoipa::path(
     post,
@@ -83,8 +88,43 @@ pub async fn tenant_token<S: HasServices>(
         .get_user_roles_for_service(user_id, tenant_id, service.id)
         .await?;
 
+    // Execute post-login actions for the target tenant and inject sanitized claims
+    let custom_claims = {
+        let user = state.user_service().get(user_id).await?;
+        let ip_address = extract_client_ip(&headers);
+        let user_agent = headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+        let context = ActionContext {
+            user: ActionContextUser {
+                id: user.id.to_string(),
+                email: user.email.clone(),
+                display_name: user.display_name.clone(),
+                mfa_enabled: user.mfa_enabled,
+            },
+            tenant: ActionContextTenant {
+                id: tenant_id.to_string(),
+                slug: String::new(),
+                name: String::new(),
+            },
+            service: None,
+            request: ActionContextRequest {
+                ip: ip_address,
+                user_agent,
+                timestamp: Utc::now(),
+            },
+            claims: None,
+        };
+        let modified = state
+            .action_service()
+            .execute_trigger_by_tenant(tenant_id, "post-login", context)
+            .await?;
+        modified.claims.and_then(sanitize_action_claims)
+    };
+
     let jwt_manager = state.jwt_manager();
-    let access_token = jwt_manager.create_tenant_access_token_with_session(
+    let access_token = jwt_manager.create_tenant_access_token_with_claims(
         *user_id,
         &identity_claims.email,
         *tenant_id,
@@ -92,6 +132,7 @@ pub async fn tenant_token<S: HasServices>(
         user_roles.roles,
         user_roles.permissions,
         identity_claims.sid.clone(),
+        custom_claims,
     )?;
     let refresh_token = jwt_manager.create_refresh_token(*user_id, *tenant_id, service_id)?;
 

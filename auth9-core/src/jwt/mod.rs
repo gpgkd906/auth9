@@ -1,5 +1,7 @@
 //! JWT token handling
 
+pub mod claims;
+
 use crate::config::JwtConfig;
 use crate::error::{AppError, Result};
 use base64::Engine;
@@ -61,6 +63,10 @@ pub struct TenantAccessClaims {
     pub roles: Vec<String>,
     /// Permissions (derived from roles)
     pub permissions: Vec<String>,
+    /// Custom claims (from Actions, namespaced)
+    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Issued at (Unix timestamp)
     pub iat: i64,
     /// Expiration (Unix timestamp)
@@ -317,6 +323,31 @@ impl JwtManager {
         permissions: Vec<String>,
         session_id: Option<String>,
     ) -> Result<String> {
+        self.create_tenant_access_token_with_claims(
+            user_id,
+            email,
+            tenant_id,
+            service_client_id,
+            roles,
+            permissions,
+            session_id,
+            None,
+        )
+    }
+
+    /// Create a tenant access token with custom claims from Actions.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_tenant_access_token_with_claims(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        tenant_id: Uuid,
+        service_client_id: &str,
+        roles: Vec<String>,
+        permissions: Vec<String>,
+        session_id: Option<String>,
+        custom_claims: Option<std::collections::HashMap<String, serde_json::Value>>,
+    ) -> Result<String> {
         let now = Utc::now();
         let exp = now + Duration::seconds(self.config.access_token_ttl_secs);
 
@@ -330,6 +361,7 @@ impl JwtManager {
             tenant_id: tenant_id.to_string(),
             roles,
             permissions,
+            extra: custom_claims,
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
@@ -829,6 +861,7 @@ mod tests {
             tenant_id: "tenant-789".to_string(),
             roles: vec!["admin".to_string(), "user".to_string()],
             permissions: vec!["read".to_string(), "write".to_string()],
+            extra: None,
             iat: 1000000,
             exp: 1003600,
         };
@@ -854,6 +887,7 @@ mod tests {
             tenant_id: "tenant-789".to_string(),
             roles: vec!["admin".to_string()],
             permissions: vec![],
+            extra: None,
             iat: 1000000,
             exp: 1003600,
         };

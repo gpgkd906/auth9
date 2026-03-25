@@ -48,28 +48,31 @@ context;
 
 ### 预期结果
 - ✅ Claims 中可以写入任意值（Action 脚本的设计用途）
-- ✅ **关键安全保障 — Token Exchange 切断 claims 传播链**:
-  - Action 修改的 claims **仅存在于 Identity Token** 中（post-login 阶段生成）
-  - Token Exchange（`POST /api/v1/auth/tenant-token` 或 gRPC `ExchangeToken`）生成 TenantAccess Token 时，**从数据库重新加载** roles/permissions，**不传播** Identity Token 中的自定义 claims
-  - 因此，即使 Action 脚本注入 `roles: ["admin"]`，TenantAccess Token 中的权限仍然来自数据库
+- ✅ **关键安全保障 — 三层防御（FR-006 加固后）**:
+  - **Denylist 过滤**: Action 返回的 `sub`、`iss`、`aud`、`roles`、`permissions`、`tenant_id` 等保留字段被自动过滤，不进入 token
+  - **命名空间隔离**: Action 自定义 claims 自动加上 `https://auth9.dev/` 前缀，无法与标准 JWT 字段冲突
+  - **Token Exchange 阶段注入**: Action claims 仅在 Token Exchange 时注入到 Tenant Access Token（按目标租户隔离），Identity Token 不包含任何 action claims
+  - roles/permissions **始终来自数据库**，不受 Action claims 影响
 - ✅ API handler 使用 `enforce()` 基于 TenantAccess Token 中的 DB-sourced roles/permissions 进行授权，这是安全的
 
 ### 验证方法
-1. 以普通用户登录（触发 post-login Action，Identity Token 包含注入的 claims）
+1. 以普通用户登录（post-login Action 执行但 claims 不注入 Identity Token）
 2. 进行 Token Exchange 获取 TenantAccess Token
-3. 使用 TenantAccess Token 尝试访问管理员功能（如删除租户）
-4. **预期**: 403 Forbidden（TenantAccess Token 的 roles/permissions 来自数据库，不受 Action claims 影响）
+3. 验证 TenantAccess Token 中 `roles`/`permissions` 来自数据库（Action 注入的同名字段被 denylist 过滤）
+4. 使用 TenantAccess Token 尝试访问管理员功能（如删除租户）
+5. **预期**: 403 Forbidden
 
 ### 代码审查重点
 ```rust
-// Token Exchange 安全链:
-// 1. Identity Token 包含 Action 修改的 custom claims（仅用于应用层逻辑）
-// 2. Token Exchange 从 DB 获取 roles/permissions → 生成 TenantAccess Token
-// 3. API handler enforce() 检查 TenantAccess Token 中的 DB-sourced 权限
+// Token Exchange 安全链 (FR-006 加固后):
+// 1. Identity Token 不包含任何 Action claims（hosted_login.rs 丢弃 claims）
+// 2. Token Exchange 执行 post-login actions → sanitize_action_claims() 过滤保留字段 + 加命名空间
+// 3. TenantAccess Token 包含 DB-sourced roles/permissions + 命名空间化的 action claims
+// 4. enforce() 检查 TenantAccess Token 中的 DB-sourced roles/permissions
 //
+// ✅ jwt/claims.rs: RESERVED_CLAIMS denylist 过滤 + https://auth9.dev/ 命名空间
 // ✅ grpc/token_exchange.rs: find_user_roles_in_tenant_for_service() 从 DB 查询
-// ✅ api/auth.rs: create_tenant_access_token_with_session() 不传播 custom claims
-// ✅ enforce() 检查的 roles/permissions 来自 TenantAccess Token（DB-sourced）
+// ✅ api/token_exchange.rs: create_tenant_access_token_with_claims() 注入净化后 claims
 ```
 
 ---

@@ -111,12 +111,13 @@ echo $TOKEN | cut -d. -f2 | base64 -d | jq
 
 ### 预期结果
 - 登录成功
-- Identity Token 的 claims 中包含 Action 添加的自定义字段：
+- Identity Token **不含** Action 添加的自定义字段（FR-006: claims 仅在 Token Exchange 阶段注入）
+- 执行 Token Exchange 后，Tenant Access Token 包含命名空间化的 claim：
   ```json
   {
     "sub": "...",
     "email": "test@example.com",
-    "test": "success",  // ← Action 添加的 claim
+    "https://auth9.dev/test": "success",
     "exp": ...
   }
   ```

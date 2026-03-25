@@ -6,6 +6,7 @@ use crate::grpc::proto::{
     Role as ProtoRole, ValidateTokenRequest, ValidateTokenResponse,
 };
 use crate::jwt::JwtManager;
+use crate::models::action::ActionContext;
 use crate::models::common::StringUuid;
 use crate::repository::audit::{AuditRepository, CreateAuditLogInput};
 use crate::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
@@ -15,6 +16,31 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::{Request, Response, Status};
 use tracing::debug;
 use uuid::Uuid;
+
+/// Trait for executing post-login actions in the gRPC token exchange path.
+/// Follows the same trait-object pattern as `TokenExchangeCache`.
+#[async_trait::async_trait]
+pub trait ActionExecutor: Send + Sync {
+    async fn execute_post_login(
+        &self,
+        tenant_id: StringUuid,
+        context: ActionContext,
+    ) -> crate::error::Result<ActionContext>;
+}
+
+#[async_trait::async_trait]
+impl<R: crate::repository::action::ActionRepository + 'static> ActionExecutor
+    for crate::domains::integration::service::ActionService<R>
+{
+    async fn execute_post_login(
+        &self,
+        tenant_id: StringUuid,
+        context: ActionContext,
+    ) -> crate::error::Result<ActionContext> {
+        self.execute_trigger_by_tenant(tenant_id, "post-login", context)
+            .await
+    }
+}
 
 async fn resolve_optional_service_scope<S: ServiceRepository>(
     service_repo: &S,
@@ -212,6 +238,7 @@ where
     rbac_repo: Arc<R>,
     tenant_repo: Option<Arc<dyn TenantRepository>>,
     audit_repo: Option<Arc<dyn AuditRepository>>,
+    action_executor: Option<Arc<dyn ActionExecutor>>,
     rate_limiter: Option<GrpcRateLimiter>,
     is_production: bool,
 }
@@ -239,6 +266,7 @@ where
             rbac_repo,
             tenant_repo: None,
             audit_repo: None,
+            action_executor: None,
             rate_limiter: None,
             is_production,
         }
@@ -261,6 +289,7 @@ where
             rbac_repo,
             tenant_repo: Some(tenant_repo),
             audit_repo: None,
+            action_executor: None,
             rate_limiter: None,
             is_production,
         }
@@ -268,6 +297,11 @@ where
 
     pub fn with_audit_repo(mut self, audit_repo: Arc<dyn AuditRepository>) -> Self {
         self.audit_repo = Some(audit_repo);
+        self
+    }
+
+    pub fn with_action_executor(mut self, executor: Arc<dyn ActionExecutor>) -> Self {
+        self.action_executor = Some(executor);
         self
     }
 
@@ -418,15 +452,12 @@ where
             }
         }
 
-        let user_exists = self
+        let user = self
             .user_repo
             .find_by_id(user_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to lookup user: {}", e)))?
-            .is_some();
-        if !user_exists {
-            return Err(Status::not_found("User not found"));
-        }
+            .ok_or_else(|| Status::not_found("User not found"))?;
 
         // Verify user is a member of the target tenant (security check)
         let _tenant_user_id = match self
@@ -564,10 +595,47 @@ where
             }
         }
 
+        // Execute post-login actions for the target tenant and sanitize claims (FR-006)
+        let custom_claims = if let Some(ref executor) = self.action_executor {
+            use crate::jwt::claims::sanitize_action_claims;
+            use crate::models::action::{
+                ActionContextRequest, ActionContextTenant, ActionContextUser,
+            };
+            let context = ActionContext {
+                user: ActionContextUser {
+                    id: user.id.to_string(),
+                    email: user.email.clone(),
+                    display_name: user.display_name.clone(),
+                    mfa_enabled: user.mfa_enabled,
+                },
+                tenant: ActionContextTenant {
+                    id: tenant_id.to_string(),
+                    slug: String::new(),
+                    name: String::new(),
+                },
+                service: None,
+                request: ActionContextRequest {
+                    ip: ip_address.clone(),
+                    user_agent: None,
+                    timestamp: chrono::Utc::now(),
+                },
+                claims: None,
+            };
+            match executor.execute_post_login(tenant_id, context).await {
+                Ok(modified) => modified.claims.and_then(sanitize_action_claims),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Post-login action failed during gRPC exchange, proceeding without claims");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         // Create tenant access token (propagate session_id for blacklist support)
         let access_token = self
             .jwt_manager
-            .create_tenant_access_token_with_session(
+            .create_tenant_access_token_with_claims(
                 Uuid::from(user_id),
                 &claims.email,
                 Uuid::from(tenant_id),
@@ -575,6 +643,7 @@ where
                 roles,
                 user_roles.permissions,
                 claims.sid.clone(),
+                custom_claims,
             )
             .map_err(|e| Status::internal(format!("Failed to create access token: {}", e)))?;
 

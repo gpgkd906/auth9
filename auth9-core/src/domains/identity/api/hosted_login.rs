@@ -351,11 +351,12 @@ pub async fn password_login<
 
     // Execute post-login action triggers BEFORE session creation so that
     // strict-mode failures block login without leaving orphan sessions.
-    let custom_claims = {
+    // Claims from actions are NOT injected into the Identity Token; they are
+    // applied per-tenant at token-exchange time (FR-006 hardening).
+    {
         use crate::models::action::{
             ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
         };
-        let mut merged_claims = std::collections::HashMap::<String, serde_json::Value>::new();
         let tenant_memberships = state
             .user_service()
             .get_user_tenants(user.id)
@@ -382,16 +383,13 @@ pub async fn password_login<
                 },
                 claims: None,
             };
-            let modified_context = state
+            // Execute for side effects only (strict-mode gating); claims discarded.
+            let _ = state
                 .action_service()
                 .execute_trigger_by_tenant(membership.tenant_id, "post-login", context)
                 .await?;
-            if let Some(claims) = modified_context.claims {
-                merged_claims.extend(claims);
-            }
         }
-        merged_claims
-    };
+    }
 
     // Actions passed — now create session and token
     let session = state
@@ -423,24 +421,14 @@ pub async fn password_login<
         }
     };
 
-    // Create identity token, including custom claims from post-login actions
+    // Create identity token (no custom claims — action claims are injected at token exchange)
     let jwt_manager = HasServices::jwt_manager(&state);
-    let identity_token = if custom_claims.is_empty() {
-        jwt_manager.create_identity_token_with_session(
-            *user.id,
-            &user.email,
-            user.display_name.as_deref(),
-            Some(*session.id),
-        )?
-    } else {
-        jwt_manager.create_identity_token_with_session_and_claims(
-            *user.id,
-            &user.email,
-            user.display_name.as_deref(),
-            Some(*session.id),
-            custom_claims,
-        )?
-    };
+    let identity_token = jwt_manager.create_identity_token_with_session(
+        *user.id,
+        &user.email,
+        user.display_name.as_deref(),
+        Some(*session.id),
+    )?;
 
     // Record successful login event
     {
