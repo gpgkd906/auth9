@@ -1,6 +1,7 @@
 pub mod breached_password;
 pub mod email_verification;
 pub mod identity_provider;
+pub mod ldap;
 pub mod otp;
 pub mod password;
 pub mod recovery_code;

@@ -56,7 +56,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   try {
     if (intent === "create") {
-      const providerType = String(formData.get("provider_type") || "saml") as "saml" | "oidc";
+      const providerType = String(formData.get("provider_type") || "saml") as "saml" | "oidc" | "ldap";
       const domains = String(formData.get("domains") || "")
         .split(",")
         .map((v) => v.trim())
@@ -67,12 +67,30 @@ export async function action({ request, params }: ActionFunctionArgs) {
         config.entityId = String(formData.get("entity_id") || "").trim();
         config.singleSignOnServiceUrl = String(formData.get("sso_url") || "").trim();
         config.signingCertificate = String(formData.get("certificate") || "").trim();
-      } else {
+      } else if (providerType === "oidc") {
         config.clientId = String(formData.get("client_id") || "").trim();
         config.clientSecret = String(formData.get("client_secret") || "").trim();
         config.authorizationUrl = String(formData.get("authorization_url") || "").trim();
         config.tokenUrl = String(formData.get("token_url") || "").trim();
         config.userInfoUrl = String(formData.get("userinfo_url") || "").trim();
+      } else if (providerType === "ldap") {
+        config.serverUrl = String(formData.get("server_url") || "").trim();
+        config.bindDn = String(formData.get("bind_dn") || "").trim();
+        config.bindPassword = String(formData.get("bind_password") || "").trim();
+        config.baseDn = String(formData.get("base_dn") || "").trim();
+        config.userSearchFilter = String(formData.get("user_search_filter") || "").trim();
+        config.attrUsername = String(formData.get("attr_username") || "").trim();
+        config.attrEmail = String(formData.get("attr_email") || "").trim();
+        config.attrFirstName = String(formData.get("attr_first_name") || "").trim();
+        config.attrLastName = String(formData.get("attr_last_name") || "").trim();
+        const isAd = formData.get("is_active_directory") === "true";
+        if (isAd) {
+          config.isActiveDirectory = "true";
+          const adDomain = String(formData.get("ad_domain") || "").trim();
+          if (adDomain) config.adDomain = adDomain;
+        }
+        const useTls = formData.get("use_tls");
+        if (useTls === "false") config.useTls = "false";
       }
 
       await tenantSsoApi.create(
@@ -123,7 +141,7 @@ export default function TenantSsoPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const [providerType, setProviderType] = useState<"saml" | "oidc">("saml");
+  const [providerType, setProviderType] = useState<"saml" | "oidc" | "ldap">("saml");
 
   return (
     <div className="space-y-6">
@@ -166,13 +184,14 @@ export default function TenantSsoPage() {
             </div>
             <div className="space-y-2">
               <Label id="provider_type_label" htmlFor="provider_type_trigger">{t("tenants.sso.providerType")}</Label>
-              <Select value={providerType} onValueChange={(value) => setProviderType(value as "saml" | "oidc")}>
+              <Select value={providerType} onValueChange={(value) => setProviderType(value as "saml" | "oidc" | "ldap")}>
                 <SelectTrigger id="provider_type_trigger" aria-labelledby="provider_type_label">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="saml">SAML</SelectItem>
                   <SelectItem value="oidc">OIDC</SelectItem>
+                  <SelectItem value="ldap">LDAP / Active Directory</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -185,7 +204,7 @@ export default function TenantSsoPage() {
               <Input id="domains" name="domains" required placeholder={t("tenants.sso.domainsPlaceholder")} />
             </div>
 
-            {providerType === "saml" ? (
+            {providerType === "saml" && (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="entity_id">{t("tenants.sso.samlEntityId")}</Label>
@@ -200,7 +219,8 @@ export default function TenantSsoPage() {
                   <Input id="certificate" name="certificate" placeholder={t("tenants.sso.samlCertificatePlaceholder")} />
                 </div>
               </>
-            ) : (
+            )}
+            {providerType === "oidc" && (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="client_id">{t("tenants.sso.oidcClientId")}</Label>
@@ -221,6 +241,61 @@ export default function TenantSsoPage() {
                 <div className="space-y-2">
                   <Label htmlFor="userinfo_url">{t("tenants.sso.oidcUserInfoUrl")}</Label>
                   <Input id="userinfo_url" name="userinfo_url" />
+                </div>
+              </>
+            )}
+            {providerType === "ldap" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="server_url">{t("tenants.sso.ldapServerUrl")}</Label>
+                  <Input id="server_url" name="server_url" required placeholder={t("tenants.sso.ldapServerUrlPlaceholder")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bind_dn">{t("tenants.sso.ldapBindDn")}</Label>
+                  <Input id="bind_dn" name="bind_dn" required placeholder={t("tenants.sso.ldapBindDnPlaceholder")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bind_password">{t("tenants.sso.ldapBindPassword")}</Label>
+                  <Input id="bind_password" name="bind_password" type="password" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="base_dn">{t("tenants.sso.ldapBaseDn")}</Label>
+                  <Input id="base_dn" name="base_dn" required placeholder={t("tenants.sso.ldapBaseDnPlaceholder")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="user_search_filter">{t("tenants.sso.ldapUserSearchFilter")}</Label>
+                  {/* eslint-disable-next-line auth9-i18n/no-bare-ui-strings */}
+                  <Input id="user_search_filter" name="user_search_filter" placeholder="(uid={username})" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="attr_username">{t("tenants.sso.ldapAttrUsername")}</Label>
+                  {/* eslint-disable-next-line auth9-i18n/no-bare-ui-strings */}
+                  <Input id="attr_username" name="attr_username" placeholder="uid" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="attr_email">{t("tenants.sso.ldapAttrEmail")}</Label>
+                  {/* eslint-disable-next-line auth9-i18n/no-bare-ui-strings */}
+                  <Input id="attr_email" name="attr_email" placeholder="mail" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="attr_first_name">{t("tenants.sso.ldapAttrFirstName")}</Label>
+                  {/* eslint-disable-next-line auth9-i18n/no-bare-ui-strings */}
+                  <Input id="attr_first_name" name="attr_first_name" placeholder="givenName" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="attr_last_name">{t("tenants.sso.ldapAttrLastName")}</Label>
+                  {/* eslint-disable-next-line auth9-i18n/no-bare-ui-strings */}
+                  <Input id="attr_last_name" name="attr_last_name" placeholder="sn" />
+                </div>
+                <div className="space-y-2 flex items-center gap-3">
+                  <input type="hidden" name="is_active_directory" value="false" />
+                  <Switch id="is_active_directory" name="is_active_directory" value="true" />
+                  <Label htmlFor="is_active_directory">{t("tenants.sso.ldapIsActiveDirectory")}</Label>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ad_domain">{t("tenants.sso.ldapAdDomain")}</Label>
+                  {/* eslint-disable-next-line auth9-i18n/no-bare-ui-strings */}
+                  <Input id="ad_domain" name="ad_domain" placeholder="company.com" />
                 </div>
               </>
             )}
@@ -280,6 +355,13 @@ export default function TenantSsoPage() {
                         SP Metadata
                       </Button>
                     </a>
+                  )}
+                  {connector.provider_type === "ldap" && (
+                    <Link to={`/dashboard/tenants/${tenant.id}/sso/${connector.id}/ldap-mappings`}>
+                      <Button type="button" variant="outline" size="sm">
+                        {t("tenants.sso.ldapGroupMappings")}
+                      </Button>
+                    </Link>
                   )}
                   <Form method="post">
                     <input type="hidden" name="intent" value="test" />

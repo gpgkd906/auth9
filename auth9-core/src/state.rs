@@ -360,3 +360,8 @@ pub trait HasMfa: Clone + Send + Sync + 'static {
     fn totp_service(&self) -> &crate::domains::identity::service::TotpService;
     fn recovery_code_service(&self) -> &crate::domains::identity::service::RecoveryCodeService;
 }
+
+/// Trait for states that provide LDAP authentication services
+pub trait HasLdapAuth: Clone + Send + Sync + 'static {
+    fn ldap_authenticator(&self) -> &dyn crate::domains::identity::service::ldap::LdapAuthenticator;
+}

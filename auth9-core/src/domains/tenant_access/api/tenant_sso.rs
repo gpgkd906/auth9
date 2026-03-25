@@ -229,6 +229,10 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
     // Both OIDC and SAML connectors are handled natively by Auth9
 
     let mut tx = state.db_pool().begin().await?;
+    sqlx::query("DELETE FROM ldap_group_role_mappings WHERE connector_id = ?")
+        .bind(connector_id.to_string())
+        .execute(tx.as_mut())
+        .await?;
     sqlx::query("DELETE FROM scim_group_role_mappings WHERE connector_id = ?")
         .bind(connector_id.to_string())
         .execute(tx.as_mut())
@@ -272,7 +276,7 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
         (status = 200, description = "Success")
     )
 )]
-pub async fn test_connector<S: HasServices + HasDbPool>(
+pub async fn test_connector<S: HasServices + HasDbPool + crate::state::HasLdapAuth>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
@@ -282,7 +286,16 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
     let connector =
         get_connector_by_id(state.db_pool(), tenant_id, StringUuid::from(connector_id)).await?;
 
-    let result = if connector.provider_type == "oidc" {
+    let result = if connector.provider_type == "ldap" {
+        // LDAP: test connection and service account bind
+        match crate::models::ldap::parse_ldap_config(&connector.config) {
+            Ok(ldap_config) => state.ldap_authenticator().test_connection(&ldap_config).await?,
+            Err(e) => ConnectorTestResult {
+                ok: false,
+                message: format!("Invalid LDAP config: {}", e),
+            },
+        }
+    } else if connector.provider_type == "oidc" {
         // OIDC: test actual endpoint reachability
         let auth_url = connector
             .config
@@ -575,11 +588,11 @@ async fn ensure_tenant_access<S: HasServices>(
 
 fn normalize_provider_type(provider_type: &str) -> Result<String> {
     let normalized = provider_type.trim().to_lowercase();
-    if normalized == "saml" || normalized == "oidc" {
+    if normalized == "saml" || normalized == "oidc" || normalized == "ldap" {
         Ok(normalized)
     } else {
         Err(AppError::Validation(
-            "provider_type must be one of: saml, oidc".to_string(),
+            "provider_type must be one of: saml, oidc, ldap".to_string(),
         ))
     }
 }
@@ -618,6 +631,7 @@ fn validate_required_config(provider_type: &str, config: &HashMap<String, String
             "tokenUrl",
             "userInfoUrl",
         ],
+        "ldap" => &["serverUrl", "bindDn", "bindPassword", "baseDn"],
         _ => &[],
     };
     let missing: Vec<&str> = required
@@ -720,8 +734,18 @@ mod tests {
     }
 
     #[test]
+    fn normalize_provider_type_ldap_lowercase() {
+        assert_eq!(normalize_provider_type("ldap").unwrap(), "ldap");
+    }
+
+    #[test]
+    fn normalize_provider_type_ldap_uppercase() {
+        assert_eq!(normalize_provider_type("LDAP").unwrap(), "ldap");
+    }
+
+    #[test]
     fn normalize_provider_type_invalid() {
-        let err = normalize_provider_type("ldap").unwrap_err();
+        let err = normalize_provider_type("kerberos").unwrap_err();
         assert!(matches!(err, AppError::Validation(_)));
     }
 
@@ -921,8 +945,35 @@ mod tests {
     }
 
     #[test]
+    fn validate_required_config_ldap_all_present() {
+        let config = HashMap::from([
+            ("serverUrl".to_string(), "ldaps://ldap.example.com:636".to_string()),
+            ("bindDn".to_string(), "cn=admin,dc=example,dc=com".to_string()),
+            ("bindPassword".to_string(), "secret".to_string()), // pragma: allowlist secret
+            ("baseDn".to_string(), "ou=users,dc=example,dc=com".to_string()),
+        ]);
+        assert!(validate_required_config("ldap", &config).is_ok());
+    }
+
+    #[test]
+    fn validate_required_config_ldap_missing_fields() {
+        let config = HashMap::from([
+            ("serverUrl".to_string(), "ldaps://ldap.example.com".to_string()),
+        ]);
+        let err = validate_required_config("ldap", &config).unwrap_err();
+        match err {
+            AppError::Validation(msg) => {
+                assert!(msg.contains("bindDn"));
+                assert!(msg.contains("bindPassword"));
+                assert!(msg.contains("baseDn"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
     fn validate_required_config_unknown_type_no_requirements() {
-        assert!(validate_required_config("ldap", &HashMap::new()).is_ok());
+        assert!(validate_required_config("kerberos", &HashMap::new()).is_ok());
     }
 
     // =========================================================================

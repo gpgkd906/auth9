@@ -72,6 +72,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = await resolveLocale(request);
   const error = url.searchParams.get("error");
   const loginChallenge = url.searchParams.get("login_challenge") || undefined;
+  const ldapView = url.searchParams.get("view") === "ldap";
+  const ldapConnectorAlias = url.searchParams.get("connector") || undefined;
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const brandingClientId = url.searchParams.get("client_id")
     || process.env.AUTH9_PORTAL_CLIENT_ID
@@ -93,7 +95,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Social providers unavailable — continue without them.
   }
 
-  return { error, apiBaseUrl, locale, branding, loginChallenge, socialProviders };
+  return { error, apiBaseUrl, locale, branding, loginChallenge, socialProviders, ldapView, ldapConnectorAlias };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -103,6 +105,64 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = formData.get("intent");
 
   // Handle social login: create login_challenge if needed, then redirect to social broker
+  if (intent === "ldap-login") {
+    const connectorAlias = String(formData.get("connector_alias") || "").trim();
+    const username = String(formData.get("username") || "").trim();
+    const password = String(formData.get("password") || "").trim();
+    const loginChallenge = String(formData.get("login_challenge") || "").trim() || undefined;
+
+    if (!connectorAlias || !username || !password) {
+      return { error: translate(locale, "auth.login.missingCredentials") };
+    }
+
+    try {
+      const coreUrl = process.env.AUTH9_CORE_URL || "http://localhost:8080";
+      const response = await fetch(`${coreUrl}/api/v1/enterprise-sso/ldap/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connector_alias: connectorAlias,
+          username,
+          password,
+          login_challenge: loginChallenge,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "LDAP authentication failed" }));
+        return { error: err.error || err.message || "LDAP authentication failed" };
+      }
+
+      const result = await response.json();
+
+      // If login challenge was provided and we got a redirect URL, follow it
+      if (result.data?.redirect_url) {
+        return redirect(result.data.redirect_url);
+      }
+
+      // Direct token response — store in session and redirect to dashboard
+      if (result.data?.access_token) {
+        const { commitSession: commitSess } = await import("~/services/session.server");
+        const sessionData = {
+          identityAccessToken: result.data.access_token as string,
+          identityExpiresAt: Date.now() + (result.data.expires_in as number) * 1000,
+        };
+        return redirect("/dashboard", {
+          headers: { "Set-Cookie": await commitSess(sessionData) },
+        });
+      }
+
+      // Pending merge
+      if (result.data?.pending_merge) {
+        return { error: "Account merge required. Please contact your administrator." };
+      }
+
+      return { error: "Unexpected LDAP login response" };
+    } catch (error) {
+      return { error: mapApiError(error, locale) };
+    }
+  }
+
   if (intent === "social-login") {
     const providerAlias = String(formData.get("providerAlias") || "").trim();
     let loginChallenge = formData.get("loginChallenge") as string | null;
@@ -336,12 +396,16 @@ export default function Login() {
     branding: { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) },
     loginChallenge: (loaderData as Record<string, unknown>).loginChallenge as string | undefined,
     socialProviders: loaderData.socialProviders ?? [],
+    ldapView: (loaderData as Record<string, unknown>).ldapView as boolean | undefined,
+    ldapConnectorAlias: (loaderData as Record<string, unknown>).ldapConnectorAlias as string | undefined,
   };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const { t } = useI18n();
-  const [view, setView] = useState<"methods" | "password" | "sso">("methods");
+  const [view, setView] = useState<"methods" | "password" | "sso" | "ldap">(
+    data.ldapView ? "ldap" : "methods"
+  );
   const [ssoEmail, setSsoEmail] = useState("");
   const [dismissedError, setDismissedError] = useState(false);
 
@@ -354,7 +418,7 @@ export default function Login() {
 
   const visibleError = dismissedError ? null : actionData?.error;
 
-  const switchView = (v: "methods" | "password" | "sso") => {
+  const switchView = (v: "methods" | "password" | "sso" | "ldap") => {
     setView(v);
     setDismissedError(true);
     setPasskeyError(null);
@@ -578,6 +642,54 @@ export default function Login() {
 
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
                     {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoSubmit")}
+                  </Button>
+                </Form>
+
+                <div className="flex items-center justify-center text-sm text-[var(--text-tertiary)]">
+                  <button
+                    type="button"
+                    onClick={() => switchView("methods")}
+                    className="text-[var(--accent-blue)] hover:underline underline-offset-4"
+                  >
+                    {t("auth.login.backToMethods")}
+                  </button>
+                </div>
+              </div>
+            ) : view === "ldap" ? (
+              /* ── LDAP Login View ── */
+              <div className="space-y-4">
+                <Form method="post" action="/login" className="space-y-3">
+                  <input type="hidden" name="intent" value="ldap-login" />
+                  {data.ldapConnectorAlias && (
+                    <input type="hidden" name="connector_alias" value={data.ldapConnectorAlias} />
+                  )}
+                  {data.loginChallenge && (
+                    <input type="hidden" name="login_challenge" value={data.loginChallenge} />
+                  )}
+                  <Input
+                    type="text"
+                    name="username"
+                    required
+                    autoFocus
+                    autoComplete="username"
+                    placeholder={t("tenants.sso.ldapUsernamePlaceholder")}
+                  />
+                  <Input
+                    type="password"
+                    name="password"
+                    required
+                    autoComplete="current-password"
+                    placeholder={t("auth.login.passwordPlaceholder")}
+                  />
+
+                  {visibleError && (
+                    <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
+                      {visibleError}
+                    </div>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? t("auth.login.signingIn") : t("tenants.sso.ldapLoginButton")}
                   </Button>
                 </Form>
 

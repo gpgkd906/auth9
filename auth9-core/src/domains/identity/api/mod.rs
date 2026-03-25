@@ -6,6 +6,7 @@ pub mod email_otp;
 pub mod email_verification;
 pub mod enterprise_broker;
 pub mod enterprise_common;
+pub mod enterprise_ldap_broker;
 pub mod enterprise_saml_broker;
 pub mod hosted_login;
 pub mod identity_provider;

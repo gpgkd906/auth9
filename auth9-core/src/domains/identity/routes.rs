@@ -105,6 +105,10 @@ where
             get(identity_api::enterprise_broker::callback::<S>),
         )
         .route(
+            "/api/v1/enterprise-sso/ldap/login",
+            post(identity_api::enterprise_ldap_broker::ldap_login::<S>),
+        )
+        .route(
             "/api/v1/enterprise-sso/saml/acs",
             post(identity_api::enterprise_saml_broker::saml_acs::<S>),
         )

@@ -228,6 +228,8 @@ pub struct TestAppState {
     pub required_actions_service: Arc<RequiredActionService>,
     pub totp_service: Arc<auth9_core::domains::identity::service::TotpService>,
     pub recovery_code_service: Arc<auth9_core::domains::identity::service::RecoveryCodeService>,
+    pub ldap_authenticator:
+        Arc<dyn auth9_core::domains::identity::service::ldap::LdapAuthenticator>,
 }
 
 impl TestAppState {
@@ -454,6 +456,9 @@ impl TestAppState {
             required_actions_service,
             totp_service,
             recovery_code_service,
+            ldap_authenticator: Arc::new(
+                auth9_core::domains::identity::service::ldap::DefaultLdapAuthenticator::new(),
+            ),
         }
     }
 
@@ -739,6 +744,15 @@ impl auth9_core::state::HasMfa for TestAppState {
         &self,
     ) -> &auth9_core::domains::identity::service::RecoveryCodeService {
         &self.recovery_code_service
+    }
+}
+
+/// Implement HasLdapAuth trait for TestAppState
+impl auth9_core::state::HasLdapAuth for TestAppState {
+    fn ldap_authenticator(
+        &self,
+    ) -> &dyn auth9_core::domains::identity::service::ldap::LdapAuthenticator {
+        &*self.ldap_authenticator
     }
 }
 

@@ -73,6 +73,20 @@ where
             "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/test",
             post(tenant_access_api::tenant_sso::test_connector::<S>),
         )
+        // LDAP group-role mappings
+        .route(
+            "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/ldap-group-mappings",
+            get(tenant_access_api::tenant_ldap_group_mappings::list_mappings::<S>)
+                .post(tenant_access_api::tenant_ldap_group_mappings::create_mapping::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/ldap-group-mappings/{mapping_id}",
+            delete(tenant_access_api::tenant_ldap_group_mappings::delete_mapping::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/ldap-search-users",
+            post(tenant_access_api::tenant_ldap_group_mappings::search_ldap_users::<S>),
+        )
         .route(
             "/api/v1/users/me",
             get(tenant_access_api::user::get_me::<S>).put(tenant_access_api::user::update_me::<S>),

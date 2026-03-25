@@ -10,6 +10,7 @@ pub mod email_template;
 pub mod enterprise_sso;
 pub mod identity_provider;
 pub mod invitation;
+pub mod ldap;
 pub mod linked_identity;
 pub mod password;
 pub mod rbac;

@@ -95,6 +95,9 @@ urlencoding = "2"
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "conditional-ui"] }
 webauthn-rs-proto = "0.5"
 
+# LDAP
+ldap3 = { version = "0.11", default-features = false, features = ["tls-rustls"] }
+
 # TOTP
 totp-rs = { version = "5", features = ["otpauth"] }
 base32 = "0.5"

@@ -167,6 +167,8 @@ pub struct AppState {
     pub totp_service: Arc<TotpService>,
     pub recovery_code_service: Arc<RecoveryCodeService>,
     pub breached_password_service: Arc<BreachedPasswordService>,
+    pub ldap_authenticator:
+        Arc<dyn crate::domains::identity::service::ldap::LdapAuthenticator>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -441,6 +443,15 @@ impl crate::state::HasMfa for AppState {
 
     fn recovery_code_service(&self) -> &RecoveryCodeService {
         &self.recovery_code_service
+    }
+}
+
+/// Implement HasLdapAuth trait for production AppState
+impl crate::state::HasLdapAuth for AppState {
+    fn ldap_authenticator(
+        &self,
+    ) -> &dyn crate::domains::identity::service::ldap::LdapAuthenticator {
+        &*self.ldap_authenticator
     }
 }
 
@@ -836,6 +847,9 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         totp_service,
         recovery_code_service,
         breached_password_service,
+        ldap_authenticator: Arc::new(
+            crate::domains::identity::service::ldap::DefaultLdapAuthenticator::new(),
+        ),
     };
 
     // Create rate limit state for middleware

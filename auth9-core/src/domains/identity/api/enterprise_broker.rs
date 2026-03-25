@@ -255,6 +255,16 @@ pub async fn authorize<S: HasServices + HasCache + HasDbPool>(
         .await;
     }
 
+    if connector.provider_type == "ldap" {
+        // LDAP uses direct credentials — redirect to Portal LDAP login form
+        let portal_url = enterprise_common::portal_login_url(state.config());
+        let redirect_url = format!(
+            "{}?view=ldap&connector={}&login_challenge={}",
+            portal_url, connector.alias, params.login_challenge,
+        );
+        return Ok(Redirect::temporary(&redirect_url).into_response());
+    }
+
     // ── OIDC flow ──
     oidc_authorize(&state, connector, params).await
 }
