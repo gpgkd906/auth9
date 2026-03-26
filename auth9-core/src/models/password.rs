@@ -147,6 +147,13 @@ pub struct ChangePasswordInput {
     pub new_password: String,
 }
 
+/// Input for force-updating password (no current password required, used by required-action flow)
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
+pub struct ForceChangePasswordInput {
+    #[validate(length(min = 8, max = 128))]
+    pub new_password: String,
+}
+
 /// Input for creating a password reset token
 #[derive(Debug, Clone)]
 pub struct CreatePasswordResetTokenInput {
@@ -155,9 +162,13 @@ pub struct CreatePasswordResetTokenInput {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Valid breach check modes
+const VALID_BREACH_CHECK_MODES: &[&str] = &["block", "warn", "disabled"];
+
 /// Input for updating password policy
 #[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 #[serde(deny_unknown_fields)]
+#[validate(schema(function = "validate_breach_check_mode"))]
 pub struct UpdatePasswordPolicyInput {
     #[validate(range(min = 6, max = 128))]
     pub min_length: Option<u32>,
@@ -179,6 +190,23 @@ pub struct UpdatePasswordPolicyInput {
     pub min_breach_count: Option<u64>,
     /// Check password on login (async)
     pub breach_check_on_login: Option<bool>,
+}
+
+fn validate_breach_check_mode(input: &UpdatePasswordPolicyInput) -> Result<(), validator::ValidationError> {
+    if let Some(ref mode) = input.breach_check_mode {
+        if !VALID_BREACH_CHECK_MODES.contains(&mode.as_str()) {
+            let mut err = validator::ValidationError::new("invalid_breach_check_mode");
+            err.message = Some(
+                format!(
+                    "breach_check_mode must be one of: {}",
+                    VALID_BREACH_CHECK_MODES.join(", ")
+                )
+                .into(),
+            );
+            return Err(err);
+        }
+    }
+    Ok(())
 }
 
 impl PasswordPolicy {
@@ -415,6 +443,46 @@ mod tests {
             breach_check_on_login: None,
         };
         assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_update_password_policy_invalid_breach_check_mode() {
+        let input = UpdatePasswordPolicyInput {
+            min_length: None,
+            require_uppercase: None,
+            require_lowercase: None,
+            require_numbers: None,
+            require_symbols: None,
+            max_age_days: None,
+            history_count: None,
+            lockout_threshold: None,
+            lockout_duration_mins: None,
+            breach_check_mode: Some("invalid_mode".to_string()),
+            min_breach_count: None,
+            breach_check_on_login: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_update_password_policy_valid_breach_check_modes() {
+        for mode in &["block", "warn", "disabled"] {
+            let input = UpdatePasswordPolicyInput {
+                min_length: None,
+                require_uppercase: None,
+                require_lowercase: None,
+                require_numbers: None,
+                require_symbols: None,
+                max_age_days: None,
+                history_count: None,
+                lockout_threshold: None,
+                lockout_duration_mins: None,
+                breach_check_mode: Some(mode.to_string()),
+                min_breach_count: None,
+                breach_check_on_login: None,
+            };
+            assert!(input.validate().is_ok(), "Expected '{}' to be valid", mode);
+        }
     }
 
     #[test]

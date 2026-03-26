@@ -98,6 +98,7 @@ function mapSpecialApiError(
 }
 
 const PASSWORD_ERROR_PATTERNS: Array<{ pattern: RegExp; key: string }> = [
+  { pattern: /password must be between (\d+) and \d+ characters/i, key: "validation.passwordMinLength" },
   { pattern: /password must be at least (\d+) characters/i, key: "validation.passwordMinLength" },
   { pattern: /password must contain at least one uppercase letter/i, key: "validation.passwordRequireUppercase" },
   { pattern: /password must contain at least one lowercase letter/i, key: "validation.passwordRequireLowercase" },

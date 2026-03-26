@@ -65,6 +65,24 @@ export const passwordApi = {
     return handleResponse(response);
   },
 
+  forceChangePassword: async (
+    newPassword: string,
+    accessToken: string
+  ): Promise<{ message: string }> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/users/me/force-update-password`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ new_password: newPassword }),
+      }
+    );
+    return handleResponse(response);
+  },
+
   getPasswordPolicy: async (
     tenantId: string,
     accessToken?: string

@@ -125,6 +125,14 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}' AND utr.role_id 
 | 对话框关闭但数据库无记录 | 角色不属于目标租户的服务 | 确认选择的角色属于当前租户下的服务 |
 | 目标服务无可选角色 | 种子数据未包含该服务的角色 | 先在该服务中创建角色（API 或 Portal） |
 
+> **⚠️ 常见静默失败模式（对话框关闭但分配未生效）**
+>
+> 角色分配对话框可能看起来操作成功（对话框正常关闭），但实际上后端未写入记录。常见原因：
+>
+> 1. **角色的 service 不属于目标租户**：角色关联的 `service_id` 对应的 Service 不在当前租户下，后端校验失败但前端未显示错误。验证方法：`SELECT s.tenant_id FROM roles r JOIN services s ON s.id = r.service_id WHERE r.id = '{role_id}'`，确认 `tenant_id` 与目标租户一致。
+> 2. **用户缺少 tenant_users 记录**：用户未正式加入目标租户（`tenant_users` 表中无对应记录），分配操作无法关联 `tenant_user_id`。验证方法：`SELECT id FROM tenant_users WHERE user_id = '{user_id}' AND tenant_id = '{tenant_id}'`。
+> 3. **角色已分配（INSERT IGNORE 静默跳过）**：底层使用 `INSERT IGNORE` 语义，重复分配不会报错也不会插入新记录。这是预期行为，但可能在测试中误判为"分配失败"。验证方法：检查 `user_tenant_roles` 表是否已存在对应记录。
+
 ---
 
 ## 场景 4：移除用户的角色

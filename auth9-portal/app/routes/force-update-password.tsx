@@ -62,8 +62,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
-    // Use the password change API (current password not required for force-update)
-    await passwordApi.changePassword("", newPassword, accessToken);
+    // Use the dedicated force-update endpoint (no current password required)
+    await passwordApi.forceChangePassword(newPassword, accessToken);
 
     // Complete the pending action if we have an action ID
     if (actionId) {

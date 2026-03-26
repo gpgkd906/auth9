@@ -69,7 +69,7 @@ describe("Invite Accept Page", () => {
       expect((response as Response).status).toBe(400);
     });
 
-    it("accepts invitation successfully", async () => {
+    it("accepts invitation and redirects to login", async () => {
       vi.mocked(invitationApi.accept).mockResolvedValue({
         data: { id: "inv-1", status: "accepted" },
       });
@@ -87,10 +87,9 @@ describe("Invite Accept Page", () => {
       });
 
       const result = await action({ request, params: {}, context: {} });
-      expect(result).toEqual({
-        success: true,
-        invitation: { id: "inv-1", status: "accepted" },
-      });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/login?invite_accepted=true");
 
       expect(invitationApi.accept).toHaveBeenCalledWith({
         token: "valid-token",
@@ -100,7 +99,7 @@ describe("Invite Accept Page", () => {
       });
     });
 
-    it("accepts invitation with optional fields omitted", async () => {
+    it("accepts invitation with optional fields omitted and redirects", async () => {
       vi.mocked(invitationApi.accept).mockResolvedValue({
         data: { id: "inv-2", status: "accepted" },
       });
@@ -116,10 +115,9 @@ describe("Invite Accept Page", () => {
       });
 
       const result = await action({ request, params: {}, context: {} });
-      expect(result).toEqual({
-        success: true,
-        invitation: { id: "inv-2", status: "accepted" },
-      });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe("/login?invite_accepted=true");
 
       expect(invitationApi.accept).toHaveBeenCalledWith({
         token: "valid-token",

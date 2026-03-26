@@ -17,7 +17,7 @@ use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::domains::identity::service::trusted_device::compute_device_fingerprint;
 use crate::domains::security_observability::service::risk_engine::{RiskEngine, RiskInput};
 use crate::error::{AppError, Result};
-use crate::http_support::{write_audit_log_generic, MessageResponse};
+use crate::http_support::{write_audit_log_generic, write_audit_log_with_actor, MessageResponse};
 use crate::models::password::{ForgotPasswordInput, ResetPasswordInput};
 use crate::state::{
     HasAdaptiveMfa, HasAnalytics, HasCache, HasMfa, HasPasswordManagement, HasRequiredActions,
@@ -445,9 +445,10 @@ pub async fn password_login<
         .create_session(user.id, None, ip_address.clone(), user_agent.clone())
         .await?;
 
-    let _ = write_audit_log_generic(
+    let _ = write_audit_log_with_actor(
         &state,
         &headers,
+        Some(*user.id),
         "hosted_login.password",
         "user",
         Some(*user.id),

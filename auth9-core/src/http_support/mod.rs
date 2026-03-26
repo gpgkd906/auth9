@@ -193,6 +193,32 @@ pub async fn write_audit_log_generic<S: HasServices>(
         .await
 }
 
+/// Write an audit log entry with an explicit actor ID (for unauthenticated flows like hosted login)
+pub async fn write_audit_log_with_actor<S: HasServices>(
+    state: &S,
+    headers: &HeaderMap,
+    actor_id: Option<Uuid>,
+    action: &str,
+    resource_type: &str,
+    resource_id: Option<Uuid>,
+    old_value: Option<serde_json::Value>,
+    new_value: Option<serde_json::Value>,
+) -> Result<()> {
+    let ip_address = extract_ip(headers);
+    state
+        .audit_repo()
+        .create(&CreateAuditLogInput {
+            actor_id,
+            action: action.to_string(),
+            resource_type: resource_type.to_string(),
+            resource_id,
+            old_value,
+            new_value,
+            ip_address,
+        })
+        .await
+}
+
 /// Extract actor ID from the Authorization header using the HasServices trait
 pub(crate) fn extract_actor_id_generic<S: HasServices>(
     state: &S,

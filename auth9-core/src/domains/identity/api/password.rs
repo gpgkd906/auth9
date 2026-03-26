@@ -4,7 +4,9 @@ use crate::error::AppError;
 use crate::http_support::{write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::middleware::auth::AuthUser;
 use crate::models::common::StringUuid;
-use crate::models::password::{ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput};
+use crate::models::password::{
+    ChangePasswordInput, ForceChangePasswordInput, ForgotPasswordInput, ResetPasswordInput,
+};
 use crate::models::user::AdminSetPasswordInput;
 use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
 use crate::state::{HasPasswordManagement, HasServices};
@@ -103,6 +105,45 @@ pub async fn change_password<S: HasPasswordManagement + HasServices>(
 
     Ok(Json(
         MessageResponse::new("Password has been changed successfully.")
+            .with_password_warning(breach_warning),
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/me/force-update-password",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Password updated successfully")
+    )
+)]
+/// Force change password for authenticated user (no current password required).
+/// Used by the required-action flow when the user has a temporary or breached password.
+pub async fn force_change_password<S: HasPasswordManagement + HasServices>(
+    State(state): State<S>,
+    headers: HeaderMap,
+    Json(input): Json<ForceChangePasswordInput>,
+) -> Result<Json<MessageResponse>, AppError> {
+    let user_id = extract_user_id(&state, &headers)?;
+
+    let breach_warning = state
+        .password_service()
+        .force_change_password(user_id, input)
+        .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "password.force_changed",
+        "user",
+        Some(*user_id),
+        None,
+        None,
+    )
+    .await;
+
+    Ok(Json(
+        MessageResponse::new("Password has been updated successfully.")
             .with_password_warning(breach_warning),
     ))
 }

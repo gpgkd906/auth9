@@ -62,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const response = await fetch(
       `${API_BASE_URL}/api/v1/users/me`,
       {
-        method: "PATCH",
+        method: "PUT",
         headers: getHeaders(accessToken),
         body: JSON.stringify({ display_name: displayName }),
       }

@@ -9,8 +9,8 @@ use crate::models::action::{
 };
 use crate::models::common::StringUuid;
 use crate::models::password::{
-    ChangePasswordInput, CreatePasswordResetTokenInput, ForgotPasswordInput, PasswordPolicy,
-    ResetPasswordInput, UpdatePasswordPolicyInput,
+    ChangePasswordInput, CreatePasswordResetTokenInput, ForceChangePasswordInput,
+    ForgotPasswordInput, PasswordPolicy, ResetPasswordInput, UpdatePasswordPolicyInput,
 };
 use crate::repository::{
     ActionRepository, PasswordResetRepository, SystemSettingsRepository, TenantRepository,
@@ -181,40 +181,48 @@ impl<
         // Hash the provided token to look up in database
         let token_hash = hash_token(&input.token, self.hmac_key.as_bytes())?;
 
-        // Atomically claim the token (prevents race conditions: only one request succeeds)
-        let reset_token = self
+        // Look up the token first (non-claiming) to validate password BEFORE consuming the token.
+        // This prevents the token from being consumed when the new password fails policy validation.
+        let preview_token = self
             .password_reset_repo
-            .claim_by_token_hash(&token_hash)
+            .find_by_token_hash(&token_hash)
             .await?
             .ok_or_else(|| AppError::BadRequest("Invalid or expired reset token".to_string()))?;
 
         // Get the user
         let user = self
             .user_repo
-            .find_by_id(reset_token.user_id)
+            .find_by_id(preview_token.user_id)
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
-        // Validate new password against tenant password policy before sending to identity backend.
+        // Validate new password against tenant password policy BEFORE claiming the token.
         // Falls back to default policy when tenant lookup fails to ensure enforcement.
-        let policy = self.resolve_user_password_policy(reset_token.user_id).await;
+        let policy = self.resolve_user_password_policy(preview_token.user_id).await;
         if let Err(errors) = policy.validate_password(&input.new_password) {
             return Err(AppError::Validation(errors.join("; ")));
         }
 
-        // Check if password has been found in a data breach
+        // Check if password has been found in a data breach (before claiming)
         let breach_warning = self
             .check_breached_password(&input.new_password, &policy)
             .await?;
 
-        // Check password history before changing
+        // Check password history before changing (before claiming)
         self.check_password_history(
-            reset_token.user_id,
+            preview_token.user_id,
             &user.identity_subject,
             &input.new_password,
             &policy,
         )
         .await?;
+
+        // All validations passed — now atomically claim the token
+        let reset_token = self
+            .password_reset_repo
+            .claim_by_token_hash(&token_hash)
+            .await?
+            .ok_or_else(|| AppError::BadRequest("Invalid or expired reset token".to_string()))?;
 
         // Get the current password hash before overwriting it (for history storage)
         let current_hash = self
@@ -340,6 +348,73 @@ impl<
         let _ = self.user_repo.update_password_changed_at(user_id).await;
 
         // Send password changed notification (best-effort: password is already changed)
+        let _ = self
+            .email_service
+            .send_password_changed(&user.email, user.display_name.as_deref())
+            .await;
+
+        self.execute_post_change_password_actions(&user).await;
+
+        Ok(breach_warning)
+    }
+
+    /// Force change password for authenticated user (no current password required).
+    /// Used by the required-action flow when the user has a temporary/breached password.
+    /// Returns Ok(None) on success, Ok(Some(warning)) if breached password in warn mode.
+    pub async fn force_change_password(
+        &self,
+        user_id: StringUuid,
+        input: ForceChangePasswordInput,
+    ) -> Result<Option<String>> {
+        input.validate()?;
+
+        let user = self
+            .user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+        // Validate new password against tenant password policy
+        let policy = self.resolve_user_password_policy(user_id).await;
+        if let Err(errors) = policy.validate_password(&input.new_password) {
+            return Err(AppError::Validation(errors.join("; ")));
+        }
+
+        // Check if password has been found in a data breach
+        let breach_warning = self
+            .check_breached_password(&input.new_password, &policy)
+            .await?;
+
+        // Check password history before changing
+        self.check_password_history(user_id, &user.identity_subject, &input.new_password, &policy)
+            .await?;
+
+        // Get the current password hash before overwriting it (for history storage)
+        let current_hash = self
+            .identity_engine
+            .user_store()
+            .get_user_password_hash(&user.identity_subject)
+            .await
+            .unwrap_or(None);
+
+        // Set new password in identity backend (non-temporary)
+        self.identity_engine
+            .user_store()
+            .set_user_password(&user.identity_subject, &input.new_password, false)
+            .await?;
+
+        // Store the old password hash in history (if it existed)
+        if let Some(hash) = current_hash {
+            let _ = self
+                .password_reset_repo
+                .store_password_hash(user_id, &hash)
+                .await;
+        }
+
+        // Track password change timestamp
+        let _ = self.user_repo.update_password_changed_at(user_id).await;
+
+        // Send password changed notification (best-effort)
         let _ = self
             .email_service
             .send_password_changed(&user.email, user.display_name.as_deref())
@@ -846,9 +921,9 @@ mod tests {
         let mut password_reset_mock = MockPasswordResetRepository::new();
         let user_mock = MockUserRepository::new();
 
-        // Token not found / already claimed
+        // Token not found in non-claiming lookup
         password_reset_mock
-            .expect_claim_by_token_hash()
+            .expect_find_by_token_hash()
             .returning(|_| Ok(None));
 
         let (service, _) = create_test_password_service(password_reset_mock, user_mock);
@@ -870,9 +945,9 @@ mod tests {
 
         let user_id = StringUuid::new_v4();
 
-        // Token claimed successfully
+        // Token found in non-claiming lookup
         password_reset_mock
-            .expect_claim_by_token_hash()
+            .expect_find_by_token_hash()
             .returning(move |_| {
                 Ok(Some(PasswordResetToken {
                     user_id,
@@ -1146,6 +1221,17 @@ mod tests {
         let mut password_reset_mock = MockPasswordResetRepository::new();
         let mut user_mock = MockUserRepository::new();
 
+        // Non-claiming lookup (validation phase)
+        password_reset_mock
+            .expect_find_by_token_hash()
+            .returning(move |_| {
+                Ok(Some(PasswordResetToken {
+                    user_id,
+                    ..Default::default()
+                }))
+            });
+
+        // Atomic claim (after validation passes)
         password_reset_mock
             .expect_claim_by_token_hash()
             .returning(move |_| {
@@ -1193,8 +1279,9 @@ mod tests {
 
         let user_id = StringUuid::new_v4();
 
+        // Non-claiming lookup only — claim is never reached since policy validation fails
         password_reset_mock
-            .expect_claim_by_token_hash()
+            .expect_find_by_token_hash()
             .returning(move |_| {
                 Ok(Some(PasswordResetToken {
                     user_id,

@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
+import { Form, Link, redirect, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -62,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
       password,
     });
 
-    return { success: true, invitation: response.data };
+    return redirect("/login?invite_accepted=true");
   } catch (error) {
     const locale = await resolveLocale(request);
     const message = mapApiError(error, locale);
@@ -93,7 +93,7 @@ function InvitationStatusCard({ titleKey, descriptionKey }: { titleKey: string; 
 export default function InviteAcceptPage() {
   const { t } = useI18n();
   const { token, invitationStatus } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<typeof action>() as { error?: string } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -148,12 +148,6 @@ export default function InviteAcceptPage() {
 
             {actionData && "error" in actionData && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
-            )}
-
-            {actionData && "success" in actionData && actionData.success && (
-              <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-3 text-sm text-[var(--accent-green)]">
-                {t("invite.accepted")}
-              </div>
             )}
 
             <Button type="submit" className="w-full" disabled={isSubmitting}>

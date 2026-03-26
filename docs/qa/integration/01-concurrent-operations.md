@@ -134,10 +134,12 @@ echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
 ### 测试操作流程
 1. 使用 k6 发送 10 个并发请求（使用 **Tenant Access Token**）：
    ```bash
-   POST /api/v1/tenants/{tenant_id}/users/{user_id}/roles
+   POST /api/v1/rbac/assign
    Authorization: Bearer {tenant_access_token}
    {
-     "role_id": "{editor_role_id}"
+     "user_id": "{user_id}",
+     "tenant_id": "{tenant_id}",
+     "role_ids": ["{editor_role_id}"]
    }
    ```
 2. 同时发送所有请求

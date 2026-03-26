@@ -158,6 +158,10 @@ where
             post(identity_api::password::change_password::<S>),
         )
         .route(
+            "/api/v1/users/me/force-update-password",
+            post(identity_api::password::force_change_password::<S>),
+        )
+        .route(
             "/api/v1/users/{id}/password",
             axum::routing::put(identity_api::password::admin_set_password::<S>),
         )
