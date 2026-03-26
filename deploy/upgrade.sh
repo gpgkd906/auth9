@@ -19,6 +19,7 @@ NAMESPACE="${NAMESPACE:-auth9}"
 COMPONENT="all"
 WAIT="true"
 DRY_RUN=""
+SKIP_VALIDATION=""
 
 # Colors
 RED='\033[0;31m'
@@ -52,6 +53,10 @@ parse_arguments() {
                 DRY_RUN="true"
                 shift
                 ;;
+            --skip-validation)
+                SKIP_VALIDATION="true"
+                shift
+                ;;
             -h|--help)
                 echo "用法: ./upgrade.sh [选项]"
                 echo ""
@@ -60,6 +65,7 @@ parse_arguments() {
                 echo "  --component NAME  只升级指定组件: core, portal, all（默认: all）"
                 echo "  --no-wait         不等待 rollout 完成"
                 echo "  --dry-run         仅显示将要执行的命令"
+                echo "  --skip-validation 跳过 ConfigMap 占位符检查"
                 echo "  -h, --help        显示帮助信息"
                 exit 0
                 ;;
@@ -77,6 +83,41 @@ run_cmd() {
     else
         "$@"
     fi
+}
+
+cfg() {
+    local key="$1"
+    kubectl get configmap auth9-config -n "$NAMESPACE" -o "jsonpath={.data.$key}" 2>/dev/null || true
+}
+
+validate_config() {
+    if [ -n "$SKIP_VALIDATION" ]; then
+        print_warning "跳过 ConfigMap 占位符检查 (--skip-validation)"
+        return 0
+    fi
+
+    print_info "检查 ConfigMap 是否包含 example.com 占位符..."
+
+    local has_placeholder=""
+    local fields=(JWT_ISSUER WEBAUTHN_RP_ID CORS_ALLOWED_ORIGINS APP_BASE_URL AUTH9_CORE_PUBLIC_URL AUTH9_PORTAL_URL)
+
+    for field in "${fields[@]}"; do
+        local value="$(cfg "$field")"
+        if [[ "$value" == *"example.com"* ]]; then
+            print_error "$field 仍是示例域名: $value"
+            has_placeholder="true"
+        fi
+    done
+
+    if [ -n "$has_placeholder" ]; then
+        echo ""
+        print_error "ConfigMap 包含未替换的 example.com 占位符，中止升级"
+        print_info "请先修改 deploy/k8s/configmap.yaml 中标记为 'REQUIRED: replace before deploy' 的字段"
+        print_info "或使用 --skip-validation 跳过此检查"
+        exit 1
+    fi
+
+    print_success "ConfigMap 无 example.com 占位符"
 }
 
 upgrade_component() {
@@ -123,6 +164,9 @@ main() {
         print_error "命名空间 '$NAMESPACE' 不存在"
         exit 1
     fi
+
+    # Validate ConfigMap before upgrade
+    validate_config
 
     # Upgrade components
     case "$COMPONENT" in

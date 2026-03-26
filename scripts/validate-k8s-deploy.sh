@@ -181,6 +181,7 @@ main() {
     fi
 
     local app_base_url auth9_core_public_url auth9_portal_url jwt_issuer cors_allowed_origins
+    local webauthn_rp_id
     local tracing_enabled tracing_endpoint
     local portal_envfrom_secret portal_session_secret_ref
 
@@ -189,6 +190,7 @@ main() {
     auth9_portal_url="$(cfg auth9-config AUTH9_PORTAL_URL)"
     jwt_issuer="$(cfg auth9-config JWT_ISSUER)"
     cors_allowed_origins="$(cfg auth9-config CORS_ALLOWED_ORIGINS)"
+    webauthn_rp_id="$(cfg auth9-config WEBAUTHN_RP_ID)"
     tracing_enabled="$(cfg auth9-config OTEL_TRACING_ENABLED)"
     tracing_endpoint="$(cfg auth9-config OTEL_EXPORTER_OTLP_ENDPOINT)"
 
@@ -217,6 +219,9 @@ main() {
     check_not_example_domain "APP_BASE_URL" "$app_base_url"
     check_not_example_domain "AUTH9_CORE_PUBLIC_URL" "$auth9_core_public_url"
     check_not_example_domain "AUTH9_PORTAL_URL" "$auth9_portal_url"
+    check_not_example_domain "JWT_ISSUER" "$jwt_issuer"
+    check_not_example_domain "WEBAUTHN_RP_ID" "$webauthn_rp_id"
+    check_not_example_domain "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins"
 
     if [[ "$tracing_enabled" == "true" ]]; then
         check_nonempty "OTEL_EXPORTER_OTLP_ENDPOINT" "$tracing_endpoint"

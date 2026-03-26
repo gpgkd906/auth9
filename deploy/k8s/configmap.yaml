@@ -22,7 +22,7 @@ data:
   # JWT configuration
   # JWT_ISSUER is auto-derived from AUTH9_CORE_PUBLIC_URL by deploy.sh.
   # They must always be identical (used for OAuth callback + token iss claim).
-  JWT_ISSUER: "https://api.auth9.example.com"
+  JWT_ISSUER: "https://api.auth9.example.com"  # REQUIRED: replace before deploy
   JWT_ACCESS_TOKEN_TTL_SECS: "3600"
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"
   JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: "auth9-portal"
@@ -34,10 +34,10 @@ data:
 
   # WebAuthn configuration
   # WEBAUTHN_RP_ID must be an effective domain of AUTH9_PORTAL_URL
-  WEBAUTHN_RP_ID: "auth9.example.com"
+  WEBAUTHN_RP_ID: "auth9.example.com"  # REQUIRED: replace before deploy
 
   # CORS
-  CORS_ALLOWED_ORIGINS: "https://auth9.example.com"
+  CORS_ALLOWED_ORIGINS: "https://auth9.example.com"  # REQUIRED: replace before deploy
   CORS_ALLOW_CREDENTIALS: "true"
   ACTION_ALLOWED_DOMAINS: "gitski.work,c9r.io"
 
@@ -50,11 +50,11 @@ data:
   PLATFORM_ADMIN_EMAILS: "admin@auth9.local"
 
   # Portal configuration
-  APP_BASE_URL: "https://auth9.example.com"
+  APP_BASE_URL: "https://auth9.example.com"  # REQUIRED: replace before deploy
   AUTH9_CORE_URL: "http://auth9-core:8080"
-  AUTH9_CORE_PUBLIC_URL: "https://api.auth9.example.com"
+  AUTH9_CORE_PUBLIC_URL: "https://api.auth9.example.com"  # REQUIRED: replace before deploy
   AUTH9_OIDC_URL: "http://auth9-oidc:8090"
-  AUTH9_PORTAL_URL: "https://auth9.example.com"
+  AUTH9_PORTAL_URL: "https://auth9.example.com"  # REQUIRED: replace before deploy
   AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   ENVIRONMENT: "production"
   NODE_ENV: "production"
