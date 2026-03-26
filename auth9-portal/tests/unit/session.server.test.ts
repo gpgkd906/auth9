@@ -54,7 +54,9 @@ global.fetch = mockFetch;
 
 // Helper: store session data in Redis and return a cookie-shaped object
 function seedSession(sid: string, data: SessionData) {
-  const { _sid, ...toStore } = data;
+  const toStore = Object.fromEntries(
+    Object.entries(data).filter(([k]) => k !== "_sid"),
+  );
   redisStore.set(`portal:session:${sid}`, JSON.stringify(toStore));
 }
 
