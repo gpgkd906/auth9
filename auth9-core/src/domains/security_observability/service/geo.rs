@@ -77,7 +77,7 @@ impl GeoIpService {
             return None;
         }
 
-        let record: GeoLite2City = self.reader.lookup(ip).ok()?;
+        let record: GeoLite2City = self.reader.lookup(ip).ok()?.decode().ok()??;
 
         let location = record.location.as_ref()?;
         let latitude = location.latitude?;
