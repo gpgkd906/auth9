@@ -11,6 +11,7 @@
 #   --component NAME  只升级指定组件（core, portal, all）
 #   --no-wait         不等待 rollout 完成
 #   --dry-run         仅显示将要执行的命令
+#   --skip-init       跳过 auth9-init Job（默认会先运行一次 init/migration）
 
 set -e
 
@@ -20,6 +21,9 @@ COMPONENT="all"
 WAIT="true"
 DRY_RUN=""
 SKIP_VALIDATION=""
+RUN_INIT="true"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+K8S_DIR="$SCRIPT_DIR/k8s"
 
 # Colors
 RED='\033[0;31m'
@@ -33,6 +37,23 @@ print_success() { echo -e "  ${GREEN}✓${NC} $1"; }
 print_error() { echo -e "  ${RED}✗${NC} $1"; }
 print_info() { echo -e "  ${CYAN}ℹ${NC} $1"; }
 print_warning() { echo -e "  ${YELLOW}⚠${NC} $1"; }
+
+deprecated_keycloak_resources() {
+    kubectl get deploy,svc,cm,secret,hpa,sts,pvc -n "$NAMESPACE" -o name 2>/dev/null | \
+        rg '(^|/)(keycloak($|[-]))|keycloak-' || true
+}
+
+warn_deprecated_keycloak_resources() {
+    local resources
+    resources="$(deprecated_keycloak_resources)"
+    if [ -z "$resources" ]; then
+        return 0
+    fi
+
+    print_warning "检测到旧版 Keycloak 资源仍存在；升级流程不会自动清理这些遗留对象："
+    echo "$resources" | sed 's/^/    /'
+    print_info "确认迁移稳定后请手动删除这些资源，避免继续消耗容量或干扰排障"
+}
 
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
@@ -57,6 +78,10 @@ parse_arguments() {
                 SKIP_VALIDATION="true"
                 shift
                 ;;
+            --skip-init)
+                RUN_INIT=""
+                shift
+                ;;
             -h|--help)
                 echo "用法: ./upgrade.sh [选项]"
                 echo ""
@@ -66,6 +91,7 @@ parse_arguments() {
                 echo "  --no-wait         不等待 rollout 完成"
                 echo "  --dry-run         仅显示将要执行的命令"
                 echo "  --skip-validation 跳过 ConfigMap 占位符检查"
+                echo "  --skip-init       跳过 auth9-init Job"
                 echo "  -h, --help        显示帮助信息"
                 exit 0
                 ;;
@@ -120,6 +146,32 @@ validate_config() {
     print_success "ConfigMap 无 example.com 占位符"
 }
 
+run_init_job() {
+    print_info "运行 auth9-init（migrations / seed）..."
+
+    if [ -n "$DRY_RUN" ]; then
+        run_cmd kubectl apply -f "$K8S_DIR/auth9-core/init-job.yaml" -n "$NAMESPACE"
+        print_success "auth9-init 预演完成"
+        return 0
+    fi
+
+    kubectl delete job auth9-init -n "$NAMESPACE" --ignore-not-found=true >/dev/null 2>&1 || true
+    kubectl apply -f "$K8S_DIR/auth9-core/init-job.yaml"
+
+    if [ -n "$WAIT" ]; then
+        print_info "等待 auth9-init 完成..."
+        if kubectl wait --for=condition=complete job/auth9-init -n "$NAMESPACE" --timeout=300s >/dev/null; then
+            print_success "auth9-init 已完成"
+        else
+            print_error "auth9-init 超时或失败"
+            kubectl logs job/auth9-init -n "$NAMESPACE" --tail=100 2>/dev/null || true
+            return 1
+        fi
+    else
+        print_success "auth9-init 已触发"
+    fi
+}
+
 upgrade_component() {
     local name="$1"
     local deployment="$2"
@@ -167,6 +219,13 @@ main() {
 
     # Validate ConfigMap before upgrade
     validate_config
+    warn_deprecated_keycloak_resources
+
+    if [ -n "$RUN_INIT" ]; then
+        run_init_job
+    else
+        print_warning "跳过 auth9-init (--skip-init)"
+    fi
 
     # Upgrade components
     case "$COMPONENT" in

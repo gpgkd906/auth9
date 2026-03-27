@@ -162,6 +162,42 @@ check_http() {
     print_success "$label 可达: $url"
 }
 
+check_deprecated_keycloak_state() {
+    local deprecated_resources deprecated_config_keys deprecated_secret_keys
+
+    deprecated_resources="$(
+        kubectl get deploy,svc,cm,secret,hpa,sts,pvc -n "$NAMESPACE" -o name 2>/dev/null | \
+            rg '(^|/)(keycloak($|[-]))|keycloak-' || true
+    )"
+    deprecated_config_keys="$(
+        kubectl get configmap auth9-config -n "$NAMESPACE" -o yaml 2>/dev/null | \
+            rg '^[[:space:]]+KEYCLOAK_' || true
+    )"
+    deprecated_secret_keys="$(
+        kubectl get secret auth9-secrets -n "$NAMESPACE" -o yaml 2>/dev/null | \
+            rg 'KEYCLOAK_' || true
+    )"
+
+    if [[ -n "$deprecated_resources" ]]; then
+        print_warning "仍检测到 Keycloak 旧资源（迁移到 auth9-oidc 后建议清理）"
+        echo "$deprecated_resources" | sed 's/^/    /'
+    else
+        print_success "未发现 Keycloak 旧资源"
+    fi
+
+    if [[ -n "$deprecated_config_keys" ]]; then
+        print_warning "auth9-config 仍包含 KEYCLOAK_* 旧配置"
+    else
+        print_success "auth9-config 未包含 KEYCLOAK_* 旧配置"
+    fi
+
+    if [[ -n "$deprecated_secret_keys" ]]; then
+        print_warning "auth9-secrets 仍包含 KEYCLOAK_* 兼容密钥"
+    else
+        print_success "auth9-secrets 未包含 KEYCLOAK_* 兼容密钥"
+    fi
+}
+
 main() {
     parse_args "$@"
     require_cmd kubectl
@@ -228,6 +264,10 @@ main() {
     else
         print_success "OTEL_TRACING_ENABLED=false"
     fi
+
+    echo ""
+    print_info "检查 Keycloak 退役状态"
+    check_deprecated_keycloak_state
 
     echo ""
     print_info "检查 secrets 与 deployment wiring"

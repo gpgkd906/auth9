@@ -14,6 +14,7 @@
 #   --config-file FILE  从文件加载配置（JSON 或 env 格式）
 #   --with-observability    强制部署可观测性资源
 #   --without-observability 跳过可观测性资源部署
+#   --skip-validation   在非交互模式下跳过 ConfigMap 占位符检查
 #
 # 前提条件:
 #   - kubectl 已配置集群访问权限
@@ -29,6 +30,7 @@ DRY_RUN=""
 INTERACTIVE="true"
 CONFIG_FILE=""
 OBSERVABILITY_MODE="auto"
+SKIP_VALIDATION=""
 
 # Associative arrays for configuration
 declare -A AUTH9_SECRETS
@@ -161,6 +163,60 @@ check_command() {
     fi
     print_success "$cmd 已安装"
     return 0
+}
+
+configmap_file_value() {
+    local key="$1"
+    awk -F'"' -v lookup="$key" '$1 ~ "^[[:space:]]*" lookup ":" { print $2; exit }' "$K8S_DIR/configmap.yaml"
+}
+
+validate_static_configmap() {
+    if [ -n "$SKIP_VALIDATION" ]; then
+        print_warning "跳过静态 ConfigMap 占位符检查 (--skip-validation)"
+        return 0
+    fi
+
+    print_info "检查 deploy/k8s/configmap.yaml 是否包含 example.com 占位符..."
+
+    local has_placeholder=""
+    local fields=(JWT_ISSUER WEBAUTHN_RP_ID CORS_ALLOWED_ORIGINS APP_BASE_URL AUTH9_CORE_PUBLIC_URL AUTH9_PORTAL_URL)
+
+    for field in "${fields[@]}"; do
+        local value
+        value="$(configmap_file_value "$field")"
+        if [[ "$value" == *"example.com"* ]]; then
+            print_error "$field 仍是示例域名: $value"
+            has_placeholder="true"
+        fi
+    done
+
+    if [ -n "$has_placeholder" ]; then
+        echo ""
+        print_error "deploy/k8s/configmap.yaml 仍包含 example.com 占位符，中止非交互部署"
+        print_info "请先修改 deploy/k8s/configmap.yaml 中标记为 'REQUIRED: replace before deploy' 的字段"
+        print_info "或改用交互模式 ./deploy/deploy.sh 由脚本直接生成 ConfigMap"
+        print_info "如需强制跳过，请追加 --skip-validation"
+        exit 1
+    fi
+
+    print_success "静态 ConfigMap 无 example.com 占位符"
+}
+
+deprecated_keycloak_resources() {
+    kubectl get deploy,svc,cm,secret,hpa,sts,pvc -n "$NAMESPACE" -o name 2>/dev/null | \
+        rg '(^|/)(keycloak($|[-]))|keycloak-' || true
+}
+
+warn_deprecated_keycloak_resources() {
+    local resources
+    resources="$(deprecated_keycloak_resources)"
+    if [ -z "$resources" ]; then
+        return 0
+    fi
+
+    print_warning "检测到旧版 Keycloak 资源仍存在；新清单不会自动清理这些遗留对象："
+    echo "$resources" | sed 's/^/    /'
+    print_info "确认 auth9-oidc 迁移稳定后，请手动删除这些旧资源，避免继续占用容量和误导运维排障"
 }
 
 generate_strong_admin_password() {
@@ -689,6 +745,8 @@ print_summary() {
 deploy_auth9() {
     print_header "Auth9 部署"
 
+    warn_deprecated_keycloak_resources
+
     # Step 1: Create namespace and service account
     print_progress "1/7" "创建命名空间和服务账户"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
@@ -697,6 +755,7 @@ deploy_auth9() {
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
         print_progress "2/7" "应用 ConfigMap"
+        validate_static_configmap
         kubectl apply -f "$K8S_DIR/configmap.yaml" $DRY_RUN
     else
         print_progress "2/7" "ConfigMap 已应用"
@@ -757,30 +816,29 @@ check_secrets_non_interactive() {
 }
 
 deploy_infrastructure() {
-    if [ -z "$DRY_RUN" ]; then
-        print_info "正在部署 redis..."
-        kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN
-
-        print_success "基础设施已部署"
+    print_info "正在部署 redis..."
+    kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN
+    if [ -n "$DRY_RUN" ]; then
+        print_success "基础设施预演完成"
     else
-        print_info "跳过基础设施部署（预演模式）"
+        print_success "基础设施已部署"
     fi
 }
 
 deploy_auth9_apps() {
-    if [ -z "$DRY_RUN" ]; then
-        print_info "正在部署 auth9-core..."
-        kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
+    print_info "正在部署 auth9-core..."
+    kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
 
-        print_info "正在部署 auth9-oidc..."
-        kubectl apply -f "$K8S_DIR/auth9-oidc/" $DRY_RUN
+    print_info "正在部署 auth9-oidc..."
+    kubectl apply -f "$K8S_DIR/auth9-oidc/" $DRY_RUN
 
-        print_info "正在部署 auth9-portal..."
-        kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
+    print_info "正在部署 auth9-portal..."
+    kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
 
-        print_success "Auth9 应用已部署"
+    if [ -n "$DRY_RUN" ]; then
+        print_success "Auth9 应用预演完成"
     else
-        print_info "跳过 auth9 部署（预演模式）"
+        print_success "Auth9 应用已部署"
     fi
 }
 
@@ -814,12 +872,12 @@ deploy_observability() {
         return
     fi
 
-    if [ -z "$DRY_RUN" ]; then
-        print_info "正在部署可观测性资源 (ServiceMonitor, PrometheusRule, Grafana dashboards)..."
-        kubectl apply -f "$obs_dir/" $DRY_RUN
-        print_success "可观测性资源已部署"
+    print_info "正在部署可观测性资源 (ServiceMonitor, PrometheusRule, Grafana dashboards)..."
+    kubectl apply -f "$obs_dir/" $DRY_RUN
+    if [ -n "$DRY_RUN" ]; then
+        print_success "可观测性资源预演完成"
     else
-        print_info "跳过可观测性部署（预演模式）"
+        print_success "可观测性资源已部署"
     fi
 }
 
@@ -926,6 +984,10 @@ parse_arguments() {
                 OBSERVABILITY_MODE="disabled"
                 shift
                 ;;
+            --skip-validation)
+                SKIP_VALIDATION="true"
+                shift
+                ;;
             *)
                 echo -e "${RED}未知选项: $1${NC}"
                 echo ""
@@ -939,6 +1001,7 @@ parse_arguments() {
                 echo "  --config-file FILE  从文件加载配置"
                 echo "  --with-observability    强制部署可观测性资源"
                 echo "  --without-observability 跳过可观测性资源部署"
+                echo "  --skip-validation       在非交互模式下跳过 ConfigMap 占位符检查"
                 exit 1
                 ;;
         esac
