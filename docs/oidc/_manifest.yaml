@@ -1,0 +1,97 @@
+version: qa-doc-gen-v1
+generated_at: 2026-03-27
+documents:
+  - id: setup/01-conformance-suite
+    path: docs/oidc/setup/01-conformance-suite.md
+    module: setup
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+  - id: discovery/01-discovery-jwks
+    path: docs/oidc/discovery/01-discovery-jwks.md
+    module: discovery
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+    test_script: scripts/qa/auto/oidc-discovery-01-discovery-jwks.sh
+  - id: authz-code/01-basic-flow
+    path: docs/oidc/authz-code/01-basic-flow.md
+    module: authz-code
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+  - id: authz-code/02-pkce-flow
+    path: docs/oidc/authz-code/02-pkce-flow.md
+    module: authz-code
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+  - id: client-credentials/01-basic-flow
+    path: docs/oidc/client-credentials/01-basic-flow.md
+    module: client-credentials
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+    test_script: scripts/qa/auto/oidc-client-credentials-01-basic-flow.sh
+  - id: refresh-token/01-refresh-flow
+    path: docs/oidc/refresh-token/01-refresh-flow.md
+    module: refresh-token
+    scenarios: 4
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+  - id: token-validation/01-claims-signing
+    path: docs/oidc/token-validation/01-claims-signing.md
+    module: token-validation
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+    test_script: scripts/qa/auto/oidc-token-validation-01-claims-signing.sh
+  - id: userinfo/01-userinfo-endpoint
+    path: docs/oidc/userinfo/01-userinfo-endpoint.md
+    module: userinfo
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+    test_script: scripts/qa/auto/oidc-userinfo-01-userinfo-endpoint.sh
+  - id: logout/01-logout-flow
+    path: docs/oidc/logout/01-logout-flow.md
+    module: logout
+    scenarios: 4
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+  - id: error-handling/01-invalid-requests
+    path: docs/oidc/error-handling/01-invalid-requests.md
+    module: error-handling
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+    test_script: scripts/qa/auto/oidc-error-handling-01-invalid-requests.sh
+  - id: security/01-state-nonce-redirect
+    path: docs/oidc/security/01-state-nonce-redirect.md
+    module: security
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-27
+    test_script: scripts/qa/auto/oidc-security-01-state-nonce-redirect.sh

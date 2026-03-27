@@ -6,8 +6,10 @@
 # Only components whose source files have changed will be rebuilt.
 #
 # Usage:
-#   ./scripts/reset-docker.sh          # Smart reset (skips unchanged components)
-#   ./scripts/reset-docker.sh --purge  # Full purge (rebuild everything, clear all caches)
+#   ./scripts/reset-docker.sh                    # Smart reset (skips unchanged components)
+#   ./scripts/reset-docker.sh --purge            # Full purge (rebuild everything, clear all caches)
+#   ./scripts/reset-docker.sh --conformance      # Include OIDC Conformance Suite
+#   ./scripts/reset-docker.sh --purge --conformance  # Full purge with conformance suite
 
 set -eo pipefail
 
@@ -18,14 +20,19 @@ cd "$PROJECT_DIR"
 
 # Parse arguments
 PURGE=false
+CONFORMANCE=false
 for arg in "$@"; do
   case $arg in
     --purge) PURGE=true ;;
+    --conformance) CONFORMANCE=true ;;
   esac
 done
 
-# Compose files: base + observability overlay
+# Compose files: base + observability overlay (+ optional conformance suite)
 DC="docker-compose -f docker-compose.yml -f docker-compose.observability.yml"
+if [ "$CONFORMANCE" = true ]; then
+  DC="$DC -f docker-compose.conformance.yml"
+fi
 
 # ==================== Smart Build: Content Hash ====================
 CACHE_DIR="$PROJECT_DIR/.build-cache"
@@ -176,6 +183,9 @@ fi
 # Step 3: Remove any remaining volumes
 echo "[3/7] Removing volumes..."
 docker volume rm auth9_tidb-data auth9_redis-data auth9_prometheus-data auth9_grafana-data auth9_loki-data auth9_tempo-data 2>/dev/null || true
+if [ "$CONFORMANCE" = true ]; then
+  docker volume rm auth9_conformance-mongo-data 2>/dev/null || true
+fi
 
 # Step 4: Prune builder cache (only in --purge mode)
 if [ "$PURGE" = true ]; then
@@ -310,5 +320,8 @@ echo "  Demo:       http://localhost:3002  (SDK integration guide)"
 echo "  Mailpit:    http://localhost:8025"
 echo "  Grafana:    http://localhost:3001"
 echo "  Prometheus: http://localhost:9090"
+if [ "$CONFORMANCE" = true ]; then
+  echo "  Conformance: https://localhost:9443  (OIDC Certification Test Suite)"
+fi
 echo ""
 echo "Reset complete!"

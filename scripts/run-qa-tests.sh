@@ -19,6 +19,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 QA_DIR="$PROJECT_ROOT/docs/qa"
 SECURITY_DIR="$PROJECT_ROOT/docs/security"
 UIUX_DIR="$PROJECT_ROOT/docs/uiux"
+OIDC_DIR="$PROJECT_ROOT/docs/oidc"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -134,17 +135,25 @@ script_passed=0
 script_failed=0
 
 # Resolve a test script path for a given doc.
-# 1) For docs/qa/*: look up test_script in _manifest.yaml
+# 1) For docs/qa/* or docs/oidc/*: look up test_script in _manifest.yaml
 # 2) Fallback for any doc: derive path scripts/qa/auto/{dir-parts}.sh
 # Returns the script path on stdout (empty if none found).
 resolve_test_script() {
     local rel_path="$1"
     local script_path=""
 
-    # Strategy 1: manifest lookup (docs/qa/ only)
+    # Strategy 1: manifest lookup (docs/qa/ and docs/oidc/)
+    local manifest_file="" doc_id=""
     if [[ "$rel_path" == docs/qa/* ]]; then
-        local doc_id="${rel_path#docs/qa/}"
+        manifest_file="$PROJECT_ROOT/docs/qa/_manifest.yaml"
+        doc_id="${rel_path#docs/qa/}"
         doc_id="${doc_id%.md}"
+    elif [[ "$rel_path" == docs/oidc/* ]]; then
+        manifest_file="$PROJECT_ROOT/docs/oidc/_manifest.yaml"
+        doc_id="${rel_path#docs/oidc/}"
+        doc_id="${doc_id%.md}"
+    fi
+    if [[ -n "$manifest_file" && -f "$manifest_file" ]]; then
         script_path=$(python3 -c "
 import sys
 try:
@@ -152,7 +161,7 @@ try:
 except ImportError:
     sys.exit(0)
 try:
-    with open('$PROJECT_ROOT/docs/qa/_manifest.yaml') as f:
+    with open(sys.argv[2]) as f:
         data = yaml.safe_load(f)
     for doc in data.get('documents', []):
         if doc.get('id') == sys.argv[1]:
@@ -160,7 +169,7 @@ try:
             break
 except Exception:
     pass
-" "$doc_id" 2>/dev/null || true)
+" "$doc_id" "$manifest_file" 2>/dev/null || true)
     fi
 
     # Strategy 2: convention-based derivation
@@ -226,15 +235,16 @@ run_test_script() {
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    echo "Usage: $0 [--agent <mode>] [--only-security|--only-uiux] [--no-scripts] [--resume] [cli-options]"
+    echo "Usage: $0 [--agent <mode>] [--only-security|--only-uiux|--only-oidc] [--no-scripts] [--resume] [cli-options]"
     echo ""
-    echo "Default: run all QA docs (docs/qa/, docs/security/, docs/uiux/)."
+    echo "Default: run all QA docs (docs/qa/, docs/security/, docs/uiux/, docs/oidc/)."
     echo "Docs with pre-built scripts in scripts/qa/auto/ run directly (FAST PATH)."
     echo "Docs without scripts are tested via an AI agent (AGENT PATH)."
     echo ""
     echo "  --agent <mode>       Agent mode: 'minicode' (default), 'minimax', 'opencode', 'gemini', 'glm-5'"
     echo "  --only-security      Run only security test documents (docs/security/)"
     echo "  --only-uiux          Run only UI/UX test documents (docs/uiux/)"
+    echo "  --only-oidc          Run only OIDC conformance test documents (docs/oidc/)"
     echo "  --no-scripts         Disable FAST PATH (always use agent)"
     echo "  --resume             Resume from last interrupted run"
     exit 0
@@ -242,7 +252,7 @@ fi
 
 # Parse flags
 AGENT_MODE="minicode"
-ONLY_MODE=""  # empty = all, 'security' = only security, 'uiux' = only uiux
+ONLY_MODE=""  # empty = all, 'security' = only security, 'uiux' = only uiux, 'oidc' = only oidc
 RESUME=false
 USE_SCRIPTS=true
 while [[ $# -gt 0 ]]; do
@@ -257,6 +267,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --only-uiux)
             ONLY_MODE="uiux"
+            shift
+            ;;
+        --only-oidc)
+            ONLY_MODE="oidc"
             shift
             ;;
         --no-scripts)
@@ -294,7 +308,8 @@ fi
 case "$ONLY_MODE" in
     security) echo -e "${YELLOW}Scope: security tests only (docs/security/)${NC}" ;;
     uiux)     echo -e "${YELLOW}Scope: UI/UX tests only (docs/uiux/)${NC}" ;;
-    *)        echo -e "${YELLOW}Scope: all tests (docs/qa/, docs/security/, docs/uiux/)${NC}" ;;
+    oidc)     echo -e "${YELLOW}Scope: OIDC conformance tests only (docs/oidc/)${NC}" ;;
+    *)        echo -e "${YELLOW}Scope: all tests (docs/qa/, docs/security/, docs/uiux/, docs/oidc/)${NC}" ;;
 esac
 if [[ "$RESUME" == true ]]; then
     echo -e "${YELLOW}Resume: enabled${NC}"
@@ -307,9 +322,10 @@ echo -e "${CYAN}========================================${NC}"
 echo ""
 
 # Collect .md files based on ONLY_MODE, excluding README.md
-# Default (empty): docs/qa/ + docs/security/ + docs/uiux/
+# Default (empty): docs/qa/ + docs/security/ + docs/uiux/ + docs/oidc/
 # --only-security: docs/security/ only
 # --only-uiux: docs/uiux/ only
+# --only-oidc: docs/oidc/ only
 mapfile -t qa_files < <(
     {
         case "$ONLY_MODE" in
@@ -319,10 +335,14 @@ mapfile -t qa_files < <(
             uiux)
                 find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
                 ;;
+            oidc)
+                find "$OIDC_DIR" -name '*.md' ! -name 'README.md' ! -name '_standards.md' 2>/dev/null || true
+                ;;
             *)
                 find "$QA_DIR" -name '*.md' ! -name 'README.md' ! -name '_standards.md' 2>/dev/null || true
                 find "$SECURITY_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
                 find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                find "$OIDC_DIR" -name '*.md' ! -name 'README.md' ! -name '_standards.md' 2>/dev/null || true
                 ;;
         esac
     } | sort

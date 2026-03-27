@@ -1,0 +1,67 @@
+# Auth9 - OIDC Conformance Test Suite (OpenID Foundation)
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.conformance.yml up -d
+# Or:    ./scripts/reset-docker.sh --conformance
+#
+# Conformance Suite UI: https://localhost:9443
+# Architecture: Java server (HTTP) + nginx TLS proxy + MongoDB.
+
+services:
+  # NOTE: auth9-core keeps its default JWT_ISSUER (http://localhost:8080).
+  # The conformance suite accesses auth9-core via Docker hostname (http://auth9-core:8080)
+  # but the issuer in discovery/tokens remains http://localhost:8080.
+  # When configuring test plans in the conformance suite, use the Docker-internal
+  # discovery URL: http://auth9-core:8080/.well-known/openid-configuration
+
+  # ==================== OIDC Conformance Suite (Java server) ====================
+  conformance-suite:
+    # Community-maintained image tracking upstream OpenID conformance-suite.
+    # For official builds: clone https://gitlab.com/openid/conformance-suite and build from source.
+    image: authelia/openid-connect-conformance-suite:latest
+    platform: linux/amd64
+    container_name: auth9-conformance
+    # No host port — accessed via nginx TLS proxy
+    environment:
+      JAVA_EXTRA_ARGS: "-Xmx512m"
+      MONGODB_HOST: conformance-mongo
+      BASE_URL: https://localhost:9443
+      # Dev mode: bypass GitLab OAuth, auto-auth as dummy admin
+      ENABLE_DEBUG: "true"
+      ENABLE_START_REDIR: "true"
+      OIDC_GITLAB_CLIENTID: "dummy"
+      OIDC_GITLAB_SECRET: "dummy"
+      OIDC_ADMIN_GROUP: ""
+    depends_on:
+      - conformance-mongo
+      - auth9-core
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Nginx TLS Proxy (Conformance Suite requires HTTPS) ====================
+  conformance-nginx:
+    image: nginx:1.27-alpine
+    container_name: auth9-conformance-nginx
+    ports:
+      - "9443:443"
+    volumes:
+      - ./deploy/conformance/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/dev-certs/grpc/server.crt:/etc/nginx/certs/server.crt:ro
+      - ./deploy/dev-certs/grpc/server.key:/etc/nginx/certs/server.key:ro
+    depends_on:
+      - conformance-suite
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== MongoDB (Conformance Suite Storage) ====================
+  conformance-mongo:
+    image: mongo:6.0
+    container_name: auth9-conformance-mongo
+    volumes:
+      - conformance-mongo-data:/data/db
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+volumes:
+  conformance-mongo-data:
