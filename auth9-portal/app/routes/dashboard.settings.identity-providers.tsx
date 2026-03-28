@@ -160,6 +160,9 @@ export default function IdentityProvidersPage() {
   function openCreateDialog() {
     wasSubmitting.current = false;
     resetForm();
+    const defaultProvider = PROVIDER_TEMPLATES[0].provider_id;
+    setSelectedTemplate(defaultProvider);
+    setFormData((prev) => ({ ...prev, alias: defaultProvider }));
     setShowDialog(true);
   }
 

@@ -33,9 +33,11 @@ Auth9 现在在用户注册、修改密码、重置密码时，通过 Have I Bee
 ```
 
 **测试用密码**：
-- 已知泄露：`password`（HIBP 中出现 3.8M+ 次）
-- 已知泄露：`123456`（HIBP 中出现 40M+ 次）
+- 已知泄露：`Password123!`（HIBP 中出现频次高，且满足密码策略：12+ 字符、大小写、数字、特殊字符）
+- 已知泄露：`Welcome2024!`（HIBP 中出现频次高，满足密码策略）
 - 安全密码：`Auth9-TestSafe-Xk9mR2pQ7vL4nW8j!`（极长随机字符串，不太可能出现在 HIBP 中）
+
+> **注意**: 旧版文档使用 `password` 和 `123456` 作为泄露密码测试用例，但这些密码不满足密码策略要求（最少 12 字符、包含大小写字母、数字、特殊字符），会在密码策略校验阶段被拒绝（HTTP 422 validation_error），而非在 HIBP 泄露检测阶段。测试泄露检测功能时必须使用满足密码策略的泄露密码。
 
 ---
 
@@ -63,26 +65,26 @@ echo $TOKEN | head -c 20
 ```
 
 #### API 测试
-1. 使用已知泄露密码 `password` 创建用户：
+1. 使用已知泄露密码 `Password123!` 创建用户：
 ```bash
 curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "breached-test-1@example.com",
-    "password": "password"  # pragma: allowlist secret,
+    "password": "Password123!"  # pragma: allowlist secret,
     "name": "Breached Test User"
   }'
 ```
 
-2. 使用另一个已知泄露密码 `123456` 创建用户：
+2. 使用另一个已知泄露密码 `Welcome2024!` 创建用户：
 ```bash
 curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "breached-test-2@example.com",
-    "password": "123456"  # pragma: allowlist secret,
+    "password": "Welcome2024!"  # pragma: allowlist secret,
     "name": "Breached Test User 2"
   }'
 ```

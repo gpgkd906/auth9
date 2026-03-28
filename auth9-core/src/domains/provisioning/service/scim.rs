@@ -757,6 +757,7 @@ where
             user_id: uuid::Uuid::from(user_id),
             tenant_id: uuid::Uuid::from(tenant_id),
             role_ids: vec![uuid::Uuid::from(role_id)],
+            service_id: None,
         };
 
         rbac.assign_roles_to_user(&input, None).await?;

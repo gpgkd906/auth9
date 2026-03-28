@@ -98,17 +98,12 @@ impl Auth9OidcUserStore {
 
 #[async_trait]
 impl IdentityUserStore for Auth9OidcUserStore {
-    async fn create_user(&self, input: &IdentityUserCreateInput) -> Result<String> {
+    async fn create_user(&self, _input: &IdentityUserCreateInput) -> Result<String> {
         let identity_subject = uuid::Uuid::new_v4().to_string();
 
-        if let Some(ref credentials) = input.credentials {
-            for cred in credentials {
-                if cred.credential_type == "password" {
-                    self.upsert_password_credential(&identity_subject, &cred.value, cred.temporary)
-                        .await?;
-                }
-            }
-        }
+        // NOTE: Credentials are NOT stored here because `resolve_user_id` needs the
+        // users table row (created afterwards in user.rs) to resolve identity_subject
+        // to users.id. Caller must invoke `set_user_password` after user creation.
 
         Ok(identity_subject)
     }

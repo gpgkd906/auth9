@@ -900,6 +900,7 @@ mod tests {
             user_id,
             tenant_id,
             role_ids: vec![role_id],
+            service_id: None,
         };
 
         let result = service.assign_roles(input, None).await;

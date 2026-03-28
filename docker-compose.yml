@@ -60,8 +60,9 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY must be set in .env — run scripts/init-dev-env.sh}
       JWT_PREVIOUS_PUBLIC_KEY: ${JWT_PREVIOUS_PUBLIC_KEY:-}
       AUTH9_ADMIN_PASSWORD: ${AUTH9_ADMIN_PASSWORD:-SecurePass123!}
-      # Webhook HMAC secret (still required by auth9-core for event signature verification)
+      # Webhook HMAC secret (required by auth9-core for event signature verification)
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
+      IDENTITY_WEBHOOK_SECRET: ${IDENTITY_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
       # Settings encryption key for sensitive data (generate with: openssl rand -base64 32)
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY must be set in .env}
       # SMTP configuration for email sending (invitations, password reset, etc.)

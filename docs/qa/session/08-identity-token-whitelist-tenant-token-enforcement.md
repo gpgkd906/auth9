@@ -247,6 +247,11 @@ curl -i "http://localhost:8080/api/v1/tenants/{tenant_b}" \
 
 > **已知限制**: 本场景需要非平台管理员用户的 Identity Token，但 `gen-admin-token.sh` 只能生成 `admin@auth9.local`（平台管理员）的 token。如需测试，可使用 `gen-test-tokens.js` 工具为指定用户生成 token，或通过 Playwright 自动化浏览器 OIDC 登录流程获取 Identity Token。
 
+> **JWT 密钥不匹配问题**: 在宿主机上运行 `gen-admin-token.sh` 或 `gen-test-tokens.js` 等本地 token 生成工具时，如果工具使用的 JWT 签名密钥与 Docker 容器内 auth9-core 运行时使用的密钥不一致，生成的 token 会被服务端拒绝（返回 401 InvalidSignature）。这是常见的误报来源。解决方法：
+> 1. **推荐**: 在 Docker 容器内部执行 token 生成工具：`docker exec auth9-core /bin/sh -c '...'`
+> 2. **备选**: 从运行中的容器提取 JWT 密钥到宿主机：`docker exec auth9-core cat /path/to/jwt/keys` 并配置本地工具使用相同密钥
+> 3. 执行 `./scripts/reset-docker.sh` 重建环境，确保宿主机与容器密钥同步
+
 ---
 
 ## 检查清单

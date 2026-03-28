@@ -1467,7 +1467,9 @@ where
         .merge(domains::identity::routes::public_routes::<S>())
         .merge(domains::platform::routes::public_routes::<S>())
         .merge(domains::integration::routes::public_routes::<S>())
-        .merge(domains::tenant_access::routes::public_routes::<S>());
+        .merge(domains::tenant_access::routes::public_routes::<S>())
+        // CAPTCHA verification on protected public endpoints (login, register, etc.)
+        .layer(crate::middleware::CaptchaLayer { state: captcha_state });
 
     // ============================================================
     // PROTECTED ROUTES (authentication required)
@@ -1593,8 +1595,6 @@ where
         // 9. CORS - must be outermost for preflight requests
         .layer(cors)
         .with_state(state)
-        // Inject CaptchaState into request extensions for the captcha middleware
-        .layer(axum::Extension(captcha_state))
         // Nest the metrics route outside .with_state() since it uses its own state
         .merge(metrics_route)
         // Mount OpenAPI documentation endpoints (non-production only)

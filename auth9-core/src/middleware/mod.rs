@@ -20,7 +20,7 @@ pub mod step_up;
 pub mod trace;
 
 pub use auth::{AuthUser, OptionalAuth, RequireAuth};
-pub use captcha::{captcha_middleware, CaptchaState};
+pub use captcha::{captcha_middleware, CaptchaLayer, CaptchaState};
 pub use client_ip::inject_client_ip;
 pub use error_response::normalize_error_response;
 pub use path_guard::path_guard_middleware;

@@ -130,6 +130,10 @@ pub struct AssignRolesInput {
     pub user_id: Uuid,
     pub tenant_id: Uuid,
     pub role_ids: Vec<Uuid>,
+    /// When `role_ids` is empty, `service_id` identifies which service's roles
+    /// to clear (replace-semantics require knowing the scope).
+    #[serde(default)]
+    pub service_id: Option<Uuid>,
 }
 
 /// Role with its permissions (for API responses)
@@ -367,6 +371,7 @@ mod tests {
             user_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
             role_ids: vec![Uuid::new_v4(), Uuid::new_v4()],
+            service_id: None,
         };
 
         assert!(input.validate().is_ok());
@@ -378,6 +383,7 @@ mod tests {
             user_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
             role_ids: vec![],
+            service_id: None,
         };
 
         // Empty roles is valid at validation level

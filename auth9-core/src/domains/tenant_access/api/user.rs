@@ -5,9 +5,7 @@ use crate::error::{AppError, Result};
 use crate::http_support::{
     write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
-use crate::identity_engine::{
-    IdentityCredentialInput, IdentityUserCreateInput, IdentityUserUpdateInput,
-};
+use crate::identity_engine::{IdentityUserCreateInput, IdentityUserUpdateInput};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::models::common::StringUuid;
 use crate::models::user::{AddUserToTenantInput, CreateUserInput, UpdateUserInput, User};
@@ -447,13 +445,8 @@ pub async fn create<S: HasServices + HasBranding>(
         }
     }
 
-    let credentials = input.password.map(|password| {
-        vec![IdentityCredentialInput {
-            credential_type: "password".to_string(),
-            value: password,
-            temporary: false,
-        }]
-    });
+    // Extract password before moving input
+    let password_for_credential = input.password.clone();
 
     let identity_subject = state
         .identity_engine()
@@ -465,7 +458,7 @@ pub async fn create<S: HasServices + HasBranding>(
             last_name: None,
             enabled: true,
             email_verified: false,
-            credentials,
+            credentials: None, // Credentials stored after user record creation
         })
         .await?;
 
@@ -496,6 +489,21 @@ pub async fn create<S: HasServices + HasBranding>(
             return Err(e);
         }
     };
+
+    // Store password credential AFTER user record exists in DB,
+    // so resolve_user_id can map identity_subject → users.id correctly
+    if let Some(ref password) = password_for_credential {
+        state
+            .identity_engine()
+            .user_store()
+            .set_user_password(&identity_subject, password, false)
+            .await?;
+        // Update password_changed_at timestamp
+        state
+            .user_service()
+            .update_password_changed_at(user.id)
+            .await?;
+    }
 
     // Auto-add user to the tenant if created in a tenant context
     if let Some(tenant_id) = effective_tenant_id {

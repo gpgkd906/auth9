@@ -324,6 +324,21 @@ impl RbacRepository for RbacRepositoryImpl {
                 delete_query = delete_query.bind(StringUuid::from(*role_id));
             }
             delete_query.execute(&self.pool).await?;
+        } else if let Some(service_id) = input.service_id {
+            // Empty role_ids with a service_id means "remove all roles for this service"
+            sqlx::query(
+                r#"
+                DELETE FROM user_tenant_roles
+                WHERE tenant_user_id = ?
+                  AND role_id IN (
+                    SELECT r.id FROM roles r WHERE r.service_id = ?
+                  )
+                "#,
+            )
+            .bind(tenant_user_id)
+            .bind(StringUuid::from(service_id))
+            .execute(&self.pool)
+            .await?;
         }
 
         // Insert the new role assignments

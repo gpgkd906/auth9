@@ -178,8 +178,10 @@ curl -s -X POST http://localhost:8080/api/v1/auth/token \
 
 ### 预期行为
 
-- HTTP 401
-- 错误信息: "Refresh token is not bound to an active session"
+- HTTP 400 (invalid_grant)
+- 错误信息: "Refresh token has already been used"
+
+> **说明**: Refresh token replay 检测在 session 绑定校验之前触发。旧文档中记录的 HTTP 401 / "Refresh token is not bound to an active session" 是 session 绑定校验的错误，但 replay 检测优先级更高，属于正确的安全行为。
 
 ---
 

@@ -118,6 +118,13 @@ WHERE email = 'admin@auth9.local';
 
 若 `mfa_enabled = 1`，说明本地数据已被先前测试修改。先执行 `./scripts/reset-docker.sh` 重建环境，再继续本场景；否则会被认证流程正常引导到 MFA 配置页，这不是 OAuth Demo Flow 缺陷。
 
+> **泄露密码拦截**: 默认管理员密码 `SecurePass123!` 在 HIBP 数据库中有 610+ 次泄露记录。若租户启用了 `breach_check_mode=blocking`（默认），托管登录页会返回 HTTP 422 "This password has been found in a data breach"，导致登录失败。解决方法：
+> 1. 执行 `./scripts/reset-docker.sh` 并配置一个非泄露密码，或
+> 2. 在测试前将目标租户的 breach_check_mode 设置为 `disabled`：
+>    ```sql
+>    UPDATE tenants SET breach_check_mode = 'disabled' WHERE slug = 'auth9-platform';
+>    ```
+
 ### 目的
 验证输入凭证后完成 OAuth code exchange，获取 Auth9-signed Identity Token，正确显示用户信息
 

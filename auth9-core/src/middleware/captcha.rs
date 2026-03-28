@@ -17,6 +17,7 @@ use redis::AsyncCommands;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tower::ServiceExt as _;
 
 /// Protected endpoints that require CAPTCHA verification
 const DEFAULT_PROTECTED_ENDPOINTS: &[&str] = &[
@@ -146,6 +147,174 @@ fn extract_captcha_token(request: &axum::extract::Request) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// Tower Layer for CAPTCHA verification.
+///
+/// Unlike `from_fn`-based middleware, this uses a dedicated `tower::Layer` + `tower::Service`
+/// pair so it counts as only one type-nesting level, avoiding axum's generic depth limits.
+#[derive(Clone)]
+pub struct CaptchaLayer {
+    pub state: CaptchaState,
+}
+
+impl<S> tower::Layer<S> for CaptchaLayer {
+    type Service = CaptchaService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        CaptchaService {
+            inner,
+            state: self.state.clone(),
+        }
+    }
+}
+
+/// Tower Service that performs CAPTCHA verification before forwarding to inner service.
+#[derive(Clone)]
+pub struct CaptchaService<S> {
+    inner: S,
+    state: CaptchaState,
+}
+
+impl<S> tower::Service<axum::extract::Request> for CaptchaService<S>
+where
+    S: tower::Service<axum::extract::Request, Response = Response> + Send + Clone + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: axum::extract::Request) -> Self::Future {
+        let state = self.state.clone();
+        let mut inner = self.inner.clone();
+        // Replace current service with the cloned one for the next call
+        std::mem::swap(&mut self.inner, &mut inner);
+
+        Box::pin(async move {
+            let response = captcha_check(state, request, inner).await;
+            Ok(response)
+        })
+    }
+}
+
+/// Core CAPTCHA verification logic, shared by tower Service impl and the `from_fn` middleware.
+async fn captcha_check<S>(
+    state: CaptchaState,
+    request: axum::extract::Request,
+    inner: S,
+) -> Response
+where
+    S: tower::Service<axum::extract::Request, Response = Response> + Send + 'static,
+    S::Future: Send + 'static,
+{
+    // Quick exit if disabled or not enabled
+    if state.mode == CaptchaMode::Disabled || !state.config.enabled {
+        return inner
+            .oneshot(request)
+            .await
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+
+    let method = request.method().as_str().to_uppercase();
+    let path = request.uri().path().to_string();
+
+    // Only check protected endpoints
+    if !state.is_protected(&method, &path) {
+        return inner
+            .oneshot(request)
+            .await
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+
+    // Determine if CAPTCHA is needed for this request
+    let captcha_needed = match state.mode {
+        CaptchaMode::Always => true,
+        CaptchaMode::Adaptive => {
+            let ua = request.headers().get("user-agent")
+                .and_then(|v| v.to_str().ok()).unwrap_or("");
+            let ip = extract_client_ip(&request);
+            check_adaptive_triggers(ua, ip.as_deref(), &state).await
+        }
+        CaptchaMode::Disabled => false,
+    };
+
+    if !captcha_needed {
+        let mut response = inner
+            .oneshot(request)
+            .await
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        response
+            .headers_mut()
+            .insert("X-Captcha-Required", "false".parse().unwrap());
+        return response;
+    }
+
+    // CAPTCHA is required — check for token
+    let token = extract_captcha_token(&request);
+    let remote_ip = extract_client_ip(&request);
+
+    match token {
+        Some(token) => {
+            match state.provider.verify(&token, remote_ip.as_deref()).await {
+                Ok(verification) if verification.success => {
+                    if let Some(score) = verification.score {
+                        if score < state.config.score_threshold {
+                            tracing::info!(
+                                score = score,
+                                threshold = state.config.score_threshold,
+                                path = %path,
+                                "CAPTCHA score below threshold"
+                            );
+                            metrics::counter!("auth9_captcha_low_score_total").increment(1);
+                            return captcha_required_response(&state.config.site_key);
+                        }
+                    }
+                    metrics::counter!("auth9_captcha_verified_total", "endpoint" => path.clone())
+                        .increment(1);
+                    let mut response = inner
+                        .oneshot(request)
+                        .await
+                        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+                    response
+                        .headers_mut()
+                        .insert("X-Captcha-Required", "false".parse().unwrap());
+                    response
+                }
+                Ok(_verification) => {
+                    tracing::info!(path = %path, "CAPTCHA verification failed");
+                    metrics::counter!("auth9_captcha_failed_total", "endpoint" => path.clone())
+                        .increment(1);
+                    captcha_required_response(&state.config.site_key)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        path = %path,
+                        "CAPTCHA provider error, failing open"
+                    );
+                    inner
+                        .oneshot(request)
+                        .await
+                        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+                }
+            }
+        }
+        None => {
+            metrics::counter!("auth9_captcha_missing_total", "endpoint" => path.clone())
+                .increment(1);
+            captcha_required_response(&state.config.site_key)
+        }
+    }
+}
+
 /// CAPTCHA verification middleware
 ///
 /// Reads CaptchaState from request extensions (injected via `axum::Extension` layer).
@@ -171,8 +340,10 @@ pub async fn captcha_middleware(request: axum::extract::Request, next: Next) -> 
     let captcha_needed = match state.mode {
         CaptchaMode::Always => true,
         CaptchaMode::Adaptive => {
+            let ua = request.headers().get("user-agent")
+                .and_then(|v| v.to_str().ok()).unwrap_or("");
             let ip = extract_client_ip(&request);
-            check_adaptive_triggers(&request, ip.as_deref(), &state).await
+            check_adaptive_triggers(ua, ip.as_deref(), &state).await
         }
         CaptchaMode::Disabled => false,
     };
@@ -273,16 +444,10 @@ fn captcha_required_response(site_key: &str) -> Response {
 /// 2. Same IP has >= N failed logins in the last M minutes (Redis counter)
 /// 3. Same IP has > N requests to protected endpoints in the last M minutes (Redis counter)
 async fn check_adaptive_triggers(
-    request: &axum::extract::Request,
+    user_agent: &str,
     client_ip: Option<&str>,
     state: &CaptchaState,
 ) -> bool {
-    // Trigger 1: missing or empty User-Agent
-    let user_agent = request
-        .headers()
-        .get("user-agent")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
 
     if user_agent.is_empty() {
         tracing::debug!("Adaptive CAPTCHA trigger: missing User-Agent");

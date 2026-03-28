@@ -93,6 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const user_id = formData.get("user_id") as string;
       const tenant_id = formData.get("tenant_id") as string;
       const roles_json = formData.get("roles") as string;
+      const service_id = formData.get("service_id") as string | null;
       const roles = JSON.parse(roles_json);
 
       await rbacApi.assignRoles(
@@ -100,6 +101,7 @@ export async function action({ request }: ActionFunctionArgs) {
           user_id,
           tenant_id,
           role_ids: roles,
+          ...(service_id ? { service_id } : {}),
         },
         accessToken || undefined
       );
@@ -346,6 +348,7 @@ export default function UsersPage() {
         user_id: managingRoles.user.id,
         tenant_id: managingRoles.tenant.id,
         roles: JSON.stringify(rolesToAdd),
+        ...(selectedServiceId ? { service_id: selectedServiceId } : {}),
       },
       { method: "post" }
     );

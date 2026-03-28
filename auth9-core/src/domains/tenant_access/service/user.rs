@@ -512,6 +512,10 @@ impl<
     ) -> Result<()> {
         self.repo.update_locked_until(id, locked_until).await
     }
+
+    pub async fn update_password_changed_at(&self, id: StringUuid) -> Result<()> {
+        self.repo.update_password_changed_at(id).await
+    }
 }
 
 #[cfg(test)]

@@ -479,6 +479,7 @@ pub async fn accept<S: HasInvitations>(
                     user_id: *user.id,
                     tenant_id: *invitation.tenant_id,
                     role_ids,
+                    service_id: None,
                 },
                 Some(invitation.invited_by),
             )

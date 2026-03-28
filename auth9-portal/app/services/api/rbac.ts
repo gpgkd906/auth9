@@ -46,6 +46,7 @@ export interface AssignRolesInput {
   user_id: string;
   tenant_id: string;
   role_ids: string[];
+  service_id?: string;
 }
 
 export interface UserRolesInTenant {
