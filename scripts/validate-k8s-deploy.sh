@@ -139,6 +139,25 @@ check_rollout() {
     fi
 }
 
+check_latest_image_pull_policy() {
+    local deployment="$1"
+    local image policy
+
+    image="$(kubectl get deploy "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+    policy="$(kubectl get deploy "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}' 2>/dev/null || true)"
+
+    if [[ "$image" != *":latest" ]]; then
+        print_info "$deployment 使用非 latest 镜像，跳过 imagePullPolicy 检查"
+        return 0
+    fi
+
+    if [[ "$policy" == "Always" ]]; then
+        print_success "$deployment 使用 :latest 且 imagePullPolicy=Always"
+    else
+        print_error "$deployment 使用 :latest 但 imagePullPolicy=$policy"
+    fi
+}
+
 check_http() {
     local label="$1"
     local url="$2"
@@ -290,6 +309,9 @@ main() {
     else
         print_error "auth9-portal 未正确引用 SESSION_SECRET"
     fi
+
+    check_latest_image_pull_policy "auth9-core"
+    check_latest_image_pull_policy "auth9-portal"
 
     echo ""
     print_info "检查公网可达性"

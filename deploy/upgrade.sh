@@ -172,17 +172,46 @@ run_init_job() {
     fi
 }
 
+apply_component_manifests() {
+    local name="$1"
+    shift
+    local manifests=("$@")
+
+    print_info "同步 $name Kubernetes 清单..."
+
+    local manifest
+    for manifest in "${manifests[@]}"; do
+        run_cmd kubectl apply -f "$manifest" -n "$NAMESPACE"
+    done
+
+    if [ -n "$DRY_RUN" ]; then
+        print_success "$name 清单预演完成"
+    else
+        print_success "$name 清单已同步"
+    fi
+}
+
 upgrade_component() {
     local name="$1"
     local deployment="$2"
+    shift 2
+    local manifests=("$@")
 
     print_info "升级 $name..."
 
+    apply_component_manifests "$name" "${manifests[@]}"
+
     # Get current image
     local current_image=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "unknown")
+    local current_pull_policy=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}' 2>/dev/null || echo "unknown")
     echo "    当前镜像: $current_image"
+    echo "    拉取策略: $current_pull_policy"
 
-    # Restart deployment (triggers image pull due to imagePullPolicy: Always)
+    if [[ "$current_image" == *":latest" && "$current_pull_policy" != "Always" ]]; then
+        print_warning "$name 使用 :latest 但 imagePullPolicy=$current_pull_policy；这会导致节点复用旧镜像缓存"
+    fi
+
+    # Restart deployment after reconciling manifests so pods re-pull the intended image
     run_cmd kubectl rollout restart deployment/"$deployment" -n "$NAMESPACE"
 
     if [ -n "$WAIT" ] && [ -z "$DRY_RUN" ]; then
@@ -230,14 +259,34 @@ main() {
     # Upgrade components
     case "$COMPONENT" in
         core)
-            upgrade_component "auth9-core" "auth9-core"
+            upgrade_component \
+                "auth9-core" \
+                "auth9-core" \
+                "$K8S_DIR/auth9-core/service.yaml" \
+                "$K8S_DIR/auth9-core/deployment.yaml" \
+                "$K8S_DIR/auth9-core/hpa.yaml"
             ;;
         portal)
-            upgrade_component "auth9-portal" "auth9-portal"
+            upgrade_component \
+                "auth9-portal" \
+                "auth9-portal" \
+                "$K8S_DIR/auth9-portal/service.yaml" \
+                "$K8S_DIR/auth9-portal/deployment.yaml" \
+                "$K8S_DIR/auth9-portal/hpa.yaml"
             ;;
         all)
-            upgrade_component "auth9-core" "auth9-core"
-            upgrade_component "auth9-portal" "auth9-portal"
+            upgrade_component \
+                "auth9-core" \
+                "auth9-core" \
+                "$K8S_DIR/auth9-core/service.yaml" \
+                "$K8S_DIR/auth9-core/deployment.yaml" \
+                "$K8S_DIR/auth9-core/hpa.yaml"
+            upgrade_component \
+                "auth9-portal" \
+                "auth9-portal" \
+                "$K8S_DIR/auth9-portal/service.yaml" \
+                "$K8S_DIR/auth9-portal/deployment.yaml" \
+                "$K8S_DIR/auth9-portal/hpa.yaml"
             ;;
         *)
             print_error "未知组件: $COMPONENT（可选: core, portal, all）"
