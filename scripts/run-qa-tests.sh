@@ -241,7 +241,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     echo "Docs with pre-built scripts in scripts/qa/auto/ run directly (FAST PATH)."
     echo "Docs without scripts are tested via an AI agent (AGENT PATH)."
     echo ""
-    echo "  --agent <mode>       Agent mode: 'minicode' (default), 'minimax', 'opencode', 'gemini', 'glm-5'"
+    echo "  --agent <mode>       Agent mode: 'minicode' (default), 'minimax', 'opencode', 'gemini', 'glm-5', 'gpt-mini'"
     echo "  --only-security      Run only security test documents (docs/security/)"
     echo "  --only-uiux          Run only UI/UX test documents (docs/uiux/)"
     echo "  --only-oidc          Run only OIDC conformance test documents (docs/oidc/)"
@@ -391,6 +391,12 @@ run_agent() {
             ;;
         glm-5)
             run_cmd "${t[@]}" kilocode run "读取文档：${rel_path}，执行QA测试" -m "kilo/z-ai/glm-5:free"
+            ;;
+        gpt-mini)
+            local codex_cmd="codex"
+            local codex_model="gpt-5.4-mini"
+            local prompt="读取文档：${rel_path}，执行QA测试"
+            run_cmd "${t[@]}" "$codex_cmd" exec "$prompt" -m "$codex_model"
             ;;
         *)
             echo -e "${RED}Unknown agent mode: ${AGENT_MODE}${NC}"
