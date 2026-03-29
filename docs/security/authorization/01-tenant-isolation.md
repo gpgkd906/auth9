@@ -42,6 +42,7 @@ Auth9 是多租户系统，核心隔离要求：
 | Token 邮箱非管理员，但仍绕过隔离 | Token 的 `sub`（user_id）复用了管理员用户的 ID，DB 查询发现该 user_id 在 auth9-platform 租户中有 admin 角色 | **Token 的 user_id 也不能使用管理员用户的 ID**。使用随机 UUID 或非管理员用户的真实 ID |
 | Token 无 tenant_id 却能访问租户数据 | Identity Token 被平台管理员绕过识别 | 确认测试账号不在 `PLATFORM_ADMIN_EMAILS` 列表中 |
 | 租户管理员能执行平台操作 | 该用户同时是平台管理员 | 检查 `PLATFORM_ADMIN_EMAILS` 配置，确保测试用户不在其中 |
+| 跨租户请求返回 404 而非预期的 403 | **设计行为**：系统故意返回 404 防止泄露租户存在性（IDOR 防护） | 这是正确行为，不是 bug。验证返回 404 即可 |
 | **`gen-test-tokens.js tenant-owner` 生成的 token 可访问系统设置** | **`tenant-owner` 类型硬编码使用 `admin@auth9.local` 邮箱**（平台管理员），返回 200 是正确行为 | **测试非管理员场景时，使用 `tenant-access` 类型**（邮箱为 `regular-user@example.com`），而非 `tenant-owner` |
 
 ---
@@ -66,8 +67,8 @@ Auth9 是多租户系统，核心隔离要求：
 3. 尝试枚举租户 ID
 
 ### 预期安全行为
-- 返回 403 Forbidden
-- 不泄露租户是否存在
+- 返回 **404 Not Found**（非 403）
+- **安全说明**: 系统故意返回 404 而非 403，以避免泄露租户是否存在。如果对不属于用户的租户返回 403，攻击者可以通过遍历 UUID 来确认哪些租户 ID 存在。返回 404 使攻击者无法区分"租户不存在"和"租户存在但无权访问"。这是设计行为，不是 bug。
 - 审计日志记录访问尝试
 
 ### 验证方法
@@ -78,12 +79,12 @@ TOKEN_A="..."
 # 尝试访问租户 2
 curl -H "Authorization: Bearer $TOKEN_A" \
   http://localhost:8080/api/v1/tenants/{tenant_2_id}
-# 预期: 403 {"error": "Access denied"}
+# 预期: 404（故意返回 404 而非 403，防止泄露租户存在性）
 
 # 尝试列出租户 2 的用户
 curl -H "Authorization: Bearer $TOKEN_A" \
   http://localhost:8080/api/v1/tenants/{tenant_2_id}/users
-# 预期: 403
+# 预期: 404
 
 # 检查审计日志
 SELECT * FROM audit_logs

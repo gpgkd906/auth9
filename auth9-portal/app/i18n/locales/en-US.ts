@@ -1740,6 +1740,8 @@ export default {
     noPermissionsDefined: "No permissions defined for this service.",
     createPermissionsFirst: "Create permissions in the Permissions tab first.",
     done: "Done",
+    circularInheritanceDetected: "Circular inheritance detected: this would create a cycle in the role hierarchy.",
+    inheritanceDepthExceeded: "Role inheritance depth exceeds the maximum limit.",
   },
   abacPage: {
     metaTitle: "ABAC Policies - Auth9",

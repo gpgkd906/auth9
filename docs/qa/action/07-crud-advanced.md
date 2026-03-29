@@ -180,7 +180,7 @@ SELECT COUNT(*) FROM action_executions WHERE action_id = '{action_id}';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 查看 Action 详情 | ☐ | | | |
-| 2 | 更新 Action | ☐ | | | |
-| 3 | 启用/禁用 Action | ☐ | | | |
-| 4 | 删除 Action | ☐ | | | |
+| 1 | 查看 Action 详情 | ✅ | 2026-03-29 | QA Testing Skill | API 测试通过 |
+| 2 | 更新 Action | ✅ | 2026-03-29 | QA Testing Skill | API 测试通过 |
+| 3 | 启用/禁用 Action | ✅ | 2026-03-29 | QA Testing Skill | API 测试通过 |
+| 4 | 删除 Action | ✅ | 2026-03-29 | QA Testing Skill | API 测试通过 |

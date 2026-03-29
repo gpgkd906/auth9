@@ -521,6 +521,7 @@ export default {
     createRoleTitle: "ロールを作成", createRoleDescription: "このサービスに新しいロールを追加します。", roleName: "ロール名", roleNamePlaceholder: "admin", roleDescriptionPlaceholder: "フルアクセスを持つ管理者ロール", parentRoleOptional: "親ロール（任意）", noParentRole: "親なし（ルートロール）", creating: "作成中...", create: "作成", editRoleTitle: "ロールを編集", editRoleDescription: "ロールの詳細を更新します。", saving: "保存中...", saveChanges: "変更を保存",
     createPermissionTitle: "権限を作成", createPermissionDescription: "このサービスに新しい権限を追加します。", permissionCode: "権限コード", permissionCodePlaceholder: "user:read", permissionCodeHint: "「resource:action」形式を使用（例: user:read, post:write）", displayName: "表示名", permissionNamePlaceholder: "ユーザーを読む", permissionDescriptionPlaceholder: "ユーザー情報の読み取りを許可",
     managePermissionsTitle: "権限を管理", managePermissionsDescription: "ロール{{name}}に権限を割り当てる", noPermissionsDefined: "このサービスには権限が定義されていません。", createPermissionsFirst: "まず権限タブで権限を作成してください。", done: "完了",
+    circularInheritanceDetected: "循環継承を検出：この操作はロール階層にサイクルを作成します。", inheritanceDepthExceeded: "ロール継承の深さが最大制限を超えています。",
   },
   abacPage: {
     metaTitle: "ABAC ポリシー - Auth9", policyJsonRulesRequired: "Policy JSONはrules配列を持つオブジェクトである必要があります", jsonObjectRequired: "{{field}}はJSONオブジェクトである必要があります", noActiveTenant: "アクティブなテナントが選択されていません", notAuthenticated: "認証されていません", simulationFieldsRequired: "シミュレーションのactionとresource typeは必須です", invalidIntent: "無効なインテント", unknownError: "不明なエラー",

@@ -33,6 +33,16 @@
 
 ---
 
+## 前置条件（浏览器登录场景）
+
+> **种子用户登录限制**：
+> - `testuser*@example.com` 系列用户在种子数据中**未设置密码**，无法直接浏览器登录
+> - `admin@auth9.local` 要求 WebAuthn MFA，无法在普通浏览器环境完成认证
+> - **推荐浏览器测试账号**：`mfa-user@auth9.local`，密码 `Auth9Dev!2026x`，配合 `reset-docker.sh` 输出的 TOTP secret 完成 MFA
+> - **API 测试替代**：不涉及 UI 交互的场景（如场景 1、2、4），优先使用 Access Token 直接调用 API
+
+---
+
 ## 场景 1：通过 API 获取当前用户信息
 
 ### 初始状态

@@ -23,6 +23,13 @@
 
 ### 前置条件（防止误报）
 
+> **⚠️ 种子数据中 `mfa-user@auth9.local` 的 TOTP 状态说明**:
+> `mfa-user@auth9.local` 在种子数据中已有 TOTP 凭据已配置的状态。如果需要测试**首次 TOTP 注册**流程，需要：
+> - (a) 在测试前手动删除该用户的 TOTP 凭据（通过数据库或 API），或
+> - (b) 创建一个新的测试用户，设置 `mfa_enabled=1` 但不配置 TOTP 凭据
+>
+> 如果直接使用 `mfa-user@auth9.local` 登录，系统会跳过 TOTP 注册页直接进入 TOTP 验证页（因为 TOTP 已配置），这不是 bug。
+
 > **MFA 测试用户**: 使用 `./scripts/reset-docker.sh` 种子化的 MFA 测试用户 `mfa-user@auth9.local`，该用户已预配置为"MFA 已启用但 TOTP 未配置"状态，适合直接测试首次 TOTP 注册流程。
 >
 > **启用 MFA 的 API 需要 Tenant Access Token**: `POST /api/v1/users/{id}/mfa` 是租户管理端点，不接受 Identity Token。如果使用 Identity Token 调用会返回 `403: "Identity token is only allowed for tenant selection and exchange"`。必须使用 Tenant Access Token：
@@ -90,6 +97,14 @@
 ---
 
 ## 场景 2：认证器选择（多认证方式）
+
+> **⚠️ 种子数据说明**: 默认种子数据中**没有**配置了多种认证方式（TOTP + WebAuthn）的用户。
+> 测试此场景需要手动准备：
+> 1. 为测试用户配置 TOTP 凭据（通过场景 1 的 TOTP 注册流程完成）
+> 2. 再为同一用户配置 WebAuthn/Passkey 凭据（通过浏览器 WebAuthn API 注册）
+> 3. 只有同一用户同时拥有多种认证方式时，认证器选择页面才会被触发
+>
+> 如果未完成上述准备，登录后会直接进入唯一已配置的认证方式页面（如仅 TOTP），不会出现认证器选择页。这不是 bug。
 
 ### 初始状态
 - 用户配置了多种认证方式（如 TOTP + WebAuthn/Passkey）

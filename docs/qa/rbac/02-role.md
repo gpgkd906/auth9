@@ -21,6 +21,22 @@
 
 ---
 
+## 前置条件
+
+> **MFA 对 UI 测试的影响**：所有默认种子用户均已启用 MFA：
+> - `admin@auth9.local` 要求 WebAuthn（硬件密钥）
+> - `mfa-user@auth9.local` 要求 TOTP
+>
+> **UI 测试方案**（二选一）：
+> 1. 临时禁用 MFA：`DELETE FROM webauthn_credentials WHERE user_id = (SELECT id FROM users WHERE email = 'admin@auth9.local');`
+> 2. 改用 API 测试：使用有效 Access Token 直接调用 API，绕过 MFA 登录流程
+>
+> | 症状 | 原因 | 解决方法 |
+> |------|------|----------|
+> | MFA 重定向阻断 UI 测试流程 | admin 用户绑定了 WebAuthn 凭证 | 删除 WebAuthn 凭证或改用 API 测试 |
+
+---
+
 ## 场景 1：角色管理入口可见性与创建角色
 
 ### 初始状态

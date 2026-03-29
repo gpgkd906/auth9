@@ -151,8 +151,8 @@
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 从 Portal 可见入口进入忘记密码页，Dark Mode 控件布局正确 | ☐ | | | |
-| 2 | Portal 忘记密码页在 Dark Mode 下具备清晰层级 | ☐ | | | |
-| 3 | Portal 重置密码页在 Dark Mode 下输入区和辅助文案可读 | ☐ | | | |
-| 4 | Auth9 品牌认证页在 Dark Mode 下的忘记密码/信息页无灰雾感 | ☐ | | | |
-| 5 | Dashboard Dark Mode 无明显视觉回退 | ☐ | | | |
+| 1 | 从 Portal 可见入口进入忘记密码页，Dark Mode 控件布局正确 | ✅ PASS | 2026-03-29 | opencode | |
+| 2 | Portal 忘记密码页在 Dark Mode 下具备清晰层级 | ✅ PASS | 2026-03-29 | opencode | |
+| 3 | Portal 重置密码页在 Dark Mode 下输入区和辅助文案可读 | ✅ PASS | 2026-03-29 | opencode | |
+| 4 | Auth9 品牌认证页在 Dark Mode 下的忘记密码/信息页无灰雾感 | ✅ PASS | 2026-03-29 | opencode | |
+| 5 | Dashboard Dark Mode 无明显视觉回退 | ✅ PASS | 2026-03-29 | opencode | |

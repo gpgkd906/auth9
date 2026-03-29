@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useRevalidator } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useRevalidator, useFetcher } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, CheckIcon, GearIcon, LockClosedIcon } from "@radix-ui/react-icons";
 import { useEffect, useRef, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
@@ -196,6 +196,13 @@ export default function RolesPage() {
 
   // Permission state
   const [createPermissionServiceId, setCreatePermissionServiceId] = useState<string | null>(null);
+  const permissionsFetcher = useFetcher<{ success?: boolean; role?: RoleWithPermissions }>();
+
+  // Pending dialog open state while fetcher is loading
+  const [pendingPermissionsDialog, setPendingPermissionsDialog] = useState<{
+    role: EditableRole;
+    permissions: Permission[];
+  } | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
 
@@ -226,6 +233,27 @@ export default function RolesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData]);
 
+  // Handle fetcher response for permissions loading
+  useEffect(() => {
+    if (permissionsFetcher.state === "idle" && permissionsFetcher.data && pendingPermissionsDialog) {
+      const { role, permissions } = pendingPermissionsDialog;
+      if (permissionsFetcher.data.success && permissionsFetcher.data.role) {
+        setManagingPermissionsRole({
+          role,
+          permissions,
+          rolePermissions: permissionsFetcher.data.role.permissions || [],
+        });
+      } else {
+        setManagingPermissionsRole({
+          role,
+          permissions,
+          rolePermissions: [],
+        });
+      }
+      setPendingPermissionsDialog(null);
+    }
+  }, [permissionsFetcher.state, permissionsFetcher.data, pendingPermissionsDialog]);
+
   useEffect(() => {
     if (createRoleServiceId) {
       setCreateParentRoleId(NO_PARENT_ROLE_VALUE);
@@ -236,41 +264,12 @@ export default function RolesPage() {
     setEditParentRoleId(editingRole?.parent_role_id || NO_PARENT_ROLE_VALUE);
   }, [editingRole]);
 
-  const openManagePermissions = async (role: EditableRole, servicePermissions: Permission[]) => {
-    // Fetch current role permissions
-    const formData = new FormData();
-    formData.append("intent", "get_role_permissions");
-    formData.append("role_id", role.id);
-
-    try {
-      const response = await fetch("", {
-        method: "POST",
-        body: formData,
-      });
-      const result = await response.json();
-
-      if (result.success && result.role) {
-        setManagingPermissionsRole({
-          role,
-          permissions: servicePermissions,
-          rolePermissions: result.role.permissions || [],
-        });
-      } else {
-        // Fallback: open with empty permissions
-        setManagingPermissionsRole({
-          role,
-          permissions: servicePermissions,
-          rolePermissions: [],
-        });
-      }
-    } catch {
-      // Fallback: open with empty permissions
-      setManagingPermissionsRole({
-        role,
-        permissions: servicePermissions,
-        rolePermissions: [],
-      });
-    }
+  const openManagePermissions = (role: EditableRole, servicePermissions: Permission[]) => {
+    setPendingPermissionsDialog({ role, permissions: servicePermissions });
+    permissionsFetcher.submit(
+      { intent: "get_role_permissions", role_id: role.id },
+      { method: "post" }
+    );
   };
 
   const togglePermission = (permissionId: string, isAssigned: boolean) => {

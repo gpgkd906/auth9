@@ -1733,6 +1733,8 @@ export default {
     noPermissionsDefined: "该服务尚未定义权限。",
     createPermissionsFirst: "请先在“权限”标签页中创建权限。",
     done: "完成",
+    circularInheritanceDetected: "检测到循环继承：此操作将在角色层次结构中创建循环。",
+    inheritanceDepthExceeded: "角色继承深度超过最大限制。",
   },
   abacPage: {
     metaTitle: "ABAC 策略 - Auth9",

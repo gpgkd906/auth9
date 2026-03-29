@@ -9,11 +9,35 @@
 
 ## 前置条件
 
-### 步骤 0: Gate Check
+### 步骤 0: 验证 Token 类型
+
+> **⚠️ 关键：Action CRUD 端点需要 Tenant Access Token（`token_type: "access"`）**
+>
+> `gen-admin-token.sh` 生成的是 Identity Token（`token_type: "identity"`），**不能**用于创建/修改/删除 Action。
+> 使用 Identity Token 调用 Action 端点会返回 `403: "Identity token is only allowed for tenant selection and exchange"`。
+>
+> **正确方式**：使用 `gen-test-tokens.js tenant-owner` 生成 Tenant Access Token，或通过 Token Exchange 流程将 Identity Token 转换为 Access Token：
+> ```bash
+> # 方式 1：直接生成 Tenant Access Token
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner | grep 'Bearer' | awk '{print $2}')
+>
+> # 方式 2：Token Exchange（Identity Token → Access Token）
+> IDENTITY_TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+> TOKEN=$(curl -sf -X POST http://localhost:8080/api/v1/auth/tenant-token \
+>   -H "Authorization: Bearer $IDENTITY_TOKEN" \
+>   -H "Content-Type: application/json" \
+>   -d "{\"tenant_id\": \"$TENANT_ID\"}" | jq -r '.access_token')
+> ```
+>
+> | 症状 | 原因 | 解决方法 |
+> |------|------|----------|
+> | 403 "Identity token is only allowed for tenant selection and exchange" | 使用了 `gen-admin-token.sh` 生成的 Identity Token 调用 Action CRUD 端点 | 改用 `gen-test-tokens.js tenant-owner` 生成 Access Token，或通过 Token Exchange 获取 |
+
+### 步骤 0.1: Gate Check
 
 1. **确保环境已初始化**：执行 `./scripts/reset-docker.sh` 以重置环境并创建测试用户。未执行此脚本时，`test@example.com` 用户不存在。
 2. 确认 auth9-core 已部署最新代码（包含 FR-006 变更）
-3. 准备 Admin API Token:
+3. 准备 Admin API Token（**注意：场景 1-2 中创建 Action 需使用 Tenant Access Token，见步骤 0**）:
 
 ```bash
 TOKEN=$(.claude/skills/tools/gen-admin-token.sh)

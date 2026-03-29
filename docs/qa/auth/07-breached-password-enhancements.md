@@ -131,6 +131,12 @@ WHERE tenant_id = '<TENANT_ID>';
 
 ## 场景 2：Warn 模式 — 注册使用泄露密码返回 password_warning（D3）
 
+> **⚠️ 关键前置条件：`POST /api/v1/users` 必须包含 `tenant_id`**
+>
+> 创建用户时请求体**必须**包含 `tenant_id` 字段，以便系统使用该租户的 PasswordPolicy。
+> 如果不提供 `tenant_id`，系统使用默认 `PasswordPolicy`（`breach_check_mode: "block"`），
+> 即使你已将租户策略设为 `warn`，注册泄露密码仍会返回 422 而非 201。
+
 ### 步骤 0（Gate Check）
 ```bash
 # 确认 auth9-core 运行中
@@ -168,7 +174,8 @@ curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/users \
   -d '{
     "email": "warn-mode-reg@example.com",
     "password": "password", <!-- pragma: allowlist secret -->
-    "name": "Warn Mode Registration Test"
+    "name": "Warn Mode Registration Test",
+    "tenant_id": "'"$TENANT_ID"'"
   }'
 # pragma: allowlist secret
 ```
@@ -181,7 +188,8 @@ curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/users \
   -d '{
     "email": "warn-mode-safe@example.com",
     "password": "Auth9-TestSafe-Xk9mR2pQ7vL4nW8j!", <!-- pragma: allowlist secret -->
-    "name": "Warn Mode Safe Test"
+    "name": "Warn Mode Safe Test",
+    "tenant_id": "'"$TENANT_ID"'"
   }'
 # pragma: allowlist secret
 ```
@@ -277,6 +285,11 @@ curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/auth/reset-pass
 
 ## 场景 4：Login-time async breach check 创建 required action（D1）
 
+> **⚠️ 关键前置条件：准备测试用户时 `POST /api/v1/users` 必须包含 `tenant_id`**
+>
+> 如果通过 API 创建测试用户（例如在 `disabled` 模式下创建使用泄露密码的用户），请求体**必须**包含 `tenant_id`。
+> 否则系统使用默认 `PasswordPolicy`（`breach_check_mode: "block"`），创建会被拦截返回 422。
+
 ### 步骤 0（Gate Check）
 ```bash
 curl -sf http://localhost:8080/health | jq .
@@ -366,6 +379,11 @@ AND action_type = 'update_password' AND status = 'pending';
 
 ## 场景 5：min_breach_count 阈值过滤与 disabled 模式（D2）
 
+> **⚠️ 关键前置条件：`POST /api/v1/users` 必须包含 `tenant_id`**
+>
+> 本场景的用户创建请求已包含 `tenant_id`（见下方 curl 示例）。如果遗漏该字段，系统使用默认 `PasswordPolicy`（`breach_check_mode: "block"`），
+> 导致在高阈值或 disabled 模式下仍然返回 422，产生误报。
+
 ### 步骤 0（Gate Check）
 ```bash
 curl -sf http://localhost:8080/health | jq .
@@ -452,6 +470,16 @@ WHERE email IN ('threshold-test@example.com', 'disabled-mode-test@example.com');
 -- 清理测试用户
 DELETE FROM users WHERE email IN ('threshold-test@example.com', 'disabled-mode-test@example.com');
 ```
+
+---
+
+## 故障排除
+
+| 现象 | 原因 | 解决方法 |
+|------|------|----------|
+| Warn 模式下 `POST /api/v1/users` 返回 422 而非 201 | 请求体未包含 `tenant_id`，系统使用默认 PasswordPolicy（`breach_check_mode: "block"`） | 在请求体中添加 `"tenant_id": "<TENANT_ID>"`，确保使用目标租户的密码策略 |
+| Disabled 模式下 `POST /api/v1/users` 返回 422 | 同上，缺少 `tenant_id` 导致使用默认策略 | 同上 |
+| 高 `min_breach_count` 阈值未生效 | 同上，缺少 `tenant_id` 导致使用默认策略 | 同上 |
 
 ---
 

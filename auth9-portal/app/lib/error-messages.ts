@@ -80,6 +80,22 @@ function mapSpecialApiError(
     return mapPasswordValidationErrors(error.message, locale);
   }
 
+  // Circular role inheritance detection
+  if (
+    error.code === "bad_request" &&
+    message.includes("circular inheritance")
+  ) {
+    return translate(locale, "rolesPage.circularInheritanceDetected");
+  }
+
+  // Role inheritance depth limit
+  if (
+    error.code === "bad_request" &&
+    message.includes("inheritance depth exceeds")
+  ) {
+    return translate(locale, "rolesPage.inheritanceDepthExceeded");
+  }
+
   // Credential-specific unauthorized errors should show the actual error,
   // not the generic "session expired" message.
   if (error.code === "unauthorized") {

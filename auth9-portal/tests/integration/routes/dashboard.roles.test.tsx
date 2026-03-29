@@ -1362,22 +1362,25 @@ describe("Roles Page", () => {
     // ============================================================================
 
     describe("manage permissions dialog", () => {
-        it("opens manage permissions dialog when clicking Permissions button", async () => {
-            // Mock the fetch call that openManagePermissions makes
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    role: { id: "r1", name: "Admin", permissions: [mockPermissions[0]] },
-                }),
+        // Helper: creates a route action that handles get_role_permissions intent
+        function mockPermissionsAction(rolePermissions: typeof mockPermissions) {
+            return async ({ request }: { request: Request }) => {
+                const formData = await request.formData();
+                const intent = formData.get("intent");
+                if (intent === "get_role_permissions") {
+                    return { success: true, role: { id: "r1", name: "Admin", permissions: rolePermissions } };
+                }
+                return { success: true };
             };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
+        }
 
+        it("opens manage permissions dialog when clicking Permissions button", async () => {
             const RoutesStub = createRoutesStub([
                 {
                     path: "/dashboard/roles",
                     Component: WrappedPage,
                     loader: () => mockLoaderData,
+                    action: mockPermissionsAction([mockPermissions[0]]),
                 },
             ]);
 
@@ -1396,25 +1399,15 @@ describe("Roles Page", () => {
                 expect(screen.getByRole("dialog")).toBeInTheDocument();
                 expect(screen.getByText("Manage Permissions")).toBeInTheDocument();
             });
-
-            vi.restoreAllMocks();
         });
 
         it("shows permission checkboxes in the manage permissions dialog", async () => {
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    role: { id: "r1", name: "Admin", permissions: [mockPermissions[0]] },
-                }),
-            };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
-
             const RoutesStub = createRoutesStub([
                 {
                     path: "/dashboard/roles",
                     Component: WrappedPage,
                     loader: () => mockLoaderData,
+                    action: mockPermissionsAction([mockPermissions[0]]),
                 },
             ]);
 
@@ -1438,25 +1431,15 @@ describe("Roles Page", () => {
             expect(within(dialog).getByText("Read Users")).toBeInTheDocument();
             expect(within(dialog).getByText("users:write")).toBeInTheDocument();
             expect(within(dialog).getByText("Write Users")).toBeInTheDocument();
-
-            vi.restoreAllMocks();
         });
 
         it("closes manage permissions dialog when Done is clicked", async () => {
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    role: { id: "r1", name: "Admin", permissions: [] },
-                }),
-            };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
-
             const RoutesStub = createRoutesStub([
                 {
                     path: "/dashboard/roles",
                     Component: WrappedPage,
                     loader: () => mockLoaderData,
+                    action: mockPermissionsAction([]),
                 },
             ]);
 
@@ -1480,18 +1463,15 @@ describe("Roles Page", () => {
             await waitFor(() => {
                 expect(screen.queryByText("Manage Permissions")).not.toBeInTheDocument();
             });
-
-            vi.restoreAllMocks();
         });
 
-        it("falls back to empty permissions when fetch fails", async () => {
-            vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
-
+        it("falls back to empty permissions when action returns error", async () => {
             const RoutesStub = createRoutesStub([
                 {
                     path: "/dashboard/roles",
                     Component: WrappedPage,
                     loader: () => mockLoaderData,
+                    action: async () => ({ success: false, error: "Network error" }),
                 },
             ]);
 
@@ -1510,25 +1490,15 @@ describe("Roles Page", () => {
                 expect(screen.getByRole("dialog")).toBeInTheDocument();
                 expect(screen.getByText("Manage Permissions")).toBeInTheDocument();
             });
-
-            vi.restoreAllMocks();
         });
 
-        it("falls back when fetch returns non-success result", async () => {
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: false,
-                    error: "Not found",
-                }),
-            };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
-
+        it("falls back when action returns non-success result", async () => {
             const RoutesStub = createRoutesStub([
                 {
                     path: "/dashboard/roles",
                     Component: WrappedPage,
                     loader: () => mockLoaderData,
+                    action: async () => ({ success: false, error: "Not found" }),
                 },
             ]);
 
@@ -1547,19 +1517,9 @@ describe("Roles Page", () => {
                 expect(screen.getByRole("dialog")).toBeInTheDocument();
                 expect(screen.getByText("Manage Permissions")).toBeInTheDocument();
             });
-
-            vi.restoreAllMocks();
         });
 
         it("shows empty permissions message when service has no permissions", async () => {
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    role: { id: "r1", name: "Admin", permissions: [] },
-                }),
-            };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
 
             // Create data where service has roles but no permissions
             const dataWithNoPermissions = {
@@ -1579,6 +1539,7 @@ describe("Roles Page", () => {
                     path: "/dashboard/roles",
                     Component: WrappedPage,
                     loader: () => dataWithNoPermissions,
+                    action: mockPermissionsAction([]),
                 },
             ]);
 
@@ -1604,19 +1565,9 @@ describe("Roles Page", () => {
                 expect(screen.getByText(/Create permissions in the Permissions tab first/)).toBeInTheDocument();
             });
 
-            vi.restoreAllMocks();
         });
 
         it("toggles permission assignment via checkbox", async () => {
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    role: { id: "r1", name: "Admin", permissions: [mockPermissions[0]] },
-                }),
-            };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
-
             let submittedFormData: Record<string, string> = {};
             const RoutesStub = createRoutesStub([
                 {
@@ -1625,7 +1576,11 @@ describe("Roles Page", () => {
                     loader: () => mockLoaderData,
                     action: async ({ request }) => {
                         const formData = await request.formData();
+                        const intent = formData.get("intent");
                         submittedFormData = Object.fromEntries(formData.entries()) as Record<string, string>;
+                        if (intent === "get_role_permissions") {
+                            return { success: true, role: { id: "r1", name: "Admin", permissions: [mockPermissions[0]] } };
+                        }
                         return { success: true };
                     },
                 },
@@ -1663,15 +1618,6 @@ describe("Roles Page", () => {
         });
 
         it("unassigns a permission via checkbox toggle", async () => {
-            const mockFetchResponse = {
-                ok: true,
-                json: async () => ({
-                    success: true,
-                    role: { id: "r1", name: "Admin", permissions: [mockPermissions[0]] },
-                }),
-            };
-            vi.spyOn(globalThis, "fetch").mockResolvedValue(mockFetchResponse as Response);
-
             let submittedFormData: Record<string, string> = {};
             const RoutesStub = createRoutesStub([
                 {
@@ -1680,7 +1626,11 @@ describe("Roles Page", () => {
                     loader: () => mockLoaderData,
                     action: async ({ request }) => {
                         const formData = await request.formData();
+                        const intent = formData.get("intent");
                         submittedFormData = Object.fromEntries(formData.entries()) as Record<string, string>;
+                        if (intent === "get_role_permissions") {
+                            return { success: true, role: { id: "r1", name: "Admin", permissions: [mockPermissions[0]] } };
+                        }
                         return { success: true };
                     },
                 },

@@ -392,10 +392,12 @@ kube-bench run --targets master,node
    - 修复版本是否与当前依赖树兼容
 
 ### 预期安全行为
-- 无 HIGH/CRITICAL 级别的 open 警报
+- 无 HIGH/CRITICAL 级别的 open 警报（已评估并记录 FR 的除外）
 - MEDIUM 级别警报应在 30 天内评估并处理
 - 已修复（fixed/dismissed）的警报有对应的升级记录
 - 所有 open 警报均已评估影响并记录处理计划
+
+> **已知例外**: path-to-regexp ReDoS (HIGH) — 传递依赖 via express@4，npm overrides 不兼容。实际可利用性 Low（Portal 不暴露用户可控的多参数路由）。详见 `docs/feature_request/supply_chain_path_to_regexp.md`。
 
 ### 验证方法
 ```bash

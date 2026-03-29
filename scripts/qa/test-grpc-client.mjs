@@ -27,7 +27,7 @@ function section(title) {
 }
 
 // Generate admin token
-const identityToken = execSync("cd /Volumes/Yotta/auth9 && .claude/skills/tools/gen-admin-token.sh")
+const identityToken = execSync(".claude/skills/tools/gen-admin-token.sh")
   .toString()
   .trim();
 
@@ -46,7 +46,7 @@ const userId = execSync(
   .toString()
   .trim();
 
-const certDir = "/Volumes/Yotta/auth9/deploy/dev-certs/grpc";
+const certDir = "deploy/dev-certs/grpc";
 const grpcAuth = {
   apiKey: "dev-grpc-api-key",
   mtls: {
