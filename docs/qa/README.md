@@ -223,6 +223,7 @@
 | [integration/24-keycloak-cleanup-phase1-2.md](./integration/24-keycloak-cleanup-phase1-2.md) | Keycloak 遗留清理 Phase 1+2 — 用户可见文案中性化、核心服务重命名验证 | 4 |
 | [integration/25-keycloak-cleanup-phase3-5.md](./integration/25-keycloak-cleanup-phase3-5.md) | Keycloak 遗留清理 Phase 3-5 — API 端点迁移、配置清理、模型重命名验证 | 5 |
 | [integration/26-keycloak-cleanup-phase6.md](./integration/26-keycloak-cleanup-phase6.md) | Keycloak 遗留清理 Phase 6 — 数据库 Schema 最终清理、DROP 旧列、COALESCE 移除 | 5 |
+| [integration/27-supply-chain-path-to-regexp.md](./integration/27-supply-chain-path-to-regexp.md) | 供应链 path-to-regexp ReDoS 漏洞修复验证 — lock 文件版本、构建兼容性、运行时验证 | 3 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |

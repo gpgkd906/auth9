@@ -25,6 +25,11 @@
         "tsx": "^4.19.0",
         "typescript": "^5.7.0"
     },
+    "overrides": {
+        "express": {
+            "path-to-regexp": "0.1.13"
+        }
+    },
     "engines": {
         "node": ">=18.0.0"
     }
