@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-router";
+import { useActionData, useLoaderData, useNavigation, Link, useFetcher } from "react-router";
 import { useState } from "react";
 import { getBrandMark } from "~/components/auth/AuthBrandPanel";
 import { AuthPageShell } from "~/components/AuthPageShell";
@@ -79,12 +79,14 @@ export default function ResetPasswordPage() {
     ...rawLoaderData,
     branding: { ...DEFAULT_PUBLIC_BRANDING, ...(rawLoaderData.branding ?? {}) },
   };
-  const actionData = useActionData<typeof action>();
+  const fetcher = useFetcher<typeof action>();
+  const routeActionData = useActionData<typeof action>();
+  const actionData = fetcher.data ?? routeActionData;
   const navigation = useNavigation();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const isSubmitting = navigation.state === "submitting";
+  const isSubmitting = fetcher.state === "submitting" || navigation.state === "submitting";
 
   // Show error if no token
   if ("error" in loaderData) {
@@ -182,7 +184,7 @@ export default function ResetPasswordPage() {
           <CardDescription className="auth-form-description">{t("auth.resetPassword.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Form method="post" className="space-y-4">
+          <fetcher.Form method="post" className="space-y-4">
             <input type="hidden" name="token" value={loaderData.token} />
 
             <div className="space-y-2">
@@ -228,7 +230,7 @@ export default function ResetPasswordPage() {
                 {t("common.buttons.backToLogin")}
               </Link>
             </div>
-          </Form>
+          </fetcher.Form>
         </CardContent>
       </Card>
     </AuthPageShell>

@@ -297,6 +297,11 @@ ORDER BY created_at DESC LIMIT 1;
 
 > **测试流程注意**: 若场景 4 (PUT group-mappings) 在场景 5 之前执行，且使用了不同的 `scim_group_id`，则 PUT 会替换原映射为新的 mapping（不同 id）。此时场景 5 的 DELETE 按原 group resource id 查找映射会找不到对应记录（返回 204 幂等响应），但新的映射仍然存在。建议测试时确保场景 5 使用的 `scim_group_id` 与当前映射中的一致。
 
+> **DELETE 日志验证注意**: 代码已正确记录 DELETE 操作到 `scim_provisioning_logs`。如果验证时查询不到 `operation = 'delete'` 记录，请注意：
+> 1. 确保使用**新鲜的测试数据**（先执行场景 1 创建 Group，再执行场景 5 删除），避免与之前的测试残留数据冲突。
+> 2. 查询时使用**更宽的时间范围**，例如 `WHERE created_at >= NOW() - INTERVAL 10 MINUTE`，避免因时钟偏差或延迟导致遗漏。
+> 3. 如果仅按 `LIMIT 1` 查询，可能取到更早的 create/update 记录而非最新的 delete 记录，建议按 `created_at DESC` 排序并检查前几条。
+
 ---
 
 ## 常见问题排查

@@ -51,6 +51,14 @@ Auth9 品牌设置支持两级配置：
 | allow_registration | BOOLEAN | 是否允许注册 |
 | email_otp_enabled | BOOLEAN | 是否启用 Email OTP 登录（默认 false，见 [auth/17-email-otp-login.md](../auth/17-email-otp-login.md)） |
 
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> /tenant/select -> /dashboard/settings).
+> If navigating to settings pages results in unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
+
 ---
 
 ## 场景 1：查看品牌设置页面

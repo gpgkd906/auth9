@@ -5,6 +5,13 @@
 
 ---
 
+## 前提条件
+
+- 全栈环境运行中（Docker + auth9-core on :8080 + auth9-portal on :3000）
+- **测试用户必须已有密码凭据（password credential）**：运行 `./scripts/reset-docker.sh` 重置环境并种子化测试数据，确保测试用户在 `credentials` 表中有 `credential_type = 'password'` 的记录。场景 4（MFA verify 路由）需要用户先完成密码登录以触发 MFA 挑战，若用户无密码凭据则无法进入该流程。
+
+---
+
 ## 场景 1：`/login` 由 Portal 托管认证入口
 
 ### 步骤 0：Gate Check

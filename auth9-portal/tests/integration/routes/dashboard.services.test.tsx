@@ -108,7 +108,7 @@ describe("Services Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("No services found")).toBeInTheDocument();
+            expect(screen.getByText("No services registered")).toBeInTheDocument();
         });
     });
 

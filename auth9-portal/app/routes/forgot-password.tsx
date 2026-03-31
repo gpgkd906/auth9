@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-router";
+import { useLoaderData, useFetcher, Link } from "react-router";
 import { useState } from "react";
 import { getBrandMark } from "~/components/auth/AuthBrandPanel";
 import { AuthPageShell } from "~/components/AuthPageShell";
@@ -56,14 +56,13 @@ export default function ForgotPasswordPage() {
   const loaderData = (useLoaderData<typeof loader>() ?? {}) as { branding?: BrandingConfig; captchaConfig?: CaptchaConfig };
   const branding = { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) };
   const captchaConfig = loaderData.captchaConfig ?? DEFAULT_CAPTCHA_CONFIG;
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
+  const fetcher = useFetcher<typeof action>();
   const [email, setEmail] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
 
-  const isSubmitting = navigation.state === "submitting";
+  const isSubmitting = fetcher.state === "submitting";
 
-  if (actionData?.success) {
+  if (fetcher.data && "success" in fetcher.data && fetcher.data.success) {
     return (
       <AuthPageShell
         branding={branding}
@@ -132,7 +131,7 @@ export default function ForgotPasswordPage() {
           <CardDescription className="auth-form-description">{t("auth.forgotPassword.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Form method="post" className="space-y-4">
+          <fetcher.Form method="post" className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">{t("common.labels.emailAddress")}</Label>
               <Input
@@ -147,9 +146,9 @@ export default function ForgotPasswordPage() {
               />
             </div>
 
-            {actionData?.error && (
+            {fetcher.data && "error" in fetcher.data && fetcher.data.error && (
               <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
-                {actionData.error}
+                {fetcher.data.error}
               </div>
             )}
 
@@ -166,7 +165,7 @@ export default function ForgotPasswordPage() {
                 {t("common.buttons.backToLogin")}
               </Link>
             </div>
-          </Form>
+          </fetcher.Form>
         </CardContent>
       </Card>
     </AuthPageShell>

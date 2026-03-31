@@ -10,24 +10,24 @@ export function ThemeToggle() {
     <div className="theme-toggle" role="group" aria-label={t("common.theme.label")} data-testid="theme-toggle">
       {theme === "light" ? (
         <button
-          role="button"
+          type="button"
           className={cn("theme-btn", "active")}
           onClick={() => setTheme("dark")}
           title={t("common.theme.switchToDark")}
           aria-label={t("common.theme.switchToDark")}
-          tabIndex={0}
+          aria-pressed={true}
           data-testid="theme-dark"
         >
           <MoonIcon />
         </button>
       ) : (
         <button
-          role="button"
+          type="button"
           className={cn("theme-btn", "active")}
           onClick={() => setTheme("light")}
           title={t("common.theme.switchToLight")}
           aria-label={t("common.theme.switchToLight")}
-          tabIndex={0}
+          aria-pressed={true}
           data-testid="theme-light"
         >
           <SunIcon />

@@ -49,6 +49,14 @@ curl -sf http://localhost:3000/ > /dev/null && echo "Portal OK"
 
 若登录时出现「邮箱或密码无效」，**首先确认是否已执行 `reset-docker.sh`**。该脚本初始化测试用户密码凭证；未执行时数据库中可能没有密码记录。
 
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> callback -> /tenant/select -> /dashboard).
+> If multi-step flows fail with unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
+
 ---
 
 ## 场景 1：标准登录流程

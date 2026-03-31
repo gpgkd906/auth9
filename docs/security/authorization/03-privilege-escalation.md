@@ -25,6 +25,19 @@ Auth9 权限层级：
 
 ---
 
+## 前置条件 - JWT Key 同步
+
+> **重要**: 测试脚本生成的 JWT Token 必须使用与 auth9-core 相同的 JWT 私钥。如果测试脚本使用了独立生成的密钥对或硬编码的密钥路径，会导致签名验证失败，所有请求返回 **401 Unauthorized**，误判为安全问题。
+>
+> **推荐做法**: 使用 `node .claude/skills/tools/gen_token.js`，该脚本从 `.env` 文件读取私钥，与 Docker 容器中 auth9-core 使用的密钥一致。
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 所有请求返回 401 Unauthorized | 测试脚本使用的 JWT 密钥与 auth9-core 不一致（key mismatch） | 改用 `node .claude/skills/tools/gen_token.js` 生成 Token，它从 `.env` 读取私钥，确保与 Docker 容器一致 |
+| Token 生成成功但请求仍返回 401 | `.env` 文件中的私钥与 Docker 容器中的不同步 | 运行 `./scripts/reset-docker.sh` 重置环境，确保密钥同步 |
+
+---
+
 ## 自动化回归脚本（推荐）
 
 可使用脚本快速执行本页的核心拒绝路径回归（动态取数，无硬编码 tenant/user/token）：

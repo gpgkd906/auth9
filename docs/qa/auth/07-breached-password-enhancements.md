@@ -38,6 +38,8 @@
 - 已知泄露：`123456`（HIBP 中出现 40M+ 次）
 - 安全密码：`Auth9-TestSafe-Xk9mR2pQ7vL4nW8j!`（极长随机字符串，不太可能出现在 HIBP 中）
 
+> **重要**: 创建用户请求必须包含 `tenant_id` 字段，否则系统将使用默认密码策略（block 模式）而非租户配置的策略。这是场景 2 和场景 5 中最常见的误报根因。所有 `POST /api/v1/users` 请求体中务必加入 `"tenant_id": "<TENANT_ID>"`。
+
 ---
 
 ## 场景 1：租户级 PasswordPolicy breach 字段配置（D2）

@@ -752,13 +752,12 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
             .context("Failed to check existing admin user")?;
 
     if let Some((existing_id,)) = existing_admin {
-        // Update existing admin user's identity_subject and email
+        // Update existing admin user's identity_subject (preserve existing email)
         sqlx::query(
-            r#"UPDATE users SET identity_subject = ?, email = ?, updated_at = NOW()
+            r#"UPDATE users SET identity_subject = ?, updated_at = NOW()
             WHERE id = ?"#,
         )
         .bind(&identity_subject)
-        .bind(&admin_email)
         .bind(&existing_id)
         .execute(&pool)
         .await

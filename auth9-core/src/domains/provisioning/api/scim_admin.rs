@@ -42,8 +42,10 @@ pub async fn create_token<S: ProvisioningContext>(
 /// GET /tenants/{tid}/sso/connectors/{cid}/scim/tokens - List tokens
 pub async fn list_tokens<S: ProvisioningContext>(
     State(state): State<S>,
-    Path((_tenant_id, connector_id)): Path<(String, String)>,
+    Path((tenant_id, connector_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<ScimTokenResponse>>, AppError> {
+    let _tid = StringUuid::parse_str(&tenant_id)
+        .map_err(|_| AppError::BadRequest("Invalid tenant ID".to_string()))?;
     let cid = StringUuid::parse_str(&connector_id)
         .map_err(|_| AppError::BadRequest("Invalid connector ID".to_string()))?;
 

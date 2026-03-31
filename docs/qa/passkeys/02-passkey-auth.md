@@ -9,6 +9,11 @@
 
 > **语言说明**: Portal 支持三种语言（`zh-CN` / `en-US` / `ja`），默认为 `zh-CN`。如需按英文按钮/标题执行本用例，请先在页面右上角切换到 `English`，或预置 `auth9_locale=en-US` cookie；如需日语，切换到 `日本語` 或预置 `auth9_locale=ja`。若未切换，测试时应以中文文案为准。
 
+## 前提条件
+
+- 全栈环境运行中（Docker + auth9-core on :8080 + auth9-portal on :3000）
+- **测试用户必须已有密码凭据（password credential）**：运行 `./scripts/reset-docker.sh` 重置环境并种子化测试数据，确保测试用户在 `credentials` 表中有 `credential_type = 'password'` 的记录。若测试用户无密码凭据，场景 2 的"密码登录 -> 注册 Passkey"步骤将失败。
+
 ## 背景说明
 
 登录页面新增「Sign in with passkey」按钮，与 SSO 登录并列。用户可使用已注册的 Passkey 进行 discoverable authentication（浏览器自动展示可用 Passkey 列表），无需输入用户名/密码。

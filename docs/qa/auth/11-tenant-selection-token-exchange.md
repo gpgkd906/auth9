@@ -19,6 +19,14 @@
 3. Identity Token 仅允许最小白名单接口；tenant 业务接口需使用 Tenant Access Token
 4. gRPC 调用应使用 tenant token（identity token 仅用于 exchange）
 
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> callback -> /tenant/select -> /dashboard).
+> If multi-step flows fail with unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
+
 ---
 
 ## 场景 1：tenant 选择入口可见性与多租户登录分流

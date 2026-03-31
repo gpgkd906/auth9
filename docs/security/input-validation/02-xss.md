@@ -26,6 +26,10 @@ Auth9 XSS 风险点：
 
 ## 场景 1：存储型 XSS - 用户资料
 
+> **[DEFERRED - bio field not implemented in current schema]**
+> 当前 `users` 表 schema 中不存在 `bio`（个人简介）字段。攻击步骤中涉及 bio 字段的注入测试暂不可执行。
+> display_name 和 avatar_url 字段的 XSS 测试仍可执行。
+
 ### 前置条件
 - 可编辑用户资料的账户
 
@@ -211,6 +215,9 @@ window.postMessage('<script>alert(1)</script>', '*');
 
 ## 场景 5：XSS 通过文件上传
 
+> **[DEFERRED - file upload endpoint not implemented]**
+> `/api/v1/users/me/avatar` 文件上传端点尚未实现。本场景所有攻击步骤暂不可执行。
+
 ### 前置条件
 - 文件上传功能 (头像、文档等)
 
@@ -266,11 +273,11 @@ curl -I http://localhost:8080/uploads/avatar/xss.svg
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
-| 1 | 存储型 XSS - 用户资料 | ☐ | | | |
+| 1 | 存储型 XSS - 用户资料 | ☐ | | | [DEFERRED - bio field not in schema; display_name/avatar_url testable] |
 | 2 | 存储型 XSS - 租户/服务配置 | ☐ | | | |
 | 3 | 反射型 XSS - 搜索/错误 | ☐ | | | |
 | 4 | DOM XSS - 前端处理 | ☐ | | | |
-| 5 | XSS 通过文件上传 | ☐ | | | |
+| 5 | XSS 通过文件上传 | ☐ | | | [DEFERRED - file upload endpoint not implemented] |
 
 ---
 

@@ -1818,6 +1818,8 @@ export default {
     manageTenants: "Manage Tenants",
     edit: "Edit",
     noUsersFound: "No users found",
+    emptyTitle: "No users yet",
+    emptyDescription: "Create your first user to get started with identity management.",
     clearFilter: "Clear Filter",
     email: "Email",
     displayName: "Display Name",

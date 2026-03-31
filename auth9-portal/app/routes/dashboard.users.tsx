@@ -449,6 +449,7 @@ export default function UsersPage() {
         pagination={users.pagination}
         users={users.data}
         onClearFilter={handleClearFilter}
+        onCreateUser={() => setCreatingUser(true)}
         onDeleteUser={handleDeleteUser}
         onEditUser={setEditingUser}
         onForceLogout={handleForceLogout}

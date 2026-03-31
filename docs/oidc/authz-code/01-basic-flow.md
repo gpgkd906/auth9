@@ -67,9 +67,14 @@ Issuer 地址：`http://localhost:8080`（Host 端测试）
    ```
 
 ### 预期结果
-- 步骤 2：302 重定向到 Hosted Login，URL 含 `login_challenge`（TTL 10 分钟）
+- 步骤 2：302 重定向到 Hosted Login，URL 含 `login_challenge`（存储在 Redis，TTL 10 分钟）
 - 步骤 5：302 重定向到 `{redirect_uri}`，query 含 `code` 和 `state=random-state-value`
 - 步骤 6：HTTP 200，返回 JSON 包含 `access_token`、`id_token`、`token_type`
+
+> **troubleshooting**: `login_challenge` 基于 Redis 存储，需确保 auth9-portal 和 auth9-core 连接到同一 Redis 实例。如果 authorize/complete 返回 `invalid_request` 或找不到 login_challenge，请检查：
+> 1. Redis 连接配置是否一致（host、port、db）
+> 2. Redis 实例是否正常运行（`redis-cli ping` 应返回 `PONG`）
+> 3. login_challenge 是否已过期（默认 TTL 10 分钟）
 
 ---
 
@@ -105,14 +110,14 @@ Issuer 地址：`http://localhost:8080`（Host 端测试）
 | `expires_in` | 正整数（秒） |
 
 ### 预期数据状态
-```sql
--- 验证 auth code 已被消费（单次使用）
-SELECT id, code, used, expires_at
-FROM authorization_codes
-WHERE client_id = '{client_id}'
-ORDER BY created_at DESC LIMIT 1;
--- 预期: used = 1 或记录已删除
-```
+
+> **注意**: Authorization codes 和 login challenges 存储在 Redis 中并设置短 TTL，不存储在数据库表中。Auth code 被消费后会从 Redis 中删除。
+>
+> ```bash
+> # 验证 auth code 已被消费（换取 token 后 key 应不存在）
+> redis-cli GET "authorization_code:<auth_code>"
+> # 预期: (nil) — 已被消费并删除
+> ```
 
 ---
 

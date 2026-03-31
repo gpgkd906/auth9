@@ -249,7 +249,7 @@ SELECT email, display_name FROM users WHERE display_name = 'Admin User';
    ```bash
    docker-compose exec auth9-core auth9-core init
    ```
-4. 查询新的 keycloak_id
+4. 查询新的 identity_subject
 
 ### 预期结果
 - Init 成功完成
@@ -297,8 +297,10 @@ WHERE u.display_name = 'Admin User';
 6. 查看租户列表
 
 > **重要**: 托管认证页登录使用 **用户名**（`admin`），不能使用 email（`admin@auth9.local`），
-> 除非 Realm 显式开启了 `loginWithEmailAllowed`。如果未设置 `AUTH9_ADMIN_PASSWORD` 环境变量，
+> 除非身份引擎显式开启了邮箱登录。如果未设置 `AUTH9_ADMIN_PASSWORD` 环境变量，
 > init 命令会生成随机密码并输出到日志中。
+>
+> **注意**: auth9-oidc 是 Auth9 自研的 OIDC 引擎，不是 Keycloak。不存在 `/.well-known/openid-configuration` 或 `/realms/auth9` 等 Keycloak 风格的端点。如果测试脚本引用了这些路径，会返回 404。auth9-oidc 的 OIDC 发现端点和用户管理 API 请参考 auth9-core 的内部调用方式。
 
 ### 预期结果
 - 登录流程正常完成，无错误

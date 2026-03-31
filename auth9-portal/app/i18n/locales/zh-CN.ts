@@ -1811,6 +1811,8 @@ export default {
     manageTenants: "管理租户",
     edit: "编辑",
     noUsersFound: "未找到用户",
+    emptyTitle: "暂无用户",
+    emptyDescription: "创建第一个用户以开始身份管理。",
     clearFilter: "清除筛选",
     email: "邮箱",
     displayName: "显示名称",

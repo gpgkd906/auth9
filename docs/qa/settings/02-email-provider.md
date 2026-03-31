@@ -25,6 +25,14 @@
 | ses | region, from_email |
 | oracle | smtp_endpoint, port, username, password, from_email |
 
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> /tenant/select -> /dashboard/settings).
+> If navigating to email settings results in unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
+
 ---
 
 ## 场景 1：邮件设置入口可见性与配置 SMTP 邮件服务

@@ -3,6 +3,7 @@ import {
   ExitIcon,
   Pencil2Icon,
   PersonIcon,
+  PlusIcon,
   TrashIcon,
 } from "@radix-ui/react-icons";
 import {
@@ -30,6 +31,7 @@ interface UsersDirectoryProps {
   };
   users: User[];
   onClearFilter: () => void;
+  onCreateUser: () => void;
   onDeleteUser: (user: User) => void | Promise<void>;
   onEditUser: (user: User) => void;
   onForceLogout: (user: User) => void | Promise<void>;
@@ -42,6 +44,7 @@ export function UsersDirectory({
   pagination,
   users,
   onClearFilter,
+  onCreateUser,
   onDeleteUser,
   onEditUser,
   onForceLogout,
@@ -95,11 +98,22 @@ export function UsersDirectory({
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center px-4 py-6 text-center text-[var(--text-tertiary)]">
-              <p>{t("usersPage.noUsersFound")}</p>
-              {currentSearch && (
+            <div className="flex flex-col items-center px-4 py-10 text-center">
+              <PersonIcon className="h-10 w-10 text-[var(--text-tertiary)]" />
+              <h3 className="mt-3 text-base font-semibold text-[var(--text-primary)]">
+                {currentSearch ? t("usersPage.noUsersFound") : t("usersPage.emptyTitle")}
+              </h3>
+              {!currentSearch && (
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">{t("usersPage.emptyDescription")}</p>
+              )}
+              {currentSearch ? (
                 <Button type="button" variant="ghost" className="mt-4 min-h-11" onClick={onClearFilter}>
                   {t("usersPage.clearFilter")}
+                </Button>
+              ) : (
+                <Button type="button" className="mt-4" onClick={onCreateUser}>
+                  <PlusIcon className="mr-2 h-4 w-4" />
+                  {t("usersPage.createUser")}
                 </Button>
               )}
             </div>
@@ -182,12 +196,23 @@ export function UsersDirectory({
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
+                  <td className="px-4 py-12 text-center" colSpan={5}>
                     <div className="flex flex-col items-center">
-                      <p>{t("usersPage.noUsersFound")}</p>
-                      {currentSearch && (
+                      <PersonIcon className="h-10 w-10 text-[var(--text-tertiary)]" />
+                      <h3 className="mt-3 text-base font-semibold text-[var(--text-primary)]">
+                        {currentSearch ? t("usersPage.noUsersFound") : t("usersPage.emptyTitle")}
+                      </h3>
+                      {!currentSearch && (
+                        <p className="mt-1 text-sm text-[var(--text-secondary)]">{t("usersPage.emptyDescription")}</p>
+                      )}
+                      {currentSearch ? (
                         <Button type="button" variant="ghost" className="mt-4 min-h-10" onClick={onClearFilter}>
                           {t("usersPage.clearFilter")}
+                        </Button>
+                      ) : (
+                        <Button type="button" className="mt-4" onClick={onCreateUser}>
+                          <PlusIcon className="mr-2 h-4 w-4" />
+                          {t("usersPage.createUser")}
                         </Button>
                       )}
                     </div>

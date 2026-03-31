@@ -107,7 +107,8 @@ async function loadSession(sid: string): Promise<SessionData | null> {
     const raw = await getRedis().get(SESSION_PREFIX + sid);
     if (!raw) return null;
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("[auth9-session] Failed to load session from Redis:", (err as Error)?.message || err);
     return null; // Redis unavailable → treat as no session
   }
 }
@@ -123,7 +124,8 @@ async function saveSession(sid: string, data: SessionData): Promise<string> {
       "EX",
       SESSION_TTL
     );
-  } catch {
+  } catch (err) {
+    console.error("[auth9-session] Failed to save session to Redis — cookie set but data not persisted:", (err as Error)?.message || err);
     // Redis unavailable — cookie is set but data won't persist;
     // next request will see no session and redirect to login
   }
@@ -133,8 +135,8 @@ async function saveSession(sid: string, data: SessionData): Promise<string> {
 async function removeSession(sid: string): Promise<void> {
   try {
     await getRedis().del(SESSION_PREFIX + sid);
-  } catch {
-    // Best-effort cleanup
+  } catch (err) {
+    console.warn("[auth9-session] Failed to remove session from Redis (best-effort):", (err as Error)?.message || err);
   }
 }
 

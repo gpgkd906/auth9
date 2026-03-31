@@ -75,6 +75,8 @@ SELECT COUNT(*) AS total FROM malicious_ip_blacklist;
 
 ## 场景 2：管理员保存平台级恶意 IP 黑名单
 
+> **Playwright 多行输入注意**: 在 Playwright 中使用 `fill()` 输入多行 IP 时，`fill()` 会发送字面量 `\n` 而非实际换行符，导致整个输入被解析为一个无效 IP。应改用 Playwright keyboard 方法：先 `fill()` 输入第一个 IP，然后用 `page.keyboard.press('Enter')` 换行，再用 `page.keyboard.type()` 输入后续 IP。或者直接通过 API (`PUT /api/v1/system/security/malicious-ip-blacklist`) 验证多 IP 保存功能。
+
 ### 初始状态
 - 平台管理员已登录
 - 当前黑名单可为空

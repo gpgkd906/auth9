@@ -84,6 +84,8 @@ WHERE tenant_id = '{tenant_id}';
 
 ## 场景 2：租户管理员保存租户级恶意 IP 黑名单
 
+> **Playwright 多行输入注意**: 在 Playwright 中使用 `fill()` 输入多行 IP 时，`fill()` 会发送字面量 `\n` 而非实际换行符，导致整个输入被解析为一个无效 IP。应改用 Playwright keyboard 方法：先 `fill()` 输入第一个 IP，然后用 `page.keyboard.press('Enter')` 换行，再用 `page.keyboard.type()` 输入后续 IP。或者直接通过 API (`PUT /api/v1/tenants/{tenant_id}/security/malicious-ip-blacklist`) 验证多 IP 保存功能。
+
 ### 初始状态
 - 租户管理员已登录 Portal
 - 已从「Tenants」列表进入目标租户详情页
@@ -147,6 +149,8 @@ WHERE tenant_id = '{tenant_id}' AND ip_address = 'not-an-ip';
 ---
 
 ## 场景 4：租户级黑名单仅影响当前租户
+
+> **测试用户要求**: 本场景的租户隔离验证要求测试用户**仅属于单个租户**。如果测试用户同时属于多个租户（`tenant_count > 1`），系统在根据 `identity_subject` 查找用户所属租户时会产生歧义，可能导致事件被分配到错误的租户上下文，使测试结果不可靠。请在步骤 0 中确认 `tenant_count = 1`，必要时创建专用的单租户测试用户。
 
 ### 初始状态
 - 租户 A = `{tenant_a_id}`，租户 B = `{tenant_b_id}`

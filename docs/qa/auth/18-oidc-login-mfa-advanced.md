@@ -15,7 +15,15 @@
 - `SelectAuthenticator.tsx` 承载的多认证方式选择页
 - Sign out 后的登录态清理回归
 
-这些场景仍属于「Sign in with password」主链路，但为满足“每文档不超过 5 个场景”的治理要求，单独拆分维护。
+这些场景仍属于「Sign in with password」主链路，但为满足”每文档不超过 5 个场景”的治理要求，单独拆分维护。
+
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> password -> MFA setup/verify -> /tenant/select -> /dashboard).
+> If multi-step flows fail with unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
 
 ---
 

@@ -19,7 +19,7 @@
 5. 缩小视口至移动端，验证网格从三列变为单列。
 
 ### 预期视觉效果
-- **返回按钮**: `variant="ghost" size="icon"` 仅图标按钮（ArrowLeftIcon），链接至 `/dashboard/tenants`（租户列表页）。不含文字标签，使用 `aria-label` 提供无障碍描述。
+- **返回按钮**: `variant="ghost" size="icon"` 仅图标按钮（ArrowLeftIcon），链接至 `/dashboard/tenants`（租户列表页）。不含文字标签，使用 `aria-label` 提供无障碍描述。在 Playwright accessibility snapshot 中会显示为 `link "返回租户列表"` 或 `link "Back to tenants"`——这是 `aria-label` 的值，不代表按钮含有可见文字。snapshot 内部包含 `img` 子元素即为 ArrowLeftIcon SVG，属于正确实现。
 - **租户名**: 24px `font-weight: 600`，`--text-primary`。
 - **网格布局**: `grid-cols-1 lg:grid-cols-3`，左侧 2 列（`col-span-2`）配置区 + 右侧 1 列快速链接。
 - **配置卡片**:
@@ -33,6 +33,12 @@
   - 包含 5 项: Services、Invitations、Webhooks、Enterprise SSO、SAML Applications。
 - **移动端**: 三列变单列，快速链接卡片在配置卡片下方。
 - **useFetcher**: Status/MFA 更改使用 `useFetcher` 提交，不触发整页刷新。
+
+### 排错指南
+
+| 现象 | 原因 | 解决方案 |
+|------|------|----------|
+| Playwright snapshot 显示返回按钮为 `link "返回租户列表"` 或 `link "Back to tenants"` | 这是 `aria-label` 的文字，非可见文字。icon-only 按钮使用 `aria-label` 提供无障碍描述，Playwright accessibility snapshot 会将其显示为元素标签 | 验证按钮是否为 icon-only 时，应检查 snapshot 内部是否包含 `img` 子元素（即 ArrowLeftIcon SVG），而非将 aria-label 文字误判为可见文字链接。包含 `img` 子元素的 `link` 节点即为正确的 icon-only 按钮实现 |
 
 ---
 
@@ -133,7 +139,7 @@
 
 ### 预期视觉效果
 - **返回按钮**: 所有子页面顶部统一使用 ArrowLeftIcon，`variant="ghost"`，链接至 `/dashboard/tenants/:tenantId`（Tenant Detail 页）。概览页的返回按钮链接至 `/dashboard/tenants`（租户列表页），因为它是 Tenant Detail 的根页面。
-- **返回按钮样式**: 仅图标按钮（`variant="ghost" size="icon"`），不含文字标签，使用 `aria-label` 提供无障碍描述。
+- **返回按钮样式**: 仅图标按钮（`variant="ghost" size="icon"`），不含文字标签，使用 `aria-label` 提供无障碍描述。在 Playwright accessibility snapshot 中会显示为 `link "返回租户列表"` 或 `link "Back to ..."` 等——这是 `aria-label` 的值，不代表按钮含有可见文字。snapshot 内部包含 `img` 子元素即为 ArrowLeftIcon SVG，属于正确实现。
 - **页面标题**: 24px `font-weight: 600`，紧跟在返回按钮下方，间距 `mb-6`（24px）。
 - **内容区**: 与主 Dashboard 页面共享侧边栏，内容区宽度一致。
 - **面包屑**: 可选。若有面包屑则使用 "/" 分隔，当前页面 `--text-primary`，父级 `--accent-blue` 可点击。

@@ -245,7 +245,7 @@ describe("Users Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
-            expect(screen.getAllByText("No users found").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("No users yet").length).toBeGreaterThan(0);
         });
     });
 

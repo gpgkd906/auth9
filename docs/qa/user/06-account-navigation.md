@@ -11,6 +11,14 @@
 
 若测试账号属于多个 tenant，登录后会先进入 `/tenant/select`。请先完成 tenant 选择与 token exchange，再执行下述 Dashboard 相关步骤。
 
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> /tenant/select -> /dashboard/account).
+> If navigating to account pages results in unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
+
 ---
 
 ## 场景 1：Account 入口可见性与侧边栏显示真实用户信息

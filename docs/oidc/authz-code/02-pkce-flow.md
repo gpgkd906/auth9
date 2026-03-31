@@ -66,19 +66,18 @@ echo "code_challenge: $CODE_CHALLENGE"
    ```
 
 ### 预期结果
-- HTTP 302 重定向到 Hosted Login 页面
+- HTTP 307 重定向到 Hosted Login 页面（Axum `Redirect::temporary()` 返回 307，符合 RFC 7231）
 - 重定向 URL 包含 `login_challenge` 参数
 - 不返回任何 PKCE 相关错误
 
 ### 预期数据状态
-```sql
--- 验证 login challenge 已创建并关联 PKCE 参数
-SELECT id, client_id, code_challenge, code_challenge_method, expires_at
-FROM login_challenges
-WHERE client_id = '{client_id}'
-ORDER BY created_at DESC LIMIT 1;
--- 预期: code_challenge 非空, code_challenge_method = 'S256'
-```
+
+> **注意**: PKCE state（login challenges 和 authorization codes）存储在 Redis 中并设置短 TTL，不存储在数据库表中。无需 SQL 验证，可通过 Redis CLI 检查：
+>
+> ```bash
+> redis-cli KEYS "login_challenge:*"
+> # 预期: 存在与当前请求关联的 key，包含 code_challenge 和 code_challenge_method 字段
+> ```
 
 ---
 
@@ -118,14 +117,14 @@ ORDER BY created_at DESC LIMIT 1;
 > **注意**: 使用 PKCE 时，Public Client 不需要提供 `client_secret`（通过 `-u` 或 body），code_verifier 本身即为 proof of possession。
 
 ### 预期数据状态
-```sql
--- 验证 auth code 已被消费
-SELECT id, code, used, code_challenge, code_challenge_method
-FROM authorization_codes
-WHERE client_id = '{client_id}'
-ORDER BY created_at DESC LIMIT 1;
--- 预期: used = 1, code_challenge 非空, code_challenge_method = 'S256'
-```
+
+> **注意**: PKCE state（login challenges 和 authorization codes）存储在 Redis 中并设置短 TTL，不存储在数据库表中。Auth code 被消费后会从 Redis 中删除。
+>
+> ```bash
+> # 验证 auth code 已被消费（换取 token 后 key 应不存在）
+> redis-cli GET "authorization_code:<auth_code>"
+> # 预期: (nil) — 已被消费并删除
+> ```
 
 ---
 
@@ -214,7 +213,7 @@ ORDER BY created_at DESC LIMIT 1;
 
 ### 预期结果
 - 步骤 1：HTTP 400，Public Client 必须提供 PKCE 参数
-- 步骤 2：HTTP 302，正常重定向到 Hosted Login
+- 步骤 2：HTTP 307，正常重定向到 Hosted Login
 
 > **说明**: PKCE 仅对 Public Client（`public_client=true`）强制要求。Confidential Client 可选择性使用 PKCE。
 
@@ -282,7 +281,7 @@ WHERE client_id = '{client_id}';
 ### 预期结果
 - 步骤 1：HTTP 400，`plain` method 不被支持
 - 步骤 2：HTTP 400，`S512` 为无效 method
-- 步骤 3：HTTP 302，S256 正常接受，重定向到 Hosted Login
+- 步骤 3：HTTP 307，S256 正常接受，重定向到 Hosted Login
 
 ---
 

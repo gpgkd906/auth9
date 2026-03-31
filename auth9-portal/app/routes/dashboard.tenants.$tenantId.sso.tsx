@@ -205,7 +205,7 @@ export default function TenantSsoPage() {
             </div>
 
             {providerType === "saml" && (
-              <>
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="entity_id">{t("tenants.sso.samlEntityId")}</Label>
                   <Input id="entity_id" name="entity_id" placeholder={t("tenants.sso.samlEntityIdPlaceholder")} />
@@ -218,7 +218,7 @@ export default function TenantSsoPage() {
                   <Label htmlFor="certificate">{t("tenants.sso.samlCertificate")}</Label>
                   <Input id="certificate" name="certificate" placeholder={t("tenants.sso.samlCertificatePlaceholder")} />
                 </div>
-              </>
+              </div>
             )}
             {providerType === "oidc" && (
               <>

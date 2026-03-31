@@ -31,6 +31,14 @@ Portal 路由：
 - 若测试时手工调用 `POST /api/v1/auth/tenant-token`，请与 Portal 一致使用 `auth9-portal`。
 - 使用 `auth9-m2m-test` / `auth9-demo` 作为 exchange 的 `service_id` 去验证 Portal 页面流转，会产生误报（401/403 或 service scope 错误）。
 
+> **Browser Session Persistence (Playwright)**
+> Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
+> The portal sets a `_session` cookie that must survive across redirects (login -> callback -> /tenant/select -> /onboard).
+> If multi-step flows fail with unexpected redirects back to `/login`, ensure you are using a **persistent browser context**:
+> - Use `--save-storage` / `--load-storage` to persist cookies across Playwright CLI invocations
+> - Or maintain a **single `BrowserContext`** for the entire multi-step flow (do not create a new context per step)
+> - Ephemeral (incognito-like) contexts will lose the `_session` cookie and break post-login navigation
+
 ---
 
 ## 场景 1：B2B Onboard 入口可见性与首次登录重定向

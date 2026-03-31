@@ -14,8 +14,8 @@ export function getRedis(): Redis {
       },
       lazyConnect: true,
     });
-    redis.connect().catch(() => {
-      // Connection failures are handled at call sites via try/catch
+    redis.connect().catch((err) => {
+      console.error("[auth9-session] Redis connection failed:", err?.message || err);
     });
   }
   return redis;
