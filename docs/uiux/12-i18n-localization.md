@@ -86,6 +86,8 @@ performance.getEntriesByType('navigation')[0];
 
 ## 场景 3：Dashboard 全局控件与导航语言一致
 
+> **环境排查注意（场景 3-5）**: Scenarios 3-5 require authenticated dashboard access. If login fails, run `./scripts/reset-docker.sh` to reset the environment. Scenarios 1-2 (login page i18n) can be tested independently.
+
 ### 初始状态
 - 用户已登录并进入 `/dashboard`
 - 已有至少 1 个 tenant

@@ -30,7 +30,7 @@ _send_kc_event() {
   local payload="$1"
   local sig
   sig=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $NF}')
-  api_raw POST /api/v1/keycloak/events \
+  api_raw POST /api/v1/identity/events \
     -H "Content-Type: application/json" \
     -H "x-keycloak-signature: sha256=$sig" \
     -d "$payload"

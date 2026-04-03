@@ -15,7 +15,7 @@
 
 - `GET /api/v1/system/security/malicious-ip-blacklist`
 - `PUT /api/v1/system/security/malicious-ip-blacklist`
-- `POST /api/v1/keycloak/events`
+- `POST /api/v1/identity/events`
 
 ---
 
@@ -161,7 +161,7 @@ echo "$SECRET"
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"203.0.113.10","error":"invalid_user_credentials","time":'$(date +%s000)',"details":{"username":"target@example.com","email":"target@example.com"}}'
 SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')
-curl -s -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "X-Keycloak-Signature: sha256=$SIG" \
   -d "$BODY"

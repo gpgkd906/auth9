@@ -217,6 +217,7 @@ curl -sS -i -X PUT "http://localhost:8080/api/v1/tenants/$TENANT_ID/password-pol
    - 预期: `200/201`，配置成功更新
 2. `TENANT_OWNER_ACCESS_TOKEN` 调用租户密码策略更新:
    - 预期: `200/201`，策略成功更新
+   - **注意**: `gen-test-tokens.js` 默认使用 `admin@auth9.local` email 生成 tenant-owner token，该 email 匹配 `PLATFORM_ADMIN_EMAILS` 配置，因此会被 `is_platform_admin_with_db()` 判定为平台管理员而非普通租户 owner。若要正确测试 **租户 owner 隔离**（验证租户 owner 仅能管理自己租户的策略），应使用非管理员 email：`node gen-test-tokens.js tenant-access --email tenant-owner@example.com`
 3. 以上操作应写入 audit log:
    - 预期: `audit_logs` 中出现 `system.email.update`、`system.branding.update`、`tenant.password_policy.update`（事件名可根据实现调整）
 

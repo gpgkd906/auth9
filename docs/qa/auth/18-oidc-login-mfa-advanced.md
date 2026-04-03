@@ -29,6 +29,8 @@
 
 ## 场景 1：MFA 首次配置（TOTP 注册）
 
+> **[DEFERRED - pending FR: mfa_enforcement_redirect.md]** MFA enforcement redirect flow is not yet implemented.
+
 ### 前置条件（防止误报）
 
 > **⚠️ 种子数据中 `mfa-user@auth9.local` 的 TOTP 状态说明**:

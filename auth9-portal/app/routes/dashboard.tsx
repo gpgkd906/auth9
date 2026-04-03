@@ -130,7 +130,7 @@ export default function Dashboard() {
       <div className="page-backdrop" />
 
       {/* Mobile Header */}
-      <header aria-label={t("common.navigation.mobileHeader")} className="md:hidden fixed top-0 left-0 right-0 h-16 z-[60] px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
+      <header aria-label={t("common.navigation.mobileHeader")} className="lg:hidden fixed top-0 left-0 right-0 h-16 z-[60] px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
         <Link to="/dashboard" className="flex items-center gap-2">
           <div className="logo-icon w-8 h-8 text-sm">A9</div>
           <span className="logo-text text-lg">Auth9</span>
@@ -151,7 +151,7 @@ export default function Dashboard() {
       {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity"
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}

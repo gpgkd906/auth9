@@ -8,6 +8,8 @@
 
 ## 场景 1：正常路径 — 社交登录创建 linked identity
 
+> **[DEFERRED - pending FR: social_login_google_idp.md]** No social identity providers are configured.
+
 ### 步骤 0：Gate Check
 
 ```bash
@@ -61,6 +63,8 @@ LIMIT 1;
 ---
 
 ## 场景 2：正常路径 — Unlink 后可重新 Link
+
+> **[DEFERRED - pending FR: social_login_google_idp.md]** No social identity providers are configured.
 
 ### 步骤 0：Gate Check
 
@@ -130,6 +134,8 @@ WHERE user_id = '{USER_ID}' AND provider_alias = 'google';
 
 ## 场景 3：安全 — prompt_confirm 策略阻止静默 takeover
 
+> **[DEFERRED - pending FR: social_login_google_idp.md]** No social identity providers are configured.
+
 ### 步骤 0：Gate Check
 
 ```bash
@@ -184,6 +190,8 @@ redis-cli GET "pending_merge:{merge_token}"
 ---
 
 ## 场景 4：安全 — create_new 策略创建独立账号
+
+> **[DEFERRED - pending FR: social_login_google_idp.md]** No social identity providers are configured.
 
 ### 步骤 0：Gate Check
 

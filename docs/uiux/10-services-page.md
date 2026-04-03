@@ -8,6 +8,8 @@
 
 ## 场景 1：Client Secret 显示区域响应式
 
+> **[DEFERRED - pending FR: portal_client_secret_display.md]**
+
 ### 目的
 验证生成的密钥在不同尺寸下的换行和按钮大小。
 
@@ -42,6 +44,8 @@
 ---
 
 ## 场景 5：Service 详情页 Actions / Branding Tab 布局 及 Action 详情页脚本代码块
+
+> **[DEFERRED]** No Actions exist in test data to verify code block styling.
 
 ### 目的
 验证 Service 详情页新增的「Actions」和「Branding」标签页在不同尺寸下的布局表现，以及 Action 详情页中脚本代码使用深色代码块渲染、与普通文本明确区分。

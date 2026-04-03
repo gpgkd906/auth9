@@ -452,11 +452,11 @@ PLATFORM_TENANT_ID=$(mysql -u root -h 127.0.0.1 -P 4000 auth9 -N -e \
   auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken
 ```
 
-## Keycloak Webhook Event Simulation
+## Identity Webhook Event Simulation
 
 **IMPORTANT**: See `references/api-testing-cookbook.md` for event type mapping and all recipes.
 
-- **Endpoint**: `POST http://localhost:8080/api/v1/keycloak/events`
+- **Endpoint**: `POST http://localhost:8080/api/v1/identity/events`
 - **Secret**: `dev-webhook-secret`
 - **Signature**: `x-keycloak-signature: sha256=<HMAC-SHA256 hex>`
 - **JSON fields**: camelCase (`credentialType`, `authMethod`, `ipAddress`)
@@ -466,7 +466,7 @@ BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-
 SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
-curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
   -H "x-keycloak-signature: sha256=$SIG" \
   -d "$BODY"

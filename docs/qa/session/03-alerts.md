@@ -35,6 +35,8 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/session/seed.sql
 - Step 2 确保用户同时存在于 Auth9 和底层认证主体映射中，并同步 `identity_subject`
 - seed.sql 预置的登录记录使 new_device 和 impossible_travel 检测能在本地环境触发
 
+> **前置条件 — auth9-oidc 身份存储**: 测试用户必须存在于 auth9-oidc 身份存储（identity store）中，而不仅仅存在于数据库中。仅通过 SQL INSERT 写入 `users` 表的用户无法通过登录认证（auth9-oidc 不知道该用户的密码凭据）。正确的做法是通过 Auth9 Portal 创建用户、通过用户 API 注册、或执行 `./scripts/reset-docker.sh` 使用预置的种子数据。
+
 ---
 
 ## 数据库表结构参考

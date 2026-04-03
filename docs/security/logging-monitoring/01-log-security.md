@@ -232,14 +232,14 @@ docker logs auth9-core 2>&1 | grep -i "REDACTED\|<REDACTED>"
 ### 攻击步骤
 1. **暴力破解检测**: 对同一账户连续 5 次错误登录，检查是否生成 HIGH 告警
 2. **密码喷洒检测**: 从同一 IP 对 5+ 不同账户尝试登录，检查是否生成 CRITICAL 告警
-3. **新设备检测**: 使用不同 User-Agent 登录，检查是否生成 INFO 告警
+3. **新设备检测**: 使用不同 User-Agent 登录，检查是否生成 Medium 告警
 4. **检测规避**: 使用低速攻击（每 3 分钟 1 次），验证是否绕过检测
 5. **检查告警列表是否正确展示**
 
 ### 预期安全行为
 - 暴力破解: 5 次失败 / 10 分钟 → HIGH 告警
 - 密码喷洒: 5+ 不同账户 / 同一 IP / 10 分钟 → CRITICAL 告警
-- 新设备: 新 IP+UA 组合 → INFO 告警
+- 新设备: 新 IP+UA 组合 → Medium 告警（`AlertSeverity` 枚举值为 Low/Medium/High/Critical，无 Info 级别）
 - 告警可通过 API 查询
 - 检测不影响正常用户体验（低误报率）
 
@@ -273,9 +273,14 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 # 预期: 至少 1 条 HIGH 级别告警
 
 # 密码喷洒检测测试
-for user in user1@test.com user2@test.com user3@test.com user4@test.com user5@test.com user6@test.com; do
-  send_webhook_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"203.0.113.20\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"$user\",\"email\":\"$user\"}}"
-  echo " - $user"
+# 重要: 每个事件必须使用不同的 userId（不仅仅是不同的 email）。
+# 检测逻辑使用 COALESCE(user_id, email) 计算 distinct 用户数量。
+# 如果所有事件共用同一个 userId，即使 email 不同，distinct count 仍为 1，不会触发阈值。
+SPRAY_USERS=("550e8400-0001-0001-0001-000000000001" "550e8400-0001-0001-0001-000000000002" "550e8400-0001-0001-0001-000000000003" "550e8400-0001-0001-0001-000000000004" "550e8400-0001-0001-0001-000000000005" "550e8400-0001-0001-0001-000000000006")
+SPRAY_EMAILS=(user1@test.com user2@test.com user3@test.com user4@test.com user5@test.com user6@test.com)
+for i in $(seq 0 5); do
+  send_webhook_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"${SPRAY_USERS[$i]}\",\"ipAddress\":\"203.0.113.20\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"${SPRAY_EMAILS[$i]}\",\"email\":\"${SPRAY_EMAILS[$i]}\"}}"
+  echo " - ${SPRAY_EMAILS[$i]}"
   sleep 0.5
 done
 
@@ -285,11 +290,18 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 # 预期: CRITICAL 级别告警 (alert_type: "password_spray")
 
 # 新设备检测测试
+# 重要: 新设备检测要求该用户已有历史成功登录记录（已知设备基线）。
+# 如果环境刚重置或该用户从未登录过，所有登录都是"首次"，不会产生"新设备"告警。
+# 先注入至少 1 条成功登录事件建立基线，再用不同 IP/UA 触发新设备检测。
+send_webhook_event "{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"192.168.1.100\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\",\"user_agent\":\"KnownDevice/1.0 (Linux)\"}}"
+echo " - baseline login (known device)"
+sleep 2
+# 然后用新 IP + 新 UA 登录触发告警
 send_webhook_event "{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"198.51.100.88\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\",\"user_agent\":\"NewDevice/1.0 (Unknown OS)\"}}"
 
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   "http://localhost:8080/api/v1/security/alerts?type=new_device&limit=5"
-# 预期: INFO 级别告警
+# 预期: Medium 级别告警（AlertSeverity 无 INFO，实际为 Medium）
 
 # 检测规避测试 - 低速攻击
 for i in $(seq 1 10); do

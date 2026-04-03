@@ -54,7 +54,7 @@
 
 前置条件：
 - Auth9 Core 已启动（默认 `http://localhost:8080`）。
-- **（重要）签名密钥已知**：Docker 环境默认配置 `KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret`（历史遗留环境变量名），所有发往 `/api/v1/keycloak/events` 的请求**必须**携带 `X-Keycloak-Signature` 头（HMAC-SHA256, hex），否则会被 401 拒绝。
+- **（重要）签名密钥已知**：Docker 环境默认配置 `KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret`（历史遗留环境变量名），所有发往 `/api/v1/identity/events` 的请求**必须**携带 `X-Keycloak-Signature` 头（HMAC-SHA256, hex），否则会被 401 拒绝。
 - 存在启用的 webhook，订阅 `security.alert`，URL 指向可接收的端点（建议 `webhook.site`）。
   - 创建方法：登录 Portal (`http://localhost:3000`, admin / SecurePass123!)，进入 Settings → Webhooks → 新建，URL 填 `https://webhook.site/<your-uuid>`，勾选 `security.alert` 事件。
 - 注意：`login_events.user_agent` 列类型为 `TEXT`，单条最大约 64KB；因此本场景建议把 `User-Agent` 控制在 `60000` 字符以内。
@@ -87,7 +87,7 @@ UA=”$(python3 -c 'print(“A” * 60000)')”
 TIME1=$(python3 -c “import time; print(int(time.time()*1000))”)
 BODY1=”{\”type\”:\”LOGIN\”,\”time\”:${TIME1},\”userId\”:\”00000000-0000-0000-0000-000000000001\”,\”ipAddress\”:\”203.0.113.10\”,\”details\”:{\”email\”:\”qa-big-payload@example.com\”}}”
 SIG1=$(sign_body “$BODY1”)
-curl -sS -X POST “http://localhost:8080/api/v1/keycloak/events” \
+curl -sS -X POST “http://localhost:8080/api/v1/identity/events” \
   -H “Content-Type: application/json” \
   -H “X-Keycloak-Signature: ${SIG1}” \
   -H “User-Agent: qa-small-ua” \
@@ -100,7 +100,7 @@ sleep 1
 TIME2=$(python3 -c “import time; print(int(time.time()*1000))”)
 BODY2=”{\”type\”:\”LOGIN\”,\”time\”:${TIME2},\”userId\”:\”00000000-0000-0000-0000-000000000001\”,\”ipAddress\”:\”203.0.113.10\”,\”details\”:{\”email\”:\”qa-big-payload@example.com\”}}”
 SIG2=$(sign_body “$BODY2”)
-curl -sS -X POST “http://localhost:8080/api/v1/keycloak/events” \
+curl -sS -X POST “http://localhost:8080/api/v1/identity/events” \
   -H “Content-Type: application/json” \
   -H “X-Keycloak-Signature: ${SIG2}” \
   -H “User-Agent: ${UA}” \

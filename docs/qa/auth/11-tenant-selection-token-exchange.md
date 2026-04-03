@@ -19,6 +19,8 @@
 3. Identity Token 仅允许最小白名单接口；tenant 业务接口需使用 Tenant Access Token
 4. gRPC 调用应使用 tenant token（identity token 仅用于 exchange）
 
+> **Token Audience 验证说明**: 生成的 Tenant Access Token 的 `aud` 字段必须与 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 配置匹配（默认包含 `auth9-portal`）。通过 Portal 正常流程 exchange 时 `aud=auth9-portal`，可正常通过验证。如果手动构造 token 或使用非默认 service_id exchange，需确认 audience 已注册。验证方法：`echo <token> | cut -d. -f2 | base64 -d | jq .aud`
+
 > **Browser Session Persistence (Playwright)**
 > Playwright CLI headless browser may not persist cookies between page navigations in ephemeral contexts.
 > The portal sets a `_session` cookie that must survive across redirects (login -> callback -> /tenant/select -> /dashboard).

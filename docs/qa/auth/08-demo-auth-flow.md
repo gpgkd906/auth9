@@ -86,6 +86,8 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
 
 ## 场景 3：托管认证页登录 → Dashboard 跳转 & Identity Token 验证
 
+> **环境排查注意**: The default seed user password may be flagged by HIBP breach checking. If `breach_check_mode=blocking` (Docker default), login will fail with '邮箱或密码无效'. To test, either change the seed password to a non-breached value or set `BREACH_CHECK_MODE=off` in the environment.
+
 ### 前置检查
 
 执行测试前请确认以下条件，避免环境问题导致误报：

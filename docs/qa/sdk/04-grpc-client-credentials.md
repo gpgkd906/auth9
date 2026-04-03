@@ -96,6 +96,8 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 -- 预期: 存在记录
 ```
 
+> **Token user_id 必须引用真实用户**: 测试 token 的 `user_id` 必须对应数据库 `users` 表中的真实用户记录。使用 `gen-test-tokens.js identity-user` 生成的 token 包含虚拟 user_id（不存在于 DB 中），会导致 token exchange 和 getUserRoles 等操作因找不到用户/租户成员关系而失败。推荐使用 `gen-test-tokens.js tenant-access --user-id <real_user_id>` 或通过浏览器 OIDC 登录获取真实 token。
+
 ---
 
 ## 场景 2：gRPC ValidateToken 与 IntrospectToken

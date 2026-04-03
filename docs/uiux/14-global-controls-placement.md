@@ -23,6 +23,10 @@
 
 ---
 
+## 环境排查注意
+
+> If rate limiting blocks login during testing, wait 15 minutes or run `./scripts/reset-docker.sh` to clear rate limit state. Scenarios 1-2 (landing page controls) can be tested without authentication.
+
 ## 场景 1：全局控件入口可见性（两个页面均需验证）
 
 ### 初始状态

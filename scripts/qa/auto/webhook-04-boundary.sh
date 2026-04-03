@@ -75,7 +75,7 @@ scenario 2 "大 Payload 处理" '
   BODY1="{\"type\":\"LOGIN\",\"time\":${TIME1},\"userId\":\"00000000-0000-0000-0000-000000000099\",\"ipAddress\":\"203.0.113.10\",\"details\":{\"email\":\"qa-big-payload@example.com\"}}"
   SIG1=$(sign_body "$BODY1")
 
-  resp=$(api_raw POST /api/v1/keycloak/events \
+  resp=$(api_raw POST /api/v1/identity/events \
     -H "Content-Type: application/json" \
     -H "X-Keycloak-Signature: ${SIG1}" \
     -H "User-Agent: qa-small-ua" \
@@ -90,7 +90,7 @@ scenario 2 "大 Payload 处理" '
   BODY2="{\"type\":\"LOGIN\",\"time\":${TIME2},\"userId\":\"00000000-0000-0000-0000-000000000099\",\"ipAddress\":\"203.0.113.10\",\"details\":{\"email\":\"qa-big-payload@example.com\"}}"
   SIG2=$(sign_body "$BODY2")
 
-  resp=$(api_raw POST /api/v1/keycloak/events \
+  resp=$(api_raw POST /api/v1/identity/events \
     -H "Content-Type: application/json" \
     -H "X-Keycloak-Signature: ${SIG2}" \
     -H "User-Agent: ${LARGE_UA}" \

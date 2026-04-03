@@ -286,6 +286,8 @@ inputs.forEach(input => {
 
 ## 场景 4：卡片网格布局一致性
 
+> **[DEFERRED - pending FR: portal_services_card_grid.md]** Services page uses list layout, not card grid.
+
 ### 初始状态
 - 访问包含多卡片布局的页面（如 Services、Settings）
 

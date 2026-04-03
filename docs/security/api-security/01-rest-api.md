@@ -77,6 +77,8 @@ curl http://localhost:8080/.well-known/openid-configuration
 
 ## 场景 2：Token 验证绕过
 
+> **环境排查注意**: Token validation tests require using the SAME JWT keypair as auth9-core. The `gen_token.js` script may use a different keypair than the one configured in `.env`. Verify key match: compare `SHA256` of the public key in both the script and the Docker env.
+
 ### 前置条件
 - 有效和无效的 Token 样本
 

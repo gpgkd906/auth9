@@ -6,6 +6,10 @@
 
 ---
 
+## 前提条件
+
+> **环境排查注意**: All dashboard scenarios require successful login. If TOTP/MFA validation fails, verify the TOTP secret matches the one stored in auth9-oidc. Run `./scripts/reset-docker.sh` to re-seed clean test data.
+
 ## 设计系统参考
 
 ### Liquid Glass 核心特征

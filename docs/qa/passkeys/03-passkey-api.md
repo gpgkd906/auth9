@@ -7,6 +7,10 @@
 
 ---
 
+## 前提条件
+
+> **环境排查注意**: Scenarios 1, 3, 4 require a valid Identity Token from browser login. If unable to login, these scenarios are blocked. Public endpoint scenarios (2, 5, 6) can still be tested independently.
+
 ## 背景说明
 
 WebAuthn 功能涉及 6 个 API 端点，分为三组：

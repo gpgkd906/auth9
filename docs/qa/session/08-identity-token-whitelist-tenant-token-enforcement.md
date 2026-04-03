@@ -146,6 +146,8 @@ curl -i "http://localhost:8080/api/v1/tenants/{tenant_id}" \
 - 两个 token 的 `aud` 字段分别为 `auth9-portal` 和 `auth9-demo`
 - **关键验证**：不同 service_id 签发的 token 都可以通过 middleware 的 audience 验证
 
+> **Audience 配置说明**: 确保每个 service 的 `client_id` 已注册在该租户的 `allowed_audiences` 配置中（动态存储在 Redis SET 中）。如果新创建的 service 的 token 返回 401，先检查 auth9-core 启动日志中是否有 `Audience validation set loaded into Redis`，以及该 service 的 `client_id` 是否已被同步到 Redis audience SET。
+
 ### 常见误报
 
 | 症状 | 原因 | 结论 |
@@ -215,6 +217,8 @@ curl -s "http://localhost:8080/api/v1/auth/userinfo" \
 ### 目的
 验证切租户后必须使用新交换 token，旧 token 不可跨租户访问
 
+> **Audience 配置提示**: 确保用于测试的 service 的 `client_id` 已注册在目标租户的 `allowed_audiences` 配置中。否则即使 token exchange 成功，后续 API 调用也会因 audience 验证失败返回 401。
+
 ### 测试操作流程
 1. 在 Portal 侧边栏切换到 `{tenant_b}`
 2. 记录网络请求中 `POST /api/v1/auth/tenant-token` 成功响应，得到 `{token_b}`
@@ -234,15 +238,15 @@ curl -i "http://localhost:8080/api/v1/tenants/{tenant_b}" \
 
 ### 预期结果
 - 切换动作触发新的 tenant token exchange
-- 第 3 步返回 `403 FORBIDDEN`（注：此行为已修复，跨租户 Tenant Access Token 访问现在正确返回 403 Forbidden，之前版本曾返回 404）
+- 第 3 步返回 `404 Not Found`（IDOR 防护：跨租户访问统一返回 404，防止泄露租户或资源存在性。与 `docs/security/authorization/01-tenant-isolation.md` 场景 1/3 一致。）
 - 第 4 步返回 `200 OK`
 
 ### 故障排查
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| 第 3 步返回 200 而非 403 | 使用了平台管理员账号（平台管理员可跨租户访问） | 使用非平台管理员用户重新测试 |
-| 两个请求都返回 403 | token 已过期或签名无效 | 确认 token exchange 正常并获取新 token |
+| 第 3 步返回 200 而非 404 | 使用了平台管理员账号（平台管理员可跨租户访问） | 使用非平台管理员用户重新测试 |
+| 两个请求都返回 404 | token 已过期或签名无效 | 确认 token exchange 正常并获取新 token |
 | 无法获取非管理员 Identity Token | Identity Token 只能通过浏览器 OIDC 流程获取，无 API 方式 | 使用 Playwright 自动化浏览器登录获取，或通过 `gen-test-tokens.js` 生成指定用户的 token |
 
 > **已知限制**: 本场景需要非平台管理员用户的 Identity Token，但 `gen-admin-token.sh` 只能生成 `admin@auth9.local`（平台管理员）的 token。如需测试，可使用 `gen-test-tokens.js` 工具为指定用户生成 token，或通过 Playwright 自动化浏览器 OIDC 登录流程获取 Identity Token。

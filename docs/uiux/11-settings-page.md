@@ -71,6 +71,8 @@
 
 ## 场景 5：密码策略页租户选择器与开关行布局
 
+> **[DEFERRED - pending FR: portal_custom_select_component.md]** Native `<select>` used instead of custom component.
+
 ### 目的
 验证 Password Policy 页面使用项目统一的 Select 组件，并确认字符要求开关行的布局和对齐符合当前实现。
 

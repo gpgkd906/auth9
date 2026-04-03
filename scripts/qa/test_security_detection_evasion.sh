@@ -21,7 +21,7 @@ send_signed_event() {
   local body="$1"
   local signature=$(echo -n "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $NF}')
   curl -s -o /dev/null -w "%{http_code}" \
-    -X POST "$API_BASE/api/v1/keycloak/events" \
+    -X POST "$API_BASE/api/v1/identity/events" \
     -H "Content-Type: application/json" \
     -H "X-Keycloak-Signature: sha256=$signature" \
     -d "$body"

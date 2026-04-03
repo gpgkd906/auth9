@@ -93,6 +93,6 @@
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | `state` 仅暴露抽象身份后端 | ☑ | 2026-03-30 | Codex | `rg` 已验证 |
-| 2 | Keycloak adapter contract 覆盖新增能力面 | ☑ | 2026-03-30 | Codex | `cargo test identity_engine` 已通过 |
-| 3 | `auth9_oidc` stub backend 保持最小 wiring | ☑ | 2026-03-30 | Codex | `cargo test identity_engine` 已通过 |
+| 1 | `state` 仅暴露抽象身份后端 | ☑ | 2026-04-03 | Codex | `rg` 已验证 |
+| 2 | Keycloak adapter contract 覆盖新增能力面 | ☑ | 2026-04-03 | Codex | `cargo test identity_engine` 已通过 |
+| 3 | `auth9_oidc` stub backend 保持最小 wiring | ☑ | 2026-04-03 | Codex | `cargo test identity_engine` 已通过 |

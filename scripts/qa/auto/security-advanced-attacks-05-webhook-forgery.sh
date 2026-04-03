@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/../lib/runner.sh"
 require_bin jq
 require_bin openssl
 
-WEBHOOK_ENDPOINT="/api/v1/keycloak/events"
+WEBHOOK_ENDPOINT="/api/v1/identity/events"
 VALID_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
 scenario 1 "Inbound Webhook signature forgery" '

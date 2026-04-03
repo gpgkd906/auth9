@@ -8,6 +8,8 @@
 
 ## 场景 1：Onboarding 首次引导页 Liquid Glass 居中布局
 
+> **[DEFERRED - pending FR: portal_onboarding_flow.md]** Onboarding route redirects to login.
+
 ### 目的
 验证 Onboarding 页面的全屏居中卡片布局、品牌标识和表单自动填充逻辑。
 

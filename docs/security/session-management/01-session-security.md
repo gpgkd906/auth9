@@ -204,6 +204,8 @@ ORDER BY created_at DESC;
 
 ## 场景 4：并发 Session 控制
 
+> **环境排查注意（管理员强制登出）**: The endpoint `POST /api/v1/admin/users/{id}/logout` exists and is implemented. If you get 404, verify the admin token has correct permissions (PolicyAction::SessionForceLogout requires platform admin role).
+
 ### 前置条件
 - 单个用户账户
 

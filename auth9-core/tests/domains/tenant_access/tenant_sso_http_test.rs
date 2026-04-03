@@ -99,7 +99,7 @@ async fn test_create_connector_unauthenticated_returns_401() {
 // ============================================================================
 
 #[tokio::test]
-async fn test_list_connectors_wrong_tenant_returns_403() {
+async fn test_list_connectors_wrong_tenant_returns_404() {
     let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
@@ -109,11 +109,11 @@ async fn test_list_connectors_wrong_tenant_returns_403() {
 
     let (status, _): (StatusCode, Option<Value>) =
         get_json_with_auth(&app, &sso_connectors_path(request_tenant_id), &token).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn test_create_connector_wrong_tenant_returns_403() {
+async fn test_create_connector_wrong_tenant_returns_404() {
     let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
@@ -128,11 +128,11 @@ async fn test_create_connector_wrong_tenant_returns_403() {
         &token,
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn test_update_connector_wrong_tenant_returns_403() {
+async fn test_update_connector_wrong_tenant_returns_404() {
     let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
@@ -148,11 +148,11 @@ async fn test_update_connector_wrong_tenant_returns_403() {
         &token,
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn test_delete_connector_wrong_tenant_returns_403() {
+async fn test_delete_connector_wrong_tenant_returns_404() {
     let state = TestAppState::new("http://localhost:8081");
     let app = build_test_router(state);
 
@@ -167,7 +167,7 @@ async fn test_delete_connector_wrong_tenant_returns_403() {
         &token,
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

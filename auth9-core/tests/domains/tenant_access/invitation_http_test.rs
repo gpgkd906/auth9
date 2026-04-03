@@ -590,7 +590,7 @@ async fn test_list_invitations_non_admin_identity_returns_403() {
 }
 
 #[tokio::test]
-async fn test_list_invitations_tenant_access_wrong_tenant_returns_403() {
+async fn test_list_invitations_tenant_access_wrong_tenant_returns_404() {
     let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
@@ -619,7 +619,7 @@ async fn test_list_invitations_tenant_access_wrong_tenant_returns_403() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -727,7 +727,7 @@ async fn test_create_invitation_tenant_access_member_returns_403() {
 }
 
 #[tokio::test]
-async fn test_create_invitation_cross_tenant_returns_403() {
+async fn test_create_invitation_cross_tenant_returns_404() {
     let state = TestAppState::new("http://localhost:8081");
 
     let tenant = create_test_tenant(None);
@@ -762,7 +762,7 @@ async fn test_create_invitation_cross_tenant_returns_403() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

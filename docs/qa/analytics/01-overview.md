@@ -48,6 +48,8 @@
 > 如果 `/login` 页面本身出现跳转、按钮、CSP 或联邦登录问题，应归类到认证文档，不应作为 Analytics 缺陷建票。
 >
 > **故障排查 — 密码登录失败**: 若使用默认测试密码登录时提示”邮箱或密码无效”，检查 Docker 日志 (`docker logs auth9-core`) 是否显示 “Breached password detected”。默认密码策略启用了泄露密码检测（`breach_check_mode: “block”`）。解决方法：(1) 先执行 `./scripts/reset-docker.sh` 重置环境；(2) 确认环境中 HIBP API 不可达时检测会被跳过。
+>
+> **前置条件 — Token 类型**: Analytics API 必须使用 Tenant Access Token（不是 Identity Token）。Identity Token 仅用于租户选择和 token exchange。如果 API 返回 403，请先确认已完成 `POST /api/v1/auth/tenant-token` 交换，使用返回的 Tenant Access Token 访问 Analytics 端点。
 
 ### 目的
 验证分析概览页面正确显示统计数据

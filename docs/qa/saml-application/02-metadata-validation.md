@@ -175,6 +175,7 @@ curl -s "http://localhost:8080/api/v1/tenants/{tenant_b_id}/saml-apps/{app_id}" 
 curl -s "http://localhost:8080/api/v1/tenants/{tenant_a_id}/saml-apps/{app_id}" \
   -H "Authorization: Bearer $TOKEN_B" | jq .
 # 预期: 404 Not Found（IDOR 防护：策略层检测到跨租户访问后返回 404，防止租户 ID 枚举）
+# 注: 此行为已在代码中修复确认。此前部分跨租户路径曾返回 403，现已统一为 404。
 ```
 
 ### 预期结果

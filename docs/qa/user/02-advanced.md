@@ -48,6 +48,12 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}';
 
 ## 场景 2：启用用户 MFA
 
+> **Token user_id 必须匹配真实数据库用户（误报排查要点）**
+>
+> - Token 的 `sub` claim（即 `user_id`）**必须**对应数据库中实际存在的用户。如果使用硬编码的 userId 生成 token，但该 userId 在当前环境数据库中不存在，MFA 操作将返回 404 not found。
+> - 使用 `gen-access-token.js` 时，先确认脚本中硬编码的 `userId` 在当前数据库中存在：`SELECT id FROM users WHERE id = '<hardcoded-userId>';`
+> - 使用 `gen-test-tokens.js` 时，传入实际的 admin user_id：`node gen-test-tokens.js admin --user-id <actual-user-id-from-db>`
+
 ### 前置检查
 
 ```bash
@@ -136,6 +142,10 @@ SELECT mfa_enabled FROM users WHERE id = '{user_id}';
 ---
 
 ## 场景 3：禁用用户 MFA
+
+> **Token user_id 必须匹配真实数据库用户（误报排查要点）**
+>
+> 与场景 2 相同的前提：Token 的 `sub`（user_id）必须对应数据库中实际存在的用户。详见场景 2 顶部的说明。
 
 ### 初始状态
 - 存在用户 id=`{user_id}`，mfa_enabled=true

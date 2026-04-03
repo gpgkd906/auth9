@@ -342,8 +342,8 @@ pub async fn enforce_with_state<S: HasServices>(
                     .tenant_id
                     .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
                 if token_tenant_id != **tenant_id {
-                    return Err(AppError::Forbidden(
-                        "Access denied: token is scoped to a different tenant".to_string(),
+                    return Err(AppError::NotFound(
+                        "Resource not found".to_string(),
                     ));
                 }
             }
@@ -587,8 +587,8 @@ fn require_tenant_admin_or_permission(
                 .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
 
             if token_tenant_id != *tenant_id {
-                return Err(AppError::Forbidden(
-                    "Access denied: token is scoped to a different tenant".to_string(),
+                return Err(AppError::NotFound(
+                    "Resource not found".to_string(),
                 ));
             }
 
@@ -627,8 +627,8 @@ fn require_tenant_scope_match(
             if auth.tenant_id == Some(*tenant_id) {
                 Ok(())
             } else {
-                Err(AppError::Forbidden(
-                    "Access denied: token is scoped to a different tenant".to_string(),
+                Err(AppError::NotFound(
+                    "Resource not found".to_string(),
                 ))
             }
         }
@@ -641,8 +641,8 @@ fn require_tenant_scope_match(
             if auth.tenant_id == Some(*tenant_id) {
                 Ok(())
             } else {
-                Err(AppError::Forbidden(
-                    "Access denied: token is scoped to a different tenant".to_string(),
+                Err(AppError::NotFound(
+                    "Resource not found".to_string(),
                 ))
             }
         }
@@ -920,7 +920,7 @@ mod tests {
 
         let result = enforce(&config, &user, &input);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 
     #[test]
@@ -1367,7 +1367,7 @@ mod tests {
 
         let result = enforce(&config, &user, &input);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 
     #[test]
@@ -1450,7 +1450,7 @@ mod tests {
 
         let result = enforce(&config, &user, &input);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 
     #[test]
@@ -1471,7 +1471,7 @@ mod tests {
     // ── Cross-tenant enforcement tests (TenantAccess and ServiceClient) ──
 
     #[test]
-    fn test_tenant_read_cross_tenant_returns_forbidden() {
+    fn test_tenant_read_cross_tenant_returns_not_found() {
         let config = create_test_config(vec![]);
         let tenant_a = StringUuid::new_v4();
         let tenant_b = StringUuid::new_v4();
@@ -1483,11 +1483,11 @@ mod tests {
 
         let result = enforce(&config, &user, &input);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 
     #[test]
-    fn test_tenant_write_cross_tenant_returns_forbidden() {
+    fn test_tenant_write_cross_tenant_returns_not_found() {
         let config = create_test_config(vec![]);
         let tenant_a = StringUuid::new_v4();
         let tenant_b = StringUuid::new_v4();
@@ -1499,11 +1499,11 @@ mod tests {
 
         let result = enforce(&config, &user, &input);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 
     #[test]
-    fn test_service_client_cross_tenant_returns_forbidden() {
+    fn test_service_client_cross_tenant_returns_not_found() {
         let config = create_test_config(vec![]);
         let tenant_a = StringUuid::new_v4();
         let tenant_b = StringUuid::new_v4();
@@ -1515,7 +1515,7 @@ mod tests {
 
         let result = enforce(&config, &client, &input);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+        assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
 
     #[test]

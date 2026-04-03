@@ -133,7 +133,7 @@ curl -s http://localhost:8080/health
 6. 发送原始 TCP 垃圾数据到 gRPC 端口
 
 ### 预期安全行为
-- 空消息返回 INVALID_ARGUMENT 错误
+- 空消息返回 INVALID_ARGUMENT 错误（proto3 中空字符串字段会作为 JWT 解析，返回 `Invalid identity token: JWT error: InvalidToken`）
 - 超大消息被限制（gRPC max message size）
 - Unknown fields 被忽略（Protobuf 默认行为）
 - 格式错误的数据返回 INTERNAL 错误
@@ -146,7 +146,10 @@ grpcurl -plaintext \
   -H "x-api-key: $API_KEY" \
   -d '{}' \
   localhost:50051 auth9.TokenService/ExchangeToken
-# 预期: ERROR - Missing required field: identity_token
+# 预期: ERROR - Invalid identity token: JWT error: InvalidToken
+# 注意: proto3 没有 required 字段验证。空消息中 string 字段默认为 ""（空字符串），
+# 不会触发 "Missing required field" 错误。空字符串作为 JWT 传入解析器后，
+# 返回的是 JWT 解析错误而非字段缺失错误。
 
 # 超大字段值
 grpcurl -plaintext \

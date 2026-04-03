@@ -279,6 +279,8 @@ WHERE u.display_name = 'Admin User';
 
 ## 场景 5：Portal 登录验证种子数据可用性
 
+> **环境排查注意**: After resetting Docker, the Portal session JWT signing key may go out of sync with auth9-core. If login API returns 200 but UI shows validation error, restart the Portal container to re-sync session keys.
+
 ### 初始状态
 - 场景 1 已成功执行
 - auth9-core 和 auth9-portal 均已启动

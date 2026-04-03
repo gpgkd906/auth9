@@ -75,5 +75,5 @@
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | auth9-core 使用 auth9_oidc 后端启动成功 | ✅ | 2026-03-24 | QA | 日志显示 `Identity backend: auth9_oidc`，health 返回 200 |
-| 2 | `auth9-oidc` 独立服务 `/health` 返回成功 | ✅ | 2026-03-24 | QA | service/identity_backend/database 字段均正确 |
+| 1 | auth9-core 使用 auth9_oidc 后端启动成功 | ✅ | 2026-04-03 | QA | 日志显示 `Identity backend: auth9_oidc`，health 返回 200 |
+| 2 | `auth9-oidc` 独立服务 `/health` 返回成功 | ✅ | 2026-04-03 | QA | service/identity_backend/database 字段均正确 |

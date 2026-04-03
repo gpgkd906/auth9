@@ -20,7 +20,7 @@
 
 ### 事件 Webhook 安全校验（P0-3）
 
-Auth9 事件接入使用 Webhook 模式：事件兼容入口将事件推送到 `POST /api/v1/keycloak/events`。
+Auth9 事件接入使用 Webhook 模式：事件兼容入口将事件推送到 `POST /api/v1/identity/events`。
 
 安全规则：
 - **生产环境**：必须配置 Webhook Secret（`KEYCLOAK_WEBHOOK_SECRET`，历史遗留环境变量名），否则拒绝启动
