@@ -125,6 +125,7 @@
 | [auth/30-mfa-self-service-portal.md](./auth/30-mfa-self-service-portal.md) | Portal MFA 自助管理页面（TOTP 设置/移除、恢复码生成弹窗、导航入口、警告阈值） | 5 |
 | [auth/31-email-otp-user-toggle.md](./auth/31-email-otp-user-toggle.md) | 用户级 Email OTP 开关（MFA 页面卡片、启用/停用、登录双重检查、认证保护） | 5 |
 | [auth/32-breached-password-detection.md](./auth/32-breached-password-detection.md) | 泄露密码检测 HIBP（注册/修改/重置拦截、k-Anonymity、Fail-open 降级、HIBP_ENABLED 开关） | 5 |
+| [auth/36-mfa-enforcement-redirect.md](./auth/36-mfa-enforcement-redirect.md) | MFA 强制配置重定向（mfa_enabled + 无凭证时自动创建 CONFIGURE_TOTP action、TOTP 配置后恢复正常流程） | 4 |
 | [auth/adaptive_mfa.md](./auth/adaptive_mfa.md) | Adaptive MFA 风险驱动策略（策略 GET/PUT、可信设备列表、持久化验证、认证保护） | 5 |
 | [auth/008_auth_boundary_consolidation.md](./auth/008_auth_boundary_consolidation.md) | Auth Boundary Consolidation（AuthUser audience 动态校验、Redis fail-closed 503、token_type 访问控制） | 5 |
 

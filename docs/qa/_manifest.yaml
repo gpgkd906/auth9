@@ -286,6 +286,14 @@ documents:
     has_entry_visibility: true
     has_checklist: true
     last_reviewed: 2026-03-22
+  - id: auth/36-mfa-enforcement-redirect
+    path: docs/qa/auth/36-mfa-enforcement-redirect.md
+    module: auth
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-04-03
   - id: identity-provider/01-crud
     path: docs/qa/identity-provider/01-crud.md
     module: identity-provider

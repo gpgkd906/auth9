@@ -485,7 +485,7 @@ pub async fn password_login<
     // Check for pending required actions
     let pending_actions = match state
         .required_actions_service()
-        .check_post_login_actions(&user.identity_subject)
+        .check_post_login_actions(&user.identity_subject, user.mfa_enabled, has_mfa_enrolled)
         .await
     {
         Ok(actions) => actions,

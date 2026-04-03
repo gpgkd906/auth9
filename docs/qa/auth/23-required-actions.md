@@ -21,6 +21,7 @@ Action 类型与 Portal 页面映射：
 | `verify_email` | `/verify-email` | 邮箱验证 |
 | `update_password` | `/force-update-password` | 强制更新密码 |
 | `complete_profile` | `/complete-profile` | 补充 profile |
+| `CONFIGURE_TOTP` | `/mfa/setup-totp` | MFA 强制配置（mfa_enabled=true 且无 MFA 凭证时自动创建） |
 
 登录后跳转逻辑（`login.tsx` action）：
 ```
