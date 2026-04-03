@@ -91,6 +91,18 @@ export async function action({ request }: ActionFunctionArgs) {
     };
     const cookie = await commitSession(session);
 
+    // Redirect to first pending action if any (e.g., password expired)
+    if (result.pending_actions && result.pending_actions.length > 0) {
+      const first = result.pending_actions[0];
+      let actionUrl = first.redirect_url.includes("?")
+        ? `${first.redirect_url}&action_id=${first.id}`
+        : `${first.redirect_url}?action_id=${first.id}`;
+      if (loginChallenge) {
+        actionUrl += `&login_challenge=${encodeURIComponent(loginChallenge)}`;
+      }
+      return redirect(actionUrl, { headers: { "Set-Cookie": cookie } });
+    }
+
     // Complete OIDC authorization flow if login_challenge is present
     if (loginChallenge && result.access_token) {
       try {

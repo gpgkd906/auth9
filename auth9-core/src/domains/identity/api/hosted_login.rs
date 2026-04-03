@@ -189,37 +189,37 @@ pub async fn password_login<
             .await;
     }
 
+    // Resolve tenant password policy (used for breach check + password max-age enforcement)
+    let tenant_password_policy = {
+        let memberships = state
+            .user_service()
+            .get_user_tenants(user.id)
+            .await
+            .unwrap_or_default();
+        if let Some(first) = memberships.first() {
+            state
+                .tenant_service()
+                .get(first.tenant_id)
+                .await
+                .ok()
+                .and_then(|t| t.password_policy)
+                .unwrap_or_default()
+        } else {
+            crate::models::password::PasswordPolicy::default()
+        }
+    };
+
     // Async breach check: after successful password auth, check HIBP in background.
     // If breached, create a required action to force password change on next login.
     // Respects tenant-level breach_check_on_login and min_breach_count settings.
     if let Some(breach_svc) = state.breached_password_service() {
-        // Resolve tenant password policy for breach check settings
-        let breach_policy = {
-            let memberships = state
-                .user_service()
-                .get_user_tenants(user.id)
-                .await
-                .unwrap_or_default();
-            if let Some(first) = memberships.first() {
-                state
-                    .tenant_service()
-                    .get(first.tenant_id)
-                    .await
-                    .ok()
-                    .and_then(|t| t.password_policy)
-                    .unwrap_or_default()
-            } else {
-                crate::models::password::PasswordPolicy::default()
-            }
-        };
-
-        if breach_policy.breach_check_on_login && breach_policy.breach_check_mode != "disabled" {
+        if tenant_password_policy.breach_check_on_login && tenant_password_policy.breach_check_mode != "disabled" {
             let breach_svc = breach_svc.clone();
             let password_clone = password.clone();
             let user_id = user.id;
             let identity_subject = user.identity_subject.clone();
             let identity_engine = state.identity_engine().clone();
-            let min_breach_count = breach_policy.min_breach_count;
+            let min_breach_count = tenant_password_policy.min_breach_count;
             tokio::spawn(async move {
                 let result = breach_svc.check_password(&password_clone).await;
                 if result.is_breached && result.breach_count >= min_breach_count {
@@ -485,7 +485,13 @@ pub async fn password_login<
     // Check for pending required actions
     let pending_actions = match state
         .required_actions_service()
-        .check_post_login_actions(&user.identity_subject, user.mfa_enabled, has_mfa_enrolled)
+        .check_post_login_actions(
+            &user.identity_subject,
+            user.mfa_enabled,
+            has_mfa_enrolled,
+            user.password_changed_at,
+            tenant_password_policy.max_age_days,
+        )
         .await
     {
         Ok(actions) => actions,

@@ -5,6 +5,7 @@
 
 use crate::error::Result;
 use crate::identity_engine::IdentityEngine;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -58,6 +59,8 @@ impl RequiredActionService {
         identity_subject: &str,
         mfa_enabled: bool,
         has_mfa_credential: bool,
+        password_changed_at: Option<DateTime<Utc>>,
+        max_age_days: u32,
     ) -> Result<Vec<PendingActionResponse>> {
         let mut actions = self.get_pending_actions(identity_subject).await?;
 
@@ -77,6 +80,33 @@ impl RequiredActionService {
                 action_type: ACTION_UPDATE_PASSWORD.to_string(),
                 redirect_url: Self::action_redirect_url(ACTION_UPDATE_PASSWORD),
             });
+        }
+
+        // Check if password has exceeded max_age_days policy
+        if max_age_days > 0
+            && !actions
+                .iter()
+                .any(|a| a.action_type == ACTION_UPDATE_PASSWORD)
+        {
+            let expired = match password_changed_at {
+                Some(changed_at) => {
+                    Utc::now().signed_duration_since(changed_at).num_days()
+                        >= max_age_days as i64
+                }
+                None => true, // No record of password change → treat as expired
+            };
+            if expired {
+                let id = self
+                    .identity_engine
+                    .action_store()
+                    .create_action(identity_subject, ACTION_UPDATE_PASSWORD, None)
+                    .await?;
+                actions.push(PendingActionResponse {
+                    id,
+                    action_type: ACTION_UPDATE_PASSWORD.to_string(),
+                    redirect_url: Self::action_redirect_url(ACTION_UPDATE_PASSWORD),
+                });
+            }
         }
 
         // MFA enabled but no credential configured → force TOTP setup
@@ -499,7 +529,7 @@ mod tests {
     async fn check_creates_configure_totp_when_mfa_enabled_no_credential() {
         let (service, engine) = make_service(vec![], false);
         let actions = service
-            .check_post_login_actions("user-1", true, false)
+            .check_post_login_actions("user-1", true, false, None, 0)
             .await
             .unwrap();
         assert_eq!(actions.len(), 1);
@@ -514,7 +544,7 @@ mod tests {
     async fn check_skips_configure_totp_when_has_credential() {
         let (service, engine) = make_service(vec![], false);
         let actions = service
-            .check_post_login_actions("user-1", true, true)
+            .check_post_login_actions("user-1", true, true, None, 0)
             .await
             .unwrap();
         assert!(actions.is_empty());
@@ -526,7 +556,7 @@ mod tests {
     async fn check_skips_configure_totp_when_mfa_disabled() {
         let (service, engine) = make_service(vec![], false);
         let actions = service
-            .check_post_login_actions("user-1", false, false)
+            .check_post_login_actions("user-1", false, false, None, 0)
             .await
             .unwrap();
         assert!(actions.is_empty());
@@ -544,7 +574,7 @@ mod tests {
         }];
         let (service, engine) = make_service(existing, false);
         let actions = service
-            .check_post_login_actions("user-1", true, false)
+            .check_post_login_actions("user-1", true, false, None, 0)
             .await
             .unwrap();
         assert_eq!(actions.len(), 1);
@@ -557,11 +587,81 @@ mod tests {
     async fn check_both_password_and_totp_actions() {
         let (service, _engine) = make_service(vec![], true);
         let actions = service
-            .check_post_login_actions("user-1", true, false)
+            .check_post_login_actions("user-1", true, false, None, 0)
             .await
             .unwrap();
         assert_eq!(actions.len(), 2);
         assert_eq!(actions[0].action_type, ACTION_UPDATE_PASSWORD);
         assert_eq!(actions[1].action_type, ACTION_CONFIGURE_TOTP);
+    }
+
+    // -- Password max-age enforcement tests --
+
+    #[tokio::test]
+    async fn check_creates_update_password_when_max_age_expired() {
+        let (service, engine) = make_service(vec![], false);
+        let changed_at = Utc::now() - chrono::Duration::days(91);
+        let actions = service
+            .check_post_login_actions("user-1", false, false, Some(changed_at), 90)
+            .await
+            .unwrap();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action_type, ACTION_UPDATE_PASSWORD);
+        assert_eq!(actions[0].redirect_url, "/force-update-password");
+        let created = engine.action_store.create_called.lock().unwrap();
+        assert_eq!(created.as_slice(), &[ACTION_UPDATE_PASSWORD]);
+    }
+
+    #[tokio::test]
+    async fn check_skips_update_password_when_within_max_age() {
+        let (service, engine) = make_service(vec![], false);
+        let changed_at = Utc::now() - chrono::Duration::days(30);
+        let actions = service
+            .check_post_login_actions("user-1", false, false, Some(changed_at), 90)
+            .await
+            .unwrap();
+        assert!(actions.is_empty());
+        let created = engine.action_store.create_called.lock().unwrap();
+        assert!(created.is_empty());
+    }
+
+    #[tokio::test]
+    async fn check_creates_update_password_when_no_changed_at() {
+        let (service, engine) = make_service(vec![], false);
+        let actions = service
+            .check_post_login_actions("user-1", false, false, None, 90)
+            .await
+            .unwrap();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action_type, ACTION_UPDATE_PASSWORD);
+        let created = engine.action_store.create_called.lock().unwrap();
+        assert_eq!(created.as_slice(), &[ACTION_UPDATE_PASSWORD]);
+    }
+
+    #[tokio::test]
+    async fn check_skips_age_when_max_age_zero() {
+        let (service, engine) = make_service(vec![], false);
+        let actions = service
+            .check_post_login_actions("user-1", false, false, None, 0)
+            .await
+            .unwrap();
+        assert!(actions.is_empty());
+        let created = engine.action_store.create_called.lock().unwrap();
+        assert!(created.is_empty());
+    }
+
+    #[tokio::test]
+    async fn check_no_duplicate_update_password_for_temp_and_age() {
+        // Password is temporary AND expired — should only create one UPDATE_PASSWORD
+        let (service, engine) = make_service(vec![], true);
+        let actions = service
+            .check_post_login_actions("user-1", false, false, None, 1)
+            .await
+            .unwrap();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action_type, ACTION_UPDATE_PASSWORD);
+        let created = engine.action_store.create_called.lock().unwrap();
+        // Only one create call (from temporary check), age check skips due to duplicate guard
+        assert_eq!(created.len(), 1);
     }
 }

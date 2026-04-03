@@ -198,7 +198,7 @@
 | [sdk/09-auth-password-passkey-clients.md](./sdk/09-auth-password-passkey-clients.md) | 认证流程与凭证管理子客户端（Password/Passkeys/EmailOtp/Auth/Organizations） | 5 |
 | [sdk/10-observability-config-clients.md](./sdk/10-observability-config-clients.md) | 可观测性与系统配置子客户端（AuditLogs/Analytics/SecurityAlerts/System/EmailTemplates/Branding） | 5 |
 
-### 集成测试 (20 个文档, 91 个场景)
+### 集成测试 (21 个文档, 96 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 4 |
@@ -225,6 +225,7 @@
 | [integration/25-keycloak-cleanup-phase3-5.md](./integration/25-keycloak-cleanup-phase3-5.md) | Keycloak 遗留清理 Phase 3-5 — API 端点迁移、配置清理、模型重命名验证 | 5 |
 | [integration/26-keycloak-cleanup-phase6.md](./integration/26-keycloak-cleanup-phase6.md) | Keycloak 遗留清理 Phase 6 — 数据库 Schema 最终清理、DROP 旧列、COALESCE 移除 | 5 |
 | [integration/27-supply-chain-path-to-regexp.md](./integration/27-supply-chain-path-to-regexp.md) | 供应链 path-to-regexp ReDoS 漏洞修复验证 — lock 文件版本、构建兼容性、运行时验证 | 3 |
+| [integration/28-password-max-age-enforcement.md](./integration/28-password-max-age-enforcement.md) | 密码最大年龄强制执行 — 登录时密码过期拦截、UPDATE_PASSWORD action、MFA 路径覆盖 | 5 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |

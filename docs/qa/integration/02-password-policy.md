@@ -134,9 +134,8 @@ FROM tenants WHERE slug = 'test-tenant';
 
 ## 场景 3：密码年龄限制（强制定期修改）
 
-> **[DEFERRED - pending FR: password_max_age_enforcement]**
-> `max_age_days` 字段已存储在 `password_policies` 中，但登录时 auth9-oidc 尚未实现密码过期检查。
-> 详见 Feature Request: `docs/feature_request/password_max_age_enforcement.md`
+> **[IMPLEMENTED]** 密码年龄强制执行已实现。
+> 详细 QA 测试文档：[integration/28-password-max-age-enforcement.md](./28-password-max-age-enforcement.md)
 
 > **架构说明**: 密码年龄限制由 Auth9 内置 OIDC 引擎本地执行。
 > 登录通过 Auth9 托管认证链路完成，密码过期时托管认证页会显示 `UPDATE_PASSWORD` required action 页面。

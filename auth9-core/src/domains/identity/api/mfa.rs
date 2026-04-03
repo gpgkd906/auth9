@@ -13,9 +13,10 @@ use crate::http_support::{MessageResponse, SuccessResponse};
 use crate::middleware::auth::AuthUser;
 use crate::models::common::StringUuid;
 use crate::repository::adaptive_mfa_policy::{AdaptiveMfaPolicyRepository, AdaptiveMfaPolicyRow};
+use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::state::{
-    HasAdaptiveMfa, HasCache, HasMfa, HasServices, HasSessionManagement, HasTrustedDevices,
-    HasWebAuthn,
+    HasAdaptiveMfa, HasCache, HasMfa, HasRequiredActions, HasServices, HasSessionManagement,
+    HasTrustedDevices, HasWebAuthn,
 };
 use axum::extract::Path;
 use axum::{extract::State, Json};
@@ -86,6 +87,8 @@ pub struct HostedLoginTokenResponse {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: i64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_actions: Vec<PendingActionResponse>,
 }
 
 /// Adaptive MFA policy response
@@ -347,7 +350,7 @@ pub async fn email_otp_disable<S: HasMfa + HasWebAuthn + HasServices>(
 
 /// POST /api/v1/mfa/challenge/totp
 pub async fn challenge_totp<
-    S: HasMfa + HasCache + HasServices + HasSessionManagement + HasTrustedDevices + HasAdaptiveMfa,
+    S: HasMfa + HasCache + HasServices + HasSessionManagement + HasTrustedDevices + HasAdaptiveMfa + HasRequiredActions,
 >(
     State(state): State<S>,
     Json(input): Json<MfaChallengeVerifyRequest>,
@@ -371,7 +374,7 @@ pub async fn challenge_totp<
 
 /// POST /api/v1/mfa/challenge/recovery-code
 pub async fn challenge_recovery_code<
-    S: HasMfa + HasCache + HasServices + HasSessionManagement + HasTrustedDevices + HasAdaptiveMfa,
+    S: HasMfa + HasCache + HasServices + HasSessionManagement + HasTrustedDevices + HasAdaptiveMfa + HasRequiredActions,
 >(
     State(state): State<S>,
     Json(input): Json<MfaChallengeVerifyRequest>,
@@ -667,22 +670,65 @@ async fn maybe_trust_device<S: HasServices + HasTrustedDevices + HasAdaptiveMfa>
     }
 }
 
-async fn issue_token_after_mfa<S: HasServices + HasSessionManagement>(
+async fn issue_token_after_mfa<S: HasServices + HasSessionManagement + HasRequiredActions>(
     state: &S,
     session_data: &MfaSessionData,
 ) -> Result<Json<HostedLoginTokenResponse>> {
     let user_id = uuid::Uuid::parse_str(&session_data.user_id)
         .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid user_id in MFA session")))?;
 
+    let user_id_su: StringUuid = user_id.into();
+
     let session = state
         .session_service()
         .create_session(
-            user_id.into(),
+            user_id_su,
             None,
             session_data.ip_address.clone(),
             session_data.user_agent.clone(),
         )
         .await?;
+
+    // Check for pending required actions (password expiry, temporary password, etc.)
+    let pending_actions = {
+        let user = state.user_service().get(user_id_su).await.ok();
+        let tenant_policy = {
+            let memberships = state
+                .user_service()
+                .get_user_tenants(user_id_su)
+                .await
+                .unwrap_or_default();
+            if let Some(first) = memberships.first() {
+                state
+                    .tenant_service()
+                    .get(first.tenant_id)
+                    .await
+                    .ok()
+                    .and_then(|t| t.password_policy)
+                    .unwrap_or_default()
+            } else {
+                crate::models::password::PasswordPolicy::default()
+            }
+        };
+        let password_changed_at = user.and_then(|u| u.password_changed_at);
+        match state
+            .required_actions_service()
+            .check_post_login_actions(
+                &session_data.identity_subject,
+                true,  // mfa_enabled — always true in MFA flow
+                true,  // has_mfa_credential — user just verified
+                password_changed_at,
+                tenant_policy.max_age_days,
+            )
+            .await
+        {
+            Ok(actions) => actions,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to check pending actions after MFA, proceeding without");
+                Vec::new()
+            }
+        }
+    };
 
     let jwt_manager = HasServices::jwt_manager(state);
     let identity_token = jwt_manager.create_identity_token_with_session(
@@ -696,6 +742,7 @@ async fn issue_token_after_mfa<S: HasServices + HasSessionManagement>(
         access_token: identity_token,
         token_type: "Bearer".to_string(),
         expires_in: jwt_manager.access_token_ttl(),
+        pending_actions,
     }))
 }
 
