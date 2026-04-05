@@ -160,7 +160,7 @@ Auth9-core tests use **mocks instead of real services**:
 | Repository layer | Mock traits with `mockall` |
 | Service layer | Unit tests with mock repositories |
 | gRPC services | `NoOpCacheManager` + mock repositories |
-| Keycloak | `wiremock` HTTP mocking |
+| External HTTP (OIDC) | `wiremock` HTTP mocking |
 
 ### Prohibited
 
@@ -196,7 +196,7 @@ auth9-core/
     │   ├── validate_token_test.rs # validate_token tests
     │   ├── get_user_roles_test.rs # get_user_roles tests
     │   └── introspect_token_test.rs # introspect_token tests
-    └── keycloak_unit_test.rs      # Keycloak with wiremock
+    └── (wiremock-based HTTP tests inline in service modules)
 ```
 
 ---
@@ -271,7 +271,7 @@ use crate::api::http::{build_test_router, get_json, post_json, TestAppState};
 
 #[tokio::test]
 async fn test_list_tenants_returns_200() {
-    let state = TestAppState::new("http://mock-keycloak");
+    let state = TestAppState::new("http://mock-oidc");
 
     // Seed test data
     state.tenant_repo.seed_tenant(CreateTenantInput {
@@ -295,7 +295,7 @@ async fn test_list_tenants_returns_200() {
 
 1. **Always use `HasServices` trait** for new handlers - never use concrete `AppState`
 2. **Test production code** - `build_test_router()` uses `build_router(state)` from production
-3. **Mock Keycloak with wiremock** - see `tests/api/http/mock_keycloak.rs`
+3. **Mock external HTTP with wiremock** where needed for OIDC/HTTP tests
 4. **Use test repositories** - `TestTenantRepository`, `TestUserRepository`, etc.
 
 ---
@@ -370,28 +370,27 @@ async fn test_exchange_token() {
 
 ---
 
-## Writing Keycloak Tests
+## Writing External HTTP Tests
 
-Use `wiremock` to mock Keycloak:
+Use `wiremock` to mock external HTTP endpoints (e.g. OIDC discovery):
 
 ```rust
 use wiremock::{Mock, ResponseTemplate, matchers::{method, path}};
 
 #[tokio::test]
-async fn test_keycloak_operation() {
+async fn test_oidc_operation() {
     let mock_server = MockServer::start().await;
 
-    Mock::given(method("POST"))
-        .and(path("/realms/master/protocol/openid-connect/token"))
+    Mock::given(method("GET"))
+        .and(path("/.well-known/openid-configuration"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "access_token": "mock-token",
-            "expires_in": 300,
-            "token_type": "bearer"
+            "issuer": mock_server.uri(),
+            "token_endpoint": format!("{}/token", mock_server.uri())
         })))
         .mount(&mock_server)
         .await;
 
-    // Use mock_server.uri() as Keycloak URL
+    // Use mock_server.uri() as OIDC provider URL
 }
 ```
 

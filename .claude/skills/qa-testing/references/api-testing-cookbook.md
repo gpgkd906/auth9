@@ -79,13 +79,13 @@ Expected output for admin user:
 
 ---
 
-## 2. Keycloak Webhook Event Testing
+## 2. Identity Webhook Event Testing
 
 ### Key Facts
 
 - **Endpoint**: `POST http://localhost:8080/api/v1/identity/events`
-- **Webhook secret**: `dev-webhook-secret-change-in-production` (from `docker-compose.yml` env `KEYCLOAK_WEBHOOK_SECRET`)
-- **Signature header**: `x-keycloak-signature: sha256=<hex>`
+- **Webhook secret**: `dev-webhook-secret-change-in-production` (from `docker-compose.yml` env `IDENTITY_WEBHOOK_SECRET`)
+- **Signature header**: `x-webhook-signature: sha256=<hex>` (legacy `x-keycloak-signature` also accepted)
 - **HMAC algorithm**: HMAC-SHA256
 - **Field names in JSON**: camelCase (e.g. `credentialType`, `authMethod`, `ipAddress`)
 
@@ -98,7 +98,7 @@ SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
-  -H "x-keycloak-signature: sha256=$SIGNATURE" \
+  -H "x-webhook-signature: sha256=$SIGNATURE" \
   -d "$BODY"
 ```
 
@@ -111,7 +111,7 @@ SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
-  -H "x-keycloak-signature: sha256=$SIGNATURE" \
+  -H "x-webhook-signature: sha256=$SIGNATURE" \
   -d "$BODY"
 ```
 
@@ -124,7 +124,7 @@ SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/identity/events" \
   -H "Content-Type: application/json" \
-  -H "x-keycloak-signature: sha256=$SIGNATURE" \
+  -H "x-webhook-signature: sha256=$SIGNATURE" \
   -d "$BODY"
 ```
 
@@ -137,7 +137,7 @@ SELECT email, event_type, failure_reason FROM login_events ORDER BY created_at D
 
 ### Event Type Mapping Reference
 
-| Keycloak event | error field | details | Auth9 event_type |
+| Identity event | error field | details | Auth9 event_type |
 |---------------|-------------|---------|------------------|
 | `LOGIN` | - | - | `success` |
 | `LOGIN_ERROR` | `invalid_user_credentials` | (none) | `failed_password` |
@@ -150,63 +150,6 @@ SELECT email, event_type, failure_reason FROM login_events ORDER BY created_at D
 | `IDENTITY_PROVIDER_LOGIN` | - | - | `social` |
 
 ---
-
-## 3. Keycloak Admin API (User Management)
-
-### Key Facts (Keycloak 23.0.7)
-
-- **Admin token**: Use master realm `admin-cli` client with `admin/admin`
-- **Password cannot be set via `reset-password` endpoint** when password policy is active (returns 400 with no details)
-- **Password CAN be set during user creation** by including `credentials` in the POST body, but only if the password meets the policy
-- **Password policy**: `length(8) and upperCase(1) and lowerCase(1) and digits(1) and notUsername()`
-- **Realm update with partial JSON may fail** (400 `invalid_request`): Use GET-merge-PUT pattern for safe updates
-
-### Get Admin Token
-
-```bash
-KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-```
-
-### Create User (without password)
-
-```bash
-curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8081/admin/realms/auth9/users" \
-  -H "Authorization: Bearer $KC_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","email":"testuser@example.com","enabled":true,"emailVerified":true}'
-```
-
-### Get User UUID
-
-```bash
-USER_UUID=$(curl -s "http://localhost:8081/admin/realms/auth9/users?username=testuser&exact=true" \
-  -H "Authorization: Bearer $KC_TOKEN" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-```
-
-### List User Credentials (check MFA status)
-
-```bash
-curl -s "http://localhost:8081/admin/realms/auth9/users/$USER_UUID/credentials" \
-  -H "Authorization: Bearer $KC_TOKEN" | python3 -m json.tool
-```
-
-### Delete User
-
-```bash
-curl -s -X DELETE "http://localhost:8081/admin/realms/auth9/users/$USER_UUID" \
-  -H "Authorization: Bearer $KC_TOKEN"
-```
-
-### Known Limitation: Setting Passwords
-
-In Keycloak 23.0.7, the admin `PUT /users/{id}/reset-password` endpoint always returns HTTP 400 with `{"error":"HTTP 400 Bad Request"}` regardless of password policy or password strength. This is a confirmed Keycloak bug.
-
-**auth9-core workaround** (implemented): `reset_user_password` uses GET-merge-PUT on the user representation endpoint (`PUT /admin/realms/{realm}/users/{id}`) with credentials in the body, instead of the broken `reset-password` endpoint.
-
-**For testing**: Use the seeded admin user or create users with credentials in the POST body.
 
 ---
 

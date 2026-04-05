@@ -59,7 +59,7 @@ All tests run fast (~1-2s) with **no Docker**:
 | Repository | Mock traits with `mockall` |
 | Service | Unit tests with mock repos |
 | gRPC | `NoOpCacheManager` + mocks |
-| Keycloak | `wiremock` HTTP mocking |
+| External HTTP (OIDC) | `wiremock` HTTP mocking |
 
 ### Prohibited
 
@@ -115,18 +115,18 @@ async fn test_exchange_token() {
 }
 ```
 
-### Keycloak Tests
+### External HTTP (OIDC) Tests
 
 ```rust
 use wiremock::{Mock, ResponseTemplate, MockServer};
 
 #[tokio::test]
-async fn test_keycloak() {
+async fn test_oidc_http() {
     let mock_server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/realms/master/protocol/openid-connect/token"))
+    Mock::given(method("GET"))
+        .and(path("/.well-known/openid-configuration"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "access_token": "mock-token"
+            "issuer": mock_server.uri()
         })))
         .mount(&mock_server).await;
     // Use mock_server.uri()

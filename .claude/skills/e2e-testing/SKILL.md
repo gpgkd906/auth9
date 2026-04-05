@@ -31,7 +31,7 @@ npm run test:e2e:ui
 ## Critical Rule
 
 **ALWAYS** use `test:e2e:full:reset` for full-stack tests:
-- Resets Docker environment (clean TiDB, Redis, Keycloak)
+- Resets Docker environment (clean TiDB, Redis, auth9-oidc)
 - Creates fresh test users
 - Prevents flaky tests from dirty data
 
@@ -45,8 +45,7 @@ auth9-portal/tests/
     ├── auth-flow.spec.ts
     ├── global-setup.ts      # Creates test users
     └── setup/
-        ├── test-config.ts   # URLs, credentials
-        └── keycloak-admin.ts
+        └── test-config.ts   # URLs, credentials
 ```
 
 ## Test Configuration
@@ -56,7 +55,6 @@ auth9-portal/tests/
 export const TEST_CONFIG = {
   portalUrl: "http://localhost:3000",
   auth9CoreUrl: "http://localhost:8080",
-  keycloakUrl: "http://localhost:8081",
   testUsers: {
     standard: { username: "e2e-test-user", password: "TestPass1234!" },
     admin: { username: "e2e-admin-user", password: "SecurePass123!" },
@@ -102,7 +100,7 @@ test("Health endpoint accessible", async ({ request }) => {
 |-------|----------|
 | Services not ready | `docker-compose logs`, `./scripts/reset-docker.sh` |
 | Dirty data failures | Always use `test:e2e:full:reset` |
-| Login failures | Check Keycloak theme is `auth9`, verify test user exists |
+| Login failures | Check auth9-oidc logs, verify test user exists |
 
 ## View Reports
 

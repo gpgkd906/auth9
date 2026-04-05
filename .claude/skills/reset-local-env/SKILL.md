@@ -16,7 +16,7 @@ Use this when:
 - Starting fresh with a clean development setup
 - Encountering persistent errors after code changes
 - Database schema changes require clean migration
-- Keycloak configuration is corrupted
+- OIDC engine configuration is corrupted
 - Testing fresh installation flow
 - Switching between branches with incompatible changes
 
@@ -46,7 +46,6 @@ After reset, use these credentials:
 | Service | URL | Username | Password |
 |---------|-----|----------|----------|
 | Admin Portal | http://localhost:3000 | admin@auth9.local | SecurePass123! |
-| Keycloak Admin | http://localhost:8081 | admin | admin |
 
 ---
 
@@ -84,7 +83,7 @@ docker-compose $COMPOSE_FILES ps
 | auth9-portal | 3000 | Admin dashboard |
 | auth9-core | 8080 | REST API + /metrics |
 | auth9-core | 50051 | gRPC |
-| keycloak | 8081 | OIDC provider |
+| auth9-oidc | — | Built-in OIDC engine |
 | tidb | 4000 | Database |
 | redis | 6379 | Cache |
 | prometheus | 9090 | Metrics collection |

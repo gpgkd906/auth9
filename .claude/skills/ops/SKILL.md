@@ -70,7 +70,7 @@ cd auth9-portal && npm run typecheck
 | Frontend | auth9-portal |
 | Database | auth9-tidb |
 | Cache | auth9-redis |
-| Auth Engine | auth9-keycloak |
+| Auth Engine | auth9-oidc |
 | DB Admin | auth9-adminer |
 | Prometheus | auth9-prometheus |
 | Grafana | auth9-grafana |

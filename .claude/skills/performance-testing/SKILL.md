@@ -10,7 +10,7 @@ Run performance benchmarks for auth9-core using `benchmark.sh`.
 ## Prerequisites
 
 - **hey** HTTP load testing tool
-- Docker services (TiDB, Redis, Keycloak)
+- Docker services (TiDB, Redis, auth9-oidc)
 - auth9-core running in **release mode**
 
 ## Quick Start
