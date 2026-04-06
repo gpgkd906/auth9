@@ -90,6 +90,8 @@ context;
 - ✅ 生成的 Token 仍然绑定到 Service A
 - ✅ 脚本 **无法** 调用跨 Service 查询（因为没有提供 Host Functions）
 
+> **注意**: Context modifications (e.g., `context.tenant.id`) are intentionally allowed for logging/audit enrichment. These modifications do NOT affect security boundaries — token generation uses the original validated `tenant_id`, not the script-modified context. This is by design, not a vulnerability.
+
 ### 验证方法
 ```bash
 # 解码 Token

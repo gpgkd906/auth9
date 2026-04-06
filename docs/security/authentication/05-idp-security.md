@@ -268,6 +268,8 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 # 预期: 400 - Template validation failed 或 include 被禁用
 ```
 
+> **误报说明**: Template syntax (`{{ }}`, `{% %}`) in `display_name` is stored as literal text. No server-side template engine renders `display_name` content, so this is not an SSTI vulnerability. The `validate_no_html` check correctly prevents XSS via HTML tags. Template-like strings in display_name are harmless data, not executable code.
+
 ### 修复建议
 - 使用自动转义的模板引擎（Tera 的 `autoescape` 功能）
 - 邮件模板中用户数据通过变量传递，禁止内联模板语法

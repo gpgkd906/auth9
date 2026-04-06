@@ -168,6 +168,8 @@ WHERE domain = '{corp_domain}';
 
 ## 场景 4：更新连接器启用状态与域名成功
 
+> **[PARTIAL - pending FR: portal_sso_connector_domain_edit.md]** 域名编辑功能尚未在 Portal UI 实现，启用/禁用开关可正常工作。域名更新需等待 FR 实现后验证。
+
 ### 初始状态
 - 已存在连接器 `{connector_id}`，enabled=true，domains 包含 `{old_domain}`
 

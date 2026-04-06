@@ -87,6 +87,8 @@ WHERE r.service_id = '{service_id}';
 - 显示错误：「检测到循环继承」
 - 修改被拒绝
 
+> **注意**: Circular inheritance is prevented at the API layer (service-level cycle detection). Direct SQL manipulation can bypass this check, which is by design — TiDB does not support foreign key constraints, and database-level triggers are not used. All data integrity is enforced at the application layer. If testing via SQL, circular references will not be blocked by the database.
+
 ### 预期数据状态
 ```sql
 -- 角色 B 的 parent_role_id 保持不变

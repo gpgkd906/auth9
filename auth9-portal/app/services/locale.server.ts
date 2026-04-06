@@ -54,5 +54,10 @@ export async function resolveLocale(request: Request): Promise<AppLocale> {
 }
 
 export async function serializeLocaleCookie(locale: AppLocale) {
-  return localeCookie.serialize(locale);
+  // Use plain cookie string matching the client-side format in i18n/index.tsx.
+  // React Router's localeCookie.serialize() base64-encodes the value, which the
+  // manual readCookieValue() parser cannot decode, causing the SSR locale to be
+  // ignored on subsequent requests.
+  const secure = isProduction ? "; Secure" : "";
+  return `${LOCALE_COOKIE_NAME}=${encodeURIComponent(locale)}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax${secure}`;
 }

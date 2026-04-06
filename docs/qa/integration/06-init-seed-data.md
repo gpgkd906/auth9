@@ -318,6 +318,7 @@ WHERE u.display_name = 'Admin User';
 | "Invalid username or password" | 使用了 email 而非 username 登录 | 使用用户名 `admin`，而非 `admin@auth9.local` |
 | "Invalid username or password" | AUTH9_ADMIN_PASSWORD 未设置 | 检查 docker-compose.yml 中的 `AUTH9_ADMIN_PASSWORD` 值，或查看 init 日志 |
 | "Invalid username or password" | 密码策略阻止密码设置 | 运行 `./scripts/reset-docker.sh` 重置环境 |
+| "Invalid email or password" (hosted login) | HIBP breach check is enabled by default (mode: block). The seed password may be in the HIBP breach database. | Use the API to set `breach_check_mode` to `disabled` for testing (`UPDATE tenants SET breach_check_mode = 'disabled' WHERE slug = 'auth9-platform';`), or use the pre-configured seed password `Auth9Dev!2026x`. |
 | 登录后页面空白 | auth9-core 未正常运行 | 检查 `docker logs auth9-core` |
 | POST 返回 200 但页面显示"请求无效" | Portal session JWT 密钥与 auth9-core 不同步 | 运行 `./scripts/reset-docker.sh` 确保 JWT 密钥同步 |
 | "请求无效" after seemingly successful login POST | auth9-oidc 容器不健康或未就绪 | 检查 `docker logs auth9-oidc`，确认 OIDC 端点可达；运行 `./scripts/reset-docker.sh` 重置环境 |

@@ -80,10 +80,18 @@ export default function AccountProfilePage() {
         <Card>
           <CardHeader>
             <CardTitle>{t("account.profile.title")}</CardTitle>
+            <CardDescription>
+              {t("account.profile.description")}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-              {loaderError || t("account.profile.loadError")}
+            <div className="space-y-6 max-w-md">
+              <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md">
+                {loaderError || t("account.profile.loadError")}
+              </div>
+              <Button onClick={() => window.location.reload()}>
+                {t("common.buttons.retry")}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -178,7 +186,7 @@ export default function AccountProfilePage() {
             </div>
 
             {actionData?.error && (
-              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+              <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md">
                 {actionData.error}
               </div>
             )}

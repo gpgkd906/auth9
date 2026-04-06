@@ -54,6 +54,8 @@ fn build_db_redirect_uris(_core_public_url: Option<&str>, portal_url: Option<&st
 fn build_db_logout_uris(portal_url: Option<&str>) -> String {
     let mut uris = vec![
         "http://localhost:3000".to_string(),
+        "http://localhost:3000/dashboard".to_string(),
+        "http://localhost:3000/login".to_string(),
         "http://127.0.0.1:3000".to_string(),
     ];
 

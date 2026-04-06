@@ -148,7 +148,7 @@ WHERE tenant_id = '{tenant_id}' AND ip_address = 'not-an-ip';
 
 ---
 
-## 场景 4：租户级黑名单仅影响当前租户
+## 场景 4：租户级黑名单仅影响当前租户 [DEFERRED - requires single-tenant test users in seed data. Current seed creates multi-tenant users only.]
 
 > **测试用户要求**: 本场景的租户隔离验证要求测试用户**仅属于单个租户**。如果测试用户同时属于多个租户（`tenant_count > 1`），系统在根据 `identity_subject` 查找用户所属租户时会产生歧义，可能导致事件被分配到错误的租户上下文，使测试结果不可靠。请在步骤 0 中确认 `tenant_count = 1`，必要时创建专用的单租户测试用户。
 

@@ -190,13 +190,13 @@ export default function AccountSessionsPage() {
         </CardHeader>
         <CardContent>
           {loadError && (
-            <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md mb-4">
+            <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md mb-4">
               {loadError}
             </div>
           )}
 
           {actionData?.error && (
-            <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md mb-4">
+            <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md mb-4">
               {actionData.error}
             </div>
           )}
@@ -257,7 +257,7 @@ export default function AccountSessionsPage() {
       </Card>
 
       {/* Session Security Tips */}
-      <Card>
+      <Card className="bg-[var(--accent-orange-light)]">
         <CardHeader>
           <CardTitle>{t("account.sessions.securityTips")}</CardTitle>
         </CardHeader>

@@ -248,19 +248,19 @@ export default function AccountPasskeysPage() {
 
       {/* Error/Success Messages */}
       {loadError && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md">
           {loadError}
         </div>
       )}
 
       {clientError && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md">
           {clientError}
         </div>
       )}
 
       {actionData?.error && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md">
           {actionData.error}
         </div>
       )}
@@ -306,7 +306,7 @@ export default function AccountPasskeysPage() {
                   key={passkey.id}
                   className="flex items-center gap-4 py-4 first:pt-0 last:pb-0"
                 >
-                  <div className="p-3 bg-blue-100 text-blue-700 rounded-full">
+                  <div className="p-3 bg-[var(--accent-cyan-light)] text-[var(--accent-cyan)] rounded-full">
                     <LockClosedIcon className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -342,14 +342,14 @@ export default function AccountPasskeysPage() {
       </Card>
 
       {/* Info Card */}
-      <Card>
+      <Card className="bg-[var(--accent-cyan-light)]">
         <CardHeader>
           <CardTitle className="text-lg">{t("accountPasskeys.about")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4 text-sm text-[var(--text-secondary)]">
             <div className="flex gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <div className="flex-shrink-0 w-8 h-8 bg-[var(--accent-green)]/15 rounded-full flex items-center justify-center">
                 <span className="text-[var(--accent-green)] font-bold">1</span>
               </div>
               <div>
@@ -358,7 +358,7 @@ export default function AccountPasskeysPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <div className="flex-shrink-0 w-8 h-8 bg-[var(--accent-green)]/15 rounded-full flex items-center justify-center">
                 <span className="text-[var(--accent-green)] font-bold">2</span>
               </div>
               <div>
@@ -367,7 +367,7 @@ export default function AccountPasskeysPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <div className="flex-shrink-0 w-8 h-8 bg-[var(--accent-green)]/15 rounded-full flex items-center justify-center">
                 <span className="text-[var(--accent-green)] font-bold">3</span>
               </div>
               <div>

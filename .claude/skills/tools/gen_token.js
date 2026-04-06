@@ -129,9 +129,14 @@ const payload = {
   exp: now + 3600  // 1小时后过期
 };
 
-// Include tenant_id claim for access tokens
-if (tokenType === "access" && tenantId) {
-    payload.tenant_id = tenantId;
+// Include tenant_id, roles, and permissions claims for access tokens
+// TenantAccessClaims in auth9-core requires these fields for deserialization
+if (tokenType === "access") {
+    if (tenantId) {
+        payload.tenant_id = tenantId;
+    }
+    payload.roles = ["admin"];
+    payload.permissions = [];
 }
 
 try {

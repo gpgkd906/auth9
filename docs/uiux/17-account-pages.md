@@ -55,9 +55,11 @@
 
 ### 测试操作流程
 1. 访问 `/dashboard/account/security`。
-2. 不输入任何内容直接提交，验证浏览器原生验证。
+2. 不输入任何内容直接提交，验证服务端验证错误提示。
 3. 输入不匹配的新密码与确认密码，提交并观察错误提示。
 4. 输入有效密码提交，观察成功反馈。
+
+> **注意**: Password change form uses server-side validation (`noValidate` attribute on the form element) for consistent localized error messages. Browser native validation is intentionally disabled. Empty submission will be handled by the server and return appropriate field-level errors.
 
 ### 预期视觉效果
 - **密码字段**: `type="password"`，Input 高度 `h-10`（40px），`border-radius: 12px`。

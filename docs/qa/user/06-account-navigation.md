@@ -24,9 +24,7 @@
 ## 场景 1：Account 入口可见性与侧边栏显示真实用户信息
 
 ### 初始状态
-- 用户已登录（display_name 为 `Jane Smith`，邮箱为 `jane@example.com`）
-
-> **注意**: 默认 seed 数据中不包含 jane@example.com 用户。实际测试时请使用 admin@auth9.local 用户登录，或通过 API/SQL 预先创建该测试用户。
+- 用户已登录（display_name 为 `Admin User`，邮箱为 `admin@auth9.local`）
 
 ### 目的
 验证 Dashboard 侧边栏底部显示当前登录用户的真实信息，而非硬编码数据
@@ -37,9 +35,9 @@
 3. 确认显示内容
 
 ### 预期结果
-- 显示真实的用户名 `Jane Smith`（非 "John Doe"）
-- 显示真实邮箱 `jane@example.com`（非 "john@example.com"）
-- 头像区域显示用户 avatar_url 对应图片，无头像时显示姓名首字母缩写 `JS`
+- 显示真实的用户名 `Admin User`（非 "John Doe"）
+- 显示真实邮箱 `admin@auth9.local`（非 "john@example.com"）
+- 头像区域显示用户 avatar_url 对应图片，无头像时显示姓名首字母缩写 `AU`
 - 点击用户卡片导航至 `/dashboard/account`
 
 ---

@@ -86,7 +86,7 @@ export default function AccountSecurityPage() {
             </div>
 
             {actionData?.error && (
-              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+              <div className="text-sm text-[var(--accent-red)] bg-[var(--accent-red)]/10 p-3 rounded-md">
                 {actionData.error}
               </div>
             )}

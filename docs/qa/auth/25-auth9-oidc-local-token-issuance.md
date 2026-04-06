@@ -150,7 +150,7 @@ curl -s -X POST http://localhost:8080/api/v1/auth/token \
 
 ---
 
-## 场景 4: Refresh Token 轮转
+## 场景 4: Refresh Token 轮转 [DEFERRED - pending test infrastructure: PKCE authorization code flow automation]
 
 ### 步骤 1 - 从场景 1 获取 refresh_token
 

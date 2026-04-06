@@ -28,6 +28,7 @@
 | 症状 | 原因 | 修复方法 |
 |------|------|----------|
 | JWT 签名验证失败 (401) | 使用了 hardcoded key path 的脚本，与 Docker 容器中的 key 不一致 | 改用 `node .claude/skills/tools/gen_token.js`，它从 `.env` 读取私钥 |
+| 403 on API calls despite valid signature | Token missing `roles` or `permissions` fields | `gen_token.js` generates Tenant Access Tokens that MUST include `roles` and `permissions` fields. Verify with: `echo $TOKEN \| cut -d. -f2 \| base64 -d \| jq '{roles, permissions}'` |
 
 > **MFA 对 UI 测试的影响**：所有默认种子用户均已启用 MFA：
 > - `admin@auth9.local` 要求 WebAuthn（硬件密钥）

@@ -169,8 +169,8 @@
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 服务层不再直接持有 `KeycloakClient` | ☑ | 2026-03-17 | Codex | `rg` 已验证目标服务文件无命中 |
-| 2 | handler 主业务路径不再直接拼装 `Keycloak*` DTO | ☑ | 2026-03-17 | Codex | `rg` 已验证 `user.rs` / `invitation.rs` 无命中 |
-| 3 | 密码与 Passkeys 抽象调用路径回归 | ☑ | 2026-03-17 | Codex | `cargo test domains::identity::service::password` 与 `webauthn` 已通过 |
-| 4 | SCIM 与 SAML Application 抽象调用路径回归 | ☑ | 2026-03-17 | Codex | `cargo test domains::provisioning` 与 `saml_application` 已通过 |
-| 5 | Keycloak adapter 与 `auth9_oidc` backend contract 保持稳定 | ☑ | 2026-03-17 | Codex | `keycloak_adapter_contract_test` 与 `backend_switch_smoke_test` 已通过 |
+| 1 | 服务层不再直接持有 `KeycloakClient` | ☑ | 2026-04-06 | QA Runner | `rg` 已验证目标服务文件无命中 |
+| 2 | handler 主业务路径不再直接拼装 `Keycloak*` DTO | ☑ | 2026-04-06 | QA Runner | `rg` 已验证 `user.rs` / `invitation.rs` 无命中 |
+| 3 | 密码与 Passkeys 抽象调用路径回归 | ☑ | 2026-04-06 | QA Runner | Password: 36, WebAuthn: 17 |
+| 4 | SCIM 与 SAML Application 抽象调用路径回归 | ☑ | 2026-04-06 | QA Runner | SCIM: 22, SAML App: 35 |
+| 5 | Keycloak adapter 与 `auth9_oidc` backend contract 保持稳定 | ☑ | 2026-04-06 | QA Runner | api_test: 622, lib: 2023 |
