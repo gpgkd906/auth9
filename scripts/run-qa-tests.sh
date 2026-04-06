@@ -396,7 +396,7 @@ run_agent() {
             local codex_cmd="codex"
             local codex_model="gpt-5.4-mini"
             local prompt="读取文档：${rel_path}，执行QA测试"
-            run_cmd "${t[@]}" "$codex_cmd" exec "$prompt" -m "$codex_model"
+            run_cmd "${t[@]}" "$codex_cmd" exec -m "$codex_model" --full-auto "$prompt"
             ;;
         *)
             echo -e "${RED}Unknown agent mode: ${AGENT_MODE}${NC}"
