@@ -26,7 +26,7 @@ jobs:
         run: ./scripts/check-domain-boundaries.sh
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -85,6 +85,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -93,8 +98,8 @@ jobs:
           cache-dependency-path: auth9-portal/package-lock.json
 
       - name: Build SDK dependency
-        working-directory: sdk/packages/core
-        run: npm install && npm run build
+        working-directory: sdk
+        run: pnpm install --frozen-lockfile && pnpm --filter @auth9/core build
 
       - name: Install dependencies
         working-directory: auth9-portal
