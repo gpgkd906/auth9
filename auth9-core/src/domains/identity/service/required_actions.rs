@@ -90,8 +90,7 @@ impl RequiredActionService {
         {
             let expired = match password_changed_at {
                 Some(changed_at) => {
-                    Utc::now().signed_duration_since(changed_at).num_days()
-                        >= max_age_days as i64
+                    Utc::now().signed_duration_since(changed_at).num_days() >= max_age_days as i64
                 }
                 None => true, // No record of password change → treat as expired
             };
@@ -244,11 +243,7 @@ mod tests {
         ) -> Result<Vec<crate::identity_engine::IdentityCredentialRepresentation>> {
             Ok(Vec::new())
         }
-        async fn delete_user_credential(
-            &self,
-            _user_id: &str,
-            _credential_id: &str,
-        ) -> Result<()> {
+        async fn delete_user_credential(&self, _user_id: &str, _credential_id: &str) -> Result<()> {
             Ok(())
         }
         async fn is_password_temporary(&self, _user_id: &str) -> Result<bool> {
@@ -476,9 +471,7 @@ mod tests {
                 next_id: "new-action-id".to_string(),
                 create_called: Mutex::new(Vec::new()),
             },
-            credential_store: MockCredentialStore {
-                password_temporary,
-            },
+            credential_store: MockCredentialStore { password_temporary },
         });
         let service = RequiredActionService::new(engine.clone() as Arc<dyn IdentityEngine>);
         (service, engine)

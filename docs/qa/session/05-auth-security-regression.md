@@ -205,8 +205,8 @@ redis-cli --raw KEYS "auth9:ratelimit:*:GET:/api/v1/users/*" | wc -l
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 普通用户调用管理员强制登出端点应被拒绝 | ✅ PASS | 2026-04-05 | QA Automation | 403 Forbidden returned, session count unchanged |
+| 1 | 普通用户调用管理员强制登出端点应被拒绝 | ✅ PASS | 2026-04-08 | QA Automation | 403 Forbidden returned (Platform admin required) |
 | 2 | refresh 后 token 会话可追踪且可被强退立即失效 | ⏭️ SKIP | | | 需要OIDC浏览器流程，无法通过API测试 |
 | 3 | OIDC callback 重定向 URL 不应包含 access_token/id_token | ⏭️ SKIP | | | 需要OIDC浏览器流程，无法通过API测试 |
-| 4 | 伪造 x-tenant-id 轮换请求不能绕过限流 | ✅ PASS | 2026-04-05 | QA Automation | Rate limit counter正确递减(67→8)，未绕过 |
-| 5 | 动态路径限流键应折叠为模板路径，避免高基数 | ✅ PASS | 2026-04-05 | QA Automation | 50个不同用户路径仅生成1个模板key |
+| 4 | 伪造 x-tenant-id 轮换请求不能绕过限流 | ✅ PASS | 2026-04-08 | QA Automation | 110 requests: 40x200 + 70x429 (limit correctly applied) |
+| 5 | 动态路径限流键应折叠为模板路径，避免高基数 | ✅ PASS | 2026-04-08 | QA Automation | 50个不同用户路径仅生成1个模板key |

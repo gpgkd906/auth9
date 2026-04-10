@@ -213,7 +213,9 @@ pub async fn password_login<
     // If breached, create a required action to force password change on next login.
     // Respects tenant-level breach_check_on_login and min_breach_count settings.
     if let Some(breach_svc) = state.breached_password_service() {
-        if tenant_password_policy.breach_check_on_login && tenant_password_policy.breach_check_mode != "disabled" {
+        if tenant_password_policy.breach_check_on_login
+            && tenant_password_policy.breach_check_mode != "disabled"
+        {
             let breach_svc = breach_svc.clone();
             let password_clone = password.clone();
             let user_id = user.id;

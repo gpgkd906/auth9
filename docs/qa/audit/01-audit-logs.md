@@ -11,18 +11,17 @@
 ### audit_logs 表
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| id | CHAR(36) | UUID 主键 |
-| actor_id | CHAR(36) | 操作者用户 ID |
-| actor_email | VARCHAR(255) | 操作者邮箱（冗余） |
-| actor_display_name | VARCHAR(255) | 操作者显示名（冗余） |
-| action | VARCHAR(50) | 操作类型 |
+| id | BIGINT | 自增主键 |
+| actor_id | CHAR(36) | 操作者用户 ID（关联 users.id） |
+| action | VARCHAR(100) | 操作类型，采用 `{domain}.{operation}` 命名空间格式 |
 | resource_type | VARCHAR(50) | 资源类型 |
 | resource_id | CHAR(36) | 资源 ID |
 | old_value | JSON | 修改前的值 |
 | new_value | JSON | 修改后的值 |
 | ip_address | VARCHAR(45) | 操作者 IP |
-| user_agent | TEXT | User Agent |
 | created_at | TIMESTAMP | 操作时间 |
+
+> **注意**: 表中没有 `actor_email` / `actor_display_name` / `user_agent` 字段。如需获取操作者邮箱或显示名，需 JOIN `users` 表。
 
 ### action 类型
 
@@ -130,18 +129,19 @@ LIMIT 50;
 
 ### 预期结果
 - 出现新的审计日志记录
-- action = `create`
+- action = `tenant.create`（注意：使用 `{domain}.{operation}` 命名空间格式，不是简写 `create`）
 - resource_type = `tenant`
 - resource_id = 新创建的租户 ID
-- actor_email = 当前管理员邮箱
+- actor_id = 当前管理员的 user.id（如需邮箱请 JOIN users 表）
 - new_value 包含创建的数据
 
 ### 预期数据状态
 ```sql
-SELECT action, resource_type, resource_id, actor_email, new_value, created_at
-FROM audit_logs
-WHERE resource_type = 'tenant' AND action = 'create'
-ORDER BY created_at DESC
+SELECT al.action, al.resource_type, al.resource_id, u.email AS actor_email, al.new_value, al.created_at
+FROM audit_logs al
+LEFT JOIN users u ON u.id = al.actor_id
+WHERE al.resource_type = 'tenant' AND al.action = 'tenant.create'
+ORDER BY al.created_at DESC
 LIMIT 1;
 -- 预期: 存在刚创建的租户的日志
 ```

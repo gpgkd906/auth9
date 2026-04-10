@@ -179,14 +179,22 @@ curl -s http://localhost:8080/api/v1/tenants/$TENANT_ID/password-policy \
 ### 测试操作流程
 
 #### API 测试
-1. 使用泄露密码 `password` 注册用户：
+
+> **重要**: 测试密码必须**同时满足**两个条件：
+> 1. **满足 PasswordPolicy 复杂度要求**（默认 `min_length=12`、需要大小写、数字、符号）
+> 2. **在 HIBP 中已被泄露**（`breach_count >= min_breach_count`）
+>
+> 简单密码如 `password` 会在策略校验阶段被拒绝（返回 422），**根本走不到** breach 检查。
+> 推荐使用 `Password123!!`（满足策略 + 已被泄露 380 万+ 次）。
+
+1. 使用同时满足策略且已泄露的密码 `Password123!!` 注册用户：
 ```bash
 curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/users \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "warn-mode-reg@example.com",
-    "password": "password", <!-- pragma: allowlist secret -->
+    "password": "Password123!!", <!-- pragma: allowlist secret -->
     "name": "Warn Mode Registration Test",
     "tenant_id": "'"$TENANT_ID"'"
   }'

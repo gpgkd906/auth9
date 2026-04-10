@@ -718,8 +718,17 @@ where
             }
         }
 
-        self.log_operation(ctx, "patch", "Group", None, Some(group_id), "success", None, Some(200))
-            .await;
+        self.log_operation(
+            ctx,
+            "patch",
+            "Group",
+            None,
+            Some(group_id),
+            "success",
+            None,
+            Some(200),
+        )
+        .await;
 
         self.get_group(group_id, ctx).await
     }
@@ -1352,7 +1361,16 @@ mod tests {
 
         let ctx = make_ctx();
         service
-            .log_operation(&ctx, "create", "User", None, None, "success", None, Some(201))
+            .log_operation(
+                &ctx,
+                "create",
+                "User",
+                None,
+                None,
+                "success",
+                None,
+                Some(201),
+            )
             .await;
     }
 

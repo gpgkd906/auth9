@@ -6,6 +6,7 @@
 
 use crate::cache::CacheOperations;
 use crate::domains::identity::service::adaptive_mfa::{AdaptiveMfaMode, AdaptiveMfaPolicy};
+use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::domains::identity::service::totp::TotpEnrollmentResponse;
 use crate::domains::identity::service::trusted_device::TrustedDevice;
 use crate::error::{AppError, Result};
@@ -13,7 +14,6 @@ use crate::http_support::{MessageResponse, SuccessResponse};
 use crate::middleware::auth::AuthUser;
 use crate::models::common::StringUuid;
 use crate::repository::adaptive_mfa_policy::{AdaptiveMfaPolicyRepository, AdaptiveMfaPolicyRow};
-use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::state::{
     HasAdaptiveMfa, HasCache, HasMfa, HasRequiredActions, HasServices, HasSessionManagement,
     HasTrustedDevices, HasWebAuthn,
@@ -350,7 +350,13 @@ pub async fn email_otp_disable<S: HasMfa + HasWebAuthn + HasServices>(
 
 /// POST /api/v1/mfa/challenge/totp
 pub async fn challenge_totp<
-    S: HasMfa + HasCache + HasServices + HasSessionManagement + HasTrustedDevices + HasAdaptiveMfa + HasRequiredActions,
+    S: HasMfa
+        + HasCache
+        + HasServices
+        + HasSessionManagement
+        + HasTrustedDevices
+        + HasAdaptiveMfa
+        + HasRequiredActions,
 >(
     State(state): State<S>,
     Json(input): Json<MfaChallengeVerifyRequest>,
@@ -374,7 +380,13 @@ pub async fn challenge_totp<
 
 /// POST /api/v1/mfa/challenge/recovery-code
 pub async fn challenge_recovery_code<
-    S: HasMfa + HasCache + HasServices + HasSessionManagement + HasTrustedDevices + HasAdaptiveMfa + HasRequiredActions,
+    S: HasMfa
+        + HasCache
+        + HasServices
+        + HasSessionManagement
+        + HasTrustedDevices
+        + HasAdaptiveMfa
+        + HasRequiredActions,
 >(
     State(state): State<S>,
     Json(input): Json<MfaChallengeVerifyRequest>,
@@ -715,8 +727,8 @@ async fn issue_token_after_mfa<S: HasServices + HasSessionManagement + HasRequir
             .required_actions_service()
             .check_post_login_actions(
                 &session_data.identity_subject,
-                true,  // mfa_enabled — always true in MFA flow
-                true,  // has_mfa_credential — user just verified
+                true, // mfa_enabled — always true in MFA flow
+                true, // has_mfa_credential — user just verified
                 password_changed_at,
                 tenant_policy.max_age_days,
             )

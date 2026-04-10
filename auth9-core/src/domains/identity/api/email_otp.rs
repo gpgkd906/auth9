@@ -107,7 +107,10 @@ pub async fn send_email_otp<S: HasCache + HasSystemSettings + HasBranding>(
     let mut vars = HashMap::new();
     vars.insert("user_name".to_string(), email.clone());
     vars.insert("verification_code".to_string(), code.clone());
-    vars.insert("expires_in_minutes".to_string(), OTP_TTL_MINUTES.to_string());
+    vars.insert(
+        "expires_in_minutes".to_string(),
+        OTP_TTL_MINUTES.to_string(),
+    );
     vars.insert("app_name".to_string(), "Auth9".to_string());
     vars.insert(
         "year".to_string(),

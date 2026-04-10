@@ -91,7 +91,7 @@ curl -s http://localhost:8080/api/v1/hosted-login/pending-actions \
 ### 测试操作流程
 1. 先创建一个 pending action（通过数据库或登录时自动触发）：
 ```sql
-INSERT INTO auth9_oidc.pending_actions (id, user_id, action_type, status, metadata, created_at)
+INSERT INTO auth9.pending_actions (id, user_id, action_type, status, metadata, created_at)
 VALUES (
   UUID(),
   (SELECT identity_subject FROM auth9.users WHERE email = 'qa-user@example.com'),
@@ -104,7 +104,7 @@ VALUES (
 
 2. 获取 action ID：
 ```sql
-SELECT id, action_type, status FROM auth9_oidc.pending_actions
+SELECT id, action_type, status FROM auth9.pending_actions
 WHERE user_id = (SELECT identity_subject FROM auth9.users WHERE email = 'qa-user@example.com')
 AND status = 'pending';
 ```
@@ -130,7 +130,7 @@ curl -s -X POST http://localhost:8080/api/v1/hosted-login/complete-action \
 ```sql
 -- Action 状态已更新
 SELECT id, action_type, status, completed_at
-FROM auth9_oidc.pending_actions
+FROM auth9.pending_actions
 WHERE id = '<ACTION_ID>';
 -- 预期: status = 'completed', completed_at IS NOT NULL
 
@@ -207,7 +207,7 @@ SELECT display_name FROM auth9.users WHERE email = 'qa-user@example.com';
 -- 预期: 'QA Test User'
 
 -- Action 已完成
-SELECT status, completed_at FROM auth9_oidc.pending_actions
+SELECT status, completed_at FROM auth9.pending_actions
 WHERE id = '<ACTION_ID>';
 -- 预期: status = 'completed'
 ```
@@ -221,8 +221,11 @@ WHERE id = '<ACTION_ID>';
 - **测试用户必须拥有密码凭证**（通过 `reset-docker.sh` 创建，或使用 `admin@auth9.local`）
 - 用户存在 pending action
 
+> **重要 — `pending_actions.user_id` 列存的是 `identity_subject` 而非 `users.id`**
+> 切勿直接 INSERT 一个 UUID 到 user_id 列。必须使用 `(SELECT identity_subject FROM users WHERE email='...')` 子查询，否则登录后的 `check_post_login_actions` 查不到该 action，导致测试假阴性（看到登录跳转到 `/tenant/select` 而非 `/force-update-password`）。
+
 ### 初始状态
-- 系统中存在有密码凭证的测试用户（如 `admin@auth9.local` / `SecurePass123!`）
+- 系统中存在有密码凭证的测试用户（如 `admin@auth9.local` / `Auth9Dev!2026x`）
 - 该用户有一个 `update_password` 类型的 pending action
 
 > **注意**: `qa-user@example.com` 默认通过 OIDC 创建，**没有密码凭证**，无法用于密码登录场景。请使用 `admin@auth9.local` 或在 `reset-docker.sh` 中为 qa-user 设置密码。
@@ -233,7 +236,7 @@ WHERE id = '<ACTION_ID>';
 ### 测试操作流程
 1. 确保存在 pending action：
 ```sql
-INSERT INTO auth9_oidc.pending_actions (id, user_id, action_type, status, metadata, created_at)
+INSERT INTO auth9.pending_actions (id, user_id, action_type, status, metadata, created_at)
 VALUES (
   UUID(),
   (SELECT identity_subject FROM auth9.users WHERE email = 'qa-user@example.com'),

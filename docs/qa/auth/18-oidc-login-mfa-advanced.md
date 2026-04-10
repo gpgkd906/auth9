@@ -71,9 +71,14 @@
 ### 测试操作流程
 1. 在 Portal `/login` 页面点击「**Sign in with password**」
 2. 在 Auth9 品牌认证页输入用户名和密码
-3. 自动跳转到 TOTP 配置页面（QR 码页面）
-4. 验证页面保持 Auth9 品牌风格（Liquid Glass），**非**原生认证 UI 的默认样式
-5. 页面显示三步引导：
+3. 自动跳转到 TOTP 配置页面 `/mfa/setup-totp`
+
+> **重要 — 该页面是两步流程**
+> - **Step A（密码确认）**: 页面首次加载时**只**显示「设置身份验证器」标题、说明文字、`当前密码` 输入框和「继续」按钮，**此时 QR 码尚未渲染**（因为后端 `totpEnrollStart` 还未被调用）。看到这个状态**不是 bug**。
+> - **Step B（QR 扫描）**: 输入当前密码并点击「继续」后，前端调用 `totpEnrollStart` 获取 `otpauth_uri`，再用 qrcode 库本地生成 data URL 注入 `<img>`。此时 QR 码、密钥、OTP 输入框才出现。
+
+4. 在 Step A 输入当前密码 → 点击「继续」
+5. 在 Step B 验证页面保持 Auth9 品牌风格（Liquid Glass）并显示三步引导：
    - Step 1: 安装 authenticator 应用（如 FreeOTP, Google Authenticator）
    - Step 2: 扫描 QR 码（或点击「Unable to scan?」切换手动输入密钥模式）
    - Step 3: 输入验证码

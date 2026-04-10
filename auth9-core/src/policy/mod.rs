@@ -342,9 +342,7 @@ pub async fn enforce_with_state<S: HasServices>(
                     .tenant_id
                     .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
                 if token_tenant_id != **tenant_id {
-                    return Err(AppError::NotFound(
-                        "Resource not found".to_string(),
-                    ));
+                    return Err(AppError::NotFound("Resource not found".to_string()));
                 }
             }
         }
@@ -442,11 +440,7 @@ async fn require_user_tenant_read_with_state<S: HasServices>(
             }
             let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
             let has_permission = auth.permissions.iter().any(|p| {
-                p == "user:read"
-                    || p == "user:*"
-                    || p == "admin:*"
-                    || p == "admin:full"
-                    || p == "*"
+                p == "user:read" || p == "user:*" || p == "admin:*" || p == "admin:full" || p == "*"
             });
             if has_admin_role || has_permission {
                 Ok(())
@@ -587,9 +581,7 @@ fn require_tenant_admin_or_permission(
                 .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
 
             if token_tenant_id != *tenant_id {
-                return Err(AppError::NotFound(
-                    "Resource not found".to_string(),
-                ));
+                return Err(AppError::NotFound("Resource not found".to_string()));
             }
 
             let is_admin = auth.roles.iter().any(|r| r == "owner" || r == "admin");
@@ -627,9 +619,7 @@ fn require_tenant_scope_match(
             if auth.tenant_id == Some(*tenant_id) {
                 Ok(())
             } else {
-                Err(AppError::NotFound(
-                    "Resource not found".to_string(),
-                ))
+                Err(AppError::NotFound("Resource not found".to_string()))
             }
         }
         TokenType::ServiceClient => {
@@ -641,9 +631,7 @@ fn require_tenant_scope_match(
             if auth.tenant_id == Some(*tenant_id) {
                 Ok(())
             } else {
-                Err(AppError::NotFound(
-                    "Resource not found".to_string(),
-                ))
+                Err(AppError::NotFound("Resource not found".to_string()))
             }
         }
     }
