@@ -1900,6 +1900,8 @@ export default {
     invalidRecoveryCode: "Invalid or already used recovery code.",
     forbidden: "You do not have permission to perform this action.",
     conflict: "A resource with this identifier already exists.",
+    userAlreadyMember: "This user is already a member of the tenant.",
+    invitationAlreadyExists: "A pending invitation already exists for this email.",
     serverError: "A server error occurred. Please try again later.",
     sessionExpired: "Your session has expired. Please sign in again.",
     authServiceError:

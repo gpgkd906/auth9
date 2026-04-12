@@ -789,7 +789,7 @@
   /* Card Styles */
   .card-header-glass {
     padding: 16px 20px 0;
-    border-bottom: none;
+    border-bottom: 1px solid var(--glass-border-subtle);
   }
 
   .card-title-glass {

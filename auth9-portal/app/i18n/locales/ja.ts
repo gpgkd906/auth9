@@ -548,6 +548,8 @@ export default {
     invalidRecoveryCode: "無効または使用済みのリカバリーコードです。",
     forbidden: "この操作を実行する権限がありません。",
     conflict: "この識別子のリソースはすでに存在します。",
+    userAlreadyMember: "このユーザーはすでにテナントのメンバーです。",
+    invitationAlreadyExists: "このメールアドレスには保留中の招待が既に存在します。",
     serverError: "サーバーエラーが発生しました。しばらくしてから再度お試しください。",
     sessionExpired: "セッションの有効期限が切れました。再度ログインしてください。",
     authServiceError: "認証サービスが一時的に利用できません。しばらくしてから再度お試しください。",

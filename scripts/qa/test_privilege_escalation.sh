@@ -9,7 +9,25 @@ MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
 MYSQL_PORT="${MYSQL_PORT:-4000}"
 MYSQL_USER="${MYSQL_USER:-root}"
 MYSQL_DB="${MYSQL_DB:-auth9}"
-JWT_PRIVATE_KEY="${JWT_PRIVATE_KEY:-deploy/dev-certs/jwt/private.key}"
+# JWT_PRIVATE_KEY can be a file path or inline PEM content.
+# Auto-detect from .env when neither is set and the default file is missing.
+if [[ -z "${JWT_PRIVATE_KEY:-}" ]]; then
+  if [[ -f "deploy/dev-certs/jwt/private.key" ]]; then
+    JWT_PRIVATE_KEY="deploy/dev-certs/jwt/private.key"
+  elif [[ -f ".env" ]]; then
+    _inline_key="$(grep '^JWT_PRIVATE_KEY=' .env | head -1 | sed 's/^JWT_PRIVATE_KEY=//' | sed 's/^"//' | sed 's/"$//')"
+    if [[ -n "$_inline_key" ]]; then
+      _tmpkey="$(mktemp)"
+      printf '%b' "$_inline_key" > "$_tmpkey"
+      JWT_PRIVATE_KEY="$_tmpkey"
+      trap 'rm -f "$_tmpkey"' EXIT
+    else
+      JWT_PRIVATE_KEY="deploy/dev-certs/jwt/private.key"
+    fi
+  else
+    JWT_PRIVATE_KEY="deploy/dev-certs/jwt/private.key"
+  fi
+fi
 TEST_TENANT_SLUG="${TEST_TENANT_SLUG:-demo}"
 PLATFORM_TENANT_SLUG="${PLATFORM_TENANT_SLUG:-auth9-platform}"
 PORTAL_CLIENT_ID="${PORTAL_CLIENT_ID:-auth9-portal}"

@@ -80,6 +80,16 @@ function mapSpecialApiError(
     return mapPasswordValidationErrors(error.message, locale);
   }
 
+  // Invitation-specific conflict messages
+  if (error.code === "conflict") {
+    if (message.includes("already a member")) {
+      return translate(locale, "apiErrors.userAlreadyMember");
+    }
+    if (message.includes("invitation") && message.includes("already exists")) {
+      return translate(locale, "apiErrors.invitationAlreadyExists");
+    }
+  }
+
   // Circular role inheritance detection
   if (
     error.code === "bad_request" &&

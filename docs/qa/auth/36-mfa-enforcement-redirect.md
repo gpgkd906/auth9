@@ -19,7 +19,7 @@
 
 > **前置条件**: 测试用户 `mfa-user@auth9.local` 需通过 `./scripts/reset-docker.sh` 预置。
 
-## 场景 1：MFA 启用 + 无凭证 — 登录返回 CONFIGURE_TOTP Action
+## 场景 1：MFA 启用 + 无凭证 — 登录返回 CONFIGURE_TOTP Action [DEFERRED - pending FR: auth_mfa_configure_totp_on_login]
 
 ### 步骤 0（Gate Check）
 - Auth9 Core 服务运行中：`curl -sf http://localhost:8080/health`

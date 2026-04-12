@@ -1893,6 +1893,8 @@ export default {
     invalidRecoveryCode: "恢复码无效或已使用。",
     forbidden: "您没有权限执行此操作。",
     conflict: "具有相同标识的资源已存在。",
+    userAlreadyMember: "该用户已是租户成员。",
+    invitationAlreadyExists: "已存在待处理的邀请。",
     serverError: "服务器发生错误，请稍后重试。",
     sessionExpired: "您的会话已过期，请重新登录。",
     authServiceError: "认证服务暂时不可用，请稍后重试。",
