@@ -191,7 +191,7 @@ describe("Webhooks Page", () => {
     expect(screen.getByText("https://audit.example.com/hook")).toBeInTheDocument();
   });
 
-  it("renders event count and failure count", async () => {
+  it("renders event badges and failure count", async () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/webhooks",
@@ -203,9 +203,14 @@ describe("Webhooks Page", () => {
     render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/webhooks"]} />);
 
     await waitFor(() => {
-      // Both webhooks have 2 events each
-      expect(screen.getAllByText(/2 events/).length).toBe(2);
+      // mockWebhook has login.success and login.failed events
+      expect(screen.getByText("Login Success")).toBeInTheDocument();
+      expect(screen.getByText("Login Failed")).toBeInTheDocument();
     });
+    // mockWebhookDisabled has user.created and user.deleted events
+    expect(screen.getByText("User Created")).toBeInTheDocument();
+    expect(screen.getByText("User Deleted")).toBeInTheDocument();
+    // mockWebhookDisabled has failure_count: 3
     expect(screen.getByText(/3 failures/)).toBeInTheDocument();
   });
 
