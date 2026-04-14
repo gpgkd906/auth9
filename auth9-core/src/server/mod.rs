@@ -825,10 +825,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let required_actions_service = Arc::new(RequiredActionService::new(identity_engine.clone()));
 
     // Create MFA services (TOTP + recovery codes)
-    let credential_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
-        Arc::new(
-            auth9_oidc::repository::credential::CredentialRepositoryImpl::new(db_pool.clone()),
-        );
+    let credential_repo: Arc<
+        dyn crate::identity_engine::repository::credential::CredentialRepository,
+    > = Arc::new(
+        crate::identity_engine::repository::credential::CredentialRepositoryImpl::new(
+            db_pool.clone(),
+        ),
+    );
 
     let totp_encryption_key = match std::env::var("SETTINGS_ENCRYPTION_KEY") {
         Ok(encoded) if !encoded.is_empty() => {

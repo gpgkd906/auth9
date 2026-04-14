@@ -2,6 +2,8 @@ use crate::error::Result;
 use async_trait::async_trait;
 
 pub mod adapters;
+pub mod models;
+pub mod repository;
 mod types;
 
 pub use types::{

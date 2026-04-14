@@ -405,10 +405,13 @@ impl TestAppState {
             Arc::new(RequiredActionService::new(identity_engine.clone()));
 
         // MFA services with mock credential repo
-        let mock_cred_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
-            Arc::new(
-                auth9_oidc::repository::credential::CredentialRepositoryImpl::new(db_pool.clone()),
-            );
+        let mock_cred_repo: Arc<
+            dyn auth9_core::identity_engine::repository::credential::CredentialRepository,
+        > = Arc::new(
+            auth9_core::identity_engine::repository::credential::CredentialRepositoryImpl::new(
+                db_pool.clone(),
+            ),
+        );
         let totp_service = Arc::new(auth9_core::domains::identity::service::TotpService::new(
             mock_cred_repo.clone(),
             Arc::new(cache_manager.clone()),

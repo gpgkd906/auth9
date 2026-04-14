@@ -106,9 +106,6 @@ ldap3 = { version = "0.12", default-features = false, features = ["tls-rustls-ri
 totp-rs = { version = "5", features = ["otpauth"] }
 base32 = "0.5"
 
-# Local credential store
-auth9-oidc = { path = "../auth9-oidc" }
-
 # AWS SDK for SES
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 aws-sdk-sesv2 = "1.60"

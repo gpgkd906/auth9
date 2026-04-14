@@ -1,14 +1,16 @@
 //! TOTP (Time-based One-Time Password) service
 //!
 //! Handles TOTP enrollment, verification, and lifecycle management.
-//! Uses the local credential store (auth9-oidc) for secret storage
+//! Uses the local credential store for secret storage
 //! and Redis for enrollment state and replay protection.
 
 use crate::cache::CacheOperations;
 use crate::crypto::{self, EncryptionKey};
 use crate::error::{AppError, Result};
-use auth9_oidc::models::credential::{CreateCredentialInput, CredentialType, TotpCredentialData};
-use auth9_oidc::repository::credential::CredentialRepository;
+use crate::identity_engine::models::credential::{
+    CreateCredentialInput, CredentialType, TotpCredentialData,
+};
+use crate::identity_engine::repository::credential::CredentialRepository;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -301,25 +303,27 @@ impl TotpService {
 mod tests {
     use super::*;
     use crate::cache::NoOpCacheManager;
-    use auth9_oidc::models::credential::{CreateCredentialInput, Credential, CredentialType as CT};
-    use auth9_oidc::repository::credential::CredentialRepository;
+    use crate::identity_engine::models::credential::{
+        CreateCredentialInput, Credential, CredentialType as CT,
+    };
+    use crate::identity_engine::repository::credential::CredentialRepository;
     use chrono::Utc;
 
-    // Define mock locally since auth9-oidc's mock is behind #[cfg(test)] which only
-    // applies when auth9-oidc itself is compiled in test mode.
+    // Define mock locally because the auto-generated mock from `#[automock]`
+    // lives in a different module path; redeclaring keeps the test self-contained.
     mockall::mock! {
         pub CredRepo {}
         #[async_trait::async_trait]
         impl CredentialRepository for CredRepo {
-            async fn create(&self, input: &CreateCredentialInput) -> auth9_oidc::error::Result<Credential>;
-            async fn find_by_id(&self, id: &str) -> auth9_oidc::error::Result<Option<Credential>>;
-            async fn find_by_user_and_type(&self, user_id: &str, credential_type: CT) -> auth9_oidc::error::Result<Vec<Credential>>;
-            async fn update_data(&self, id: &str, data: &serde_json::Value) -> auth9_oidc::error::Result<()>;
-            async fn deactivate(&self, id: &str) -> auth9_oidc::error::Result<()>;
-            async fn activate(&self, id: &str) -> auth9_oidc::error::Result<()>;
-            async fn delete(&self, id: &str) -> auth9_oidc::error::Result<()>;
-            async fn delete_all_by_user(&self, user_id: &str) -> auth9_oidc::error::Result<u64>;
-            async fn delete_by_user_and_type(&self, user_id: &str, credential_type: CT) -> auth9_oidc::error::Result<u64>;
+            async fn create(&self, input: &CreateCredentialInput) -> crate::error::Result<Credential>;
+            async fn find_by_id(&self, id: &str) -> crate::error::Result<Option<Credential>>;
+            async fn find_by_user_and_type(&self, user_id: &str, credential_type: CT) -> crate::error::Result<Vec<Credential>>;
+            async fn update_data(&self, id: &str, data: &serde_json::Value) -> crate::error::Result<()>;
+            async fn deactivate(&self, id: &str) -> crate::error::Result<()>;
+            async fn activate(&self, id: &str) -> crate::error::Result<()>;
+            async fn delete(&self, id: &str) -> crate::error::Result<()>;
+            async fn delete_all_by_user(&self, user_id: &str) -> crate::error::Result<u64>;
+            async fn delete_by_user_and_type(&self, user_id: &str, credential_type: CT) -> crate::error::Result<u64>;
         }
     }
 

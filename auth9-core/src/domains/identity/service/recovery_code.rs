@@ -4,8 +4,10 @@
 //! Each code is SHA-256 hashed before storage. Codes are one-time use.
 
 use crate::error::{AppError, Result};
-use auth9_oidc::models::credential::{CreateCredentialInput, CredentialType, RecoveryCodeData};
-use auth9_oidc::repository::credential::CredentialRepository;
+use crate::identity_engine::models::credential::{
+    CreateCredentialInput, CredentialType, RecoveryCodeData,
+};
+use crate::identity_engine::repository::credential::CredentialRepository;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -171,8 +173,10 @@ impl RecoveryCodeService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use auth9_oidc::models::credential::{CreateCredentialInput, Credential, CredentialType as CT};
-    use auth9_oidc::repository::credential::CredentialRepository;
+    use crate::identity_engine::models::credential::{
+        CreateCredentialInput, Credential, CredentialType as CT,
+    };
+    use crate::identity_engine::repository::credential::CredentialRepository;
     use chrono::Utc;
     use std::collections::HashSet;
 
@@ -180,15 +184,15 @@ mod tests {
         pub CredRepo {}
         #[async_trait::async_trait]
         impl CredentialRepository for CredRepo {
-            async fn create(&self, input: &CreateCredentialInput) -> auth9_oidc::error::Result<Credential>;
-            async fn find_by_id(&self, id: &str) -> auth9_oidc::error::Result<Option<Credential>>;
-            async fn find_by_user_and_type(&self, user_id: &str, credential_type: CT) -> auth9_oidc::error::Result<Vec<Credential>>;
-            async fn update_data(&self, id: &str, data: &serde_json::Value) -> auth9_oidc::error::Result<()>;
-            async fn deactivate(&self, id: &str) -> auth9_oidc::error::Result<()>;
-            async fn activate(&self, id: &str) -> auth9_oidc::error::Result<()>;
-            async fn delete(&self, id: &str) -> auth9_oidc::error::Result<()>;
-            async fn delete_all_by_user(&self, user_id: &str) -> auth9_oidc::error::Result<u64>;
-            async fn delete_by_user_and_type(&self, user_id: &str, credential_type: CT) -> auth9_oidc::error::Result<u64>;
+            async fn create(&self, input: &CreateCredentialInput) -> crate::error::Result<Credential>;
+            async fn find_by_id(&self, id: &str) -> crate::error::Result<Option<Credential>>;
+            async fn find_by_user_and_type(&self, user_id: &str, credential_type: CT) -> crate::error::Result<Vec<Credential>>;
+            async fn update_data(&self, id: &str, data: &serde_json::Value) -> crate::error::Result<()>;
+            async fn deactivate(&self, id: &str) -> crate::error::Result<()>;
+            async fn activate(&self, id: &str) -> crate::error::Result<()>;
+            async fn delete(&self, id: &str) -> crate::error::Result<()>;
+            async fn delete_all_by_user(&self, user_id: &str) -> crate::error::Result<u64>;
+            async fn delete_by_user_and_type(&self, user_id: &str, credential_type: CT) -> crate::error::Result<u64>;
         }
     }
 
