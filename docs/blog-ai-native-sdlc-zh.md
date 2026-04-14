@@ -12,7 +12,7 @@
 
 我选择了 IAM（身份认证与访问管理）作为实验对象。这不是简单的增删改查：多租户数据隔离、OIDC/OAuth2 流程、Token Exchange、层级化 RBAC 权限、Webhook 签名验证、审计日志——这些环环相扣的复杂性意味着，一个错误决策会引发十几个隐蔽的 bug。在这里，安全不是锦上添花，而是系统存在的根本意义。
 
-最终成果是 [Auth9](https://github.com/gpgkd906/auth9)，一个自托管的 Auth0 的替代方案，基于 Rust、React Router 7、TiDB 和 Keycloak 构建。这个项目中几乎所有的代码都由 AI 生成，几乎所有步骤都由 skills 驱动——从后端 Rust 服务到前端 React 组件，从测试用例到部署脚本。但 Auth9 只是产出物，实验的真正主角是这套开发流水线本身。
+最终成果是 [Auth9](https://github.com/gpgkd906/auth9)，一个自托管的 Auth0 的替代方案，基于 Rust、React Router 7、TiDB 和 Keycloak 构建。你可以在 [auth9.c9r.io](https://auth9.c9r.io) 亲自体验一下。这个项目中几乎所有的代码都由 AI 生成，几乎所有步骤都由 skills 驱动——从后端 Rust 服务到前端 React 组件，从测试用例到部署脚本。但 Auth9 只是产出物，实验的真正主角是这套开发流水线本身。
 
 ## 真正的挑战：可验证性
 

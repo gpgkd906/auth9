@@ -12,7 +12,7 @@ Not a toy demo, not a weekend project. A real system — complex enough to test 
 
 I chose IAM (Identity and Access Management) as the test subject. This isn't simple CRUD: multi-tenant data isolation, OIDC/OAuth2 flows, Token Exchange, hierarchical RBAC permissions, webhook signature verification, audit logging — this interconnected complexity means one wrong decision can cascade into a dozen subtle bugs. Here, security isn't a nice-to-have; it's the very reason the system exists.
 
-The result is [Auth9](https://github.com/gpgkd906/auth9), a self-hosted alternative to Auth0 built with Rust, React Router 7, TiDB, and Keycloak. Almost all code in this project was AI-generated, and almost every step was driven by skills — from the backend Rust services to frontend React components, from test cases to deployment scripts. But Auth9 is just the output. The real subject of the experiment is this development pipeline itself.
+The result is [Auth9](https://github.com/gpgkd906/auth9), a self-hosted alternative to Auth0 built with Rust, React Router 7, TiDB, and Keycloak. You can try the live instance at [auth9.c9r.io](https://auth9.c9r.io). Almost all code in this project was AI-generated, and almost every step was driven by skills — from the backend Rust services to frontend React components, from test cases to deployment scripts. But Auth9 is just the output. The real subject of the experiment is this development pipeline itself.
 
 ## The Real Challenge: Verifiability
 
